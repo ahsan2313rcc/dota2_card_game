@@ -187,9 +187,14 @@ export const ITEMS: ItemCard[] = [
   { id: 'arcane_ring', name: 'Arcane Ring', kind: 'Neutral', text: 'Gain 1 XP immediately.', target: 'none' },
   { id: 'ninja_gear', name: 'Ninja Gear', kind: 'Neutral', text: 'Evade: dodge the next basic attack against this hero this round.', target: 'allyHero' },
   { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'If this hero is slain this round, it revives Healthy. Only dropped by Roshan.', target: 'allyHero' },
+  { id: 'glyph', name: 'Glyph of Fortification', kind: 'Tower', text: 'Your towers take no damage this round (so they do not fire either).', target: 'none' },
+  { id: 'lotus', name: 'Lotus Pool', kind: 'Tower', text: 'Heal all your heroes to Healthy.', target: 'none' },
+  { id: 'gate', name: 'Twin Gate', kind: 'Tower', text: 'Teleport all your heroes on the board (except Rooted ones) to a lane of your choice.', target: 'lane' },
 ]
 
-export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Neutral: 2, Special: 0 }
+export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Neutral: 2, Tower: 0, Special: 0 }
+/** Each side hides one of each under its three T1 towers, and again under its three T2 towers. */
+export const TOWER_CARD_IDS = ['glyph', 'lotus', 'gate'] as const
 export const REGULAR_CREEPS = 32
 export const SIEGE_CREEPS = 8
 

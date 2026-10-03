@@ -6,6 +6,7 @@ import {
   drawCard,
   endDraw,
   endItems,
+  handCount,
   heroesOnBoard,
   lineup,
   newGame,
@@ -174,7 +175,7 @@ describe('engine', () => {
         s = playRound(s)
         for (const p of PLAYERS) {
           expect(heroesOnBoard(s, p).length).toBeLessThanOrEqual(BOARD_LIMIT)
-          expect(s.players[p].hand.length).toBeLessThanOrEqual(HAND_LIMIT)
+          expect(handCount(s.players[p])).toBeLessThanOrEqual(HAND_LIMIT)
           expect(s.players[p].gold).toBeGreaterThanOrEqual(0)
           expect(s.players[p].xp).toBeGreaterThanOrEqual(0)
           for (const zone of ZONES) {

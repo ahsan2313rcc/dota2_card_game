@@ -62,6 +62,7 @@ function HeroFace({ id }: { id: string }) {
 const ITEM_TINT = {
   Shop: 'from-amber-600/70 to-amber-900/30',
   Neutral: 'from-teal-600/70 to-teal-900/30',
+  Tower: 'from-sky-600/70 to-slate-900/30',
   Special: 'from-yellow-400/80 to-orange-800/40',
 } as const
 

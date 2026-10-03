@@ -1,6 +1,8 @@
 import { getHero, getItem } from './cards'
 import {
   ZONE_PRIORITY,
+  buyback,
+  buybackBlockReason,
   campNeutral,
   declareUlt,
   drawBlockReason,
@@ -19,12 +21,21 @@ import {
   ultNeedsTarget,
   ultTargets,
 } from './engine'
-import { CAMPS, LANES, type GameState, type PlayerId, type Unit, type ZoneId } from './types'
+import { BOARD_LIMIT, CAMPS, LANES, type GameState, type LaneId, type PlayerId, type Unit, type ZoneId } from './types'
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
 export function aiDraw(state: GameState, p: PlayerId): GameState {
   let s = state
+  // Buy back the most recent death when short on heroes.
+  for (let guard = 0; guard < 2; guard++) {
+    const pl = s.players[p]
+    const heroesHeld = pl.hand.filter((c) => c.type === 'hero').length
+    const id = pl.grave[pl.grave.length - 1]
+    if (!id || heroesHeld >= 2 || heroesOnBoard(s, p).length + heroesHeld >= BOARD_LIMIT) break
+    if (buybackBlockReason(s, p, id)) break
+    s = buyback(s, p, id)
+  }
   for (let guard = 0; guard < 6 && s.players[p].gold > 0; guard++) {
     const hand = s.players[p].hand
     const heroes = hand.filter((c) => c.type === 'hero').length
@@ -94,6 +105,10 @@ export function aiItems(state: GameState, p: PlayerId): GameState {
   for (const card of [...s.players[p].hand]) {
     if (card.type !== 'item' || itemBlockReason(s, p, card)) continue
     const item = getItem(card.cardId)
+    if (item.kind === 'Tower') {
+      s = aiTowerCard(s, p, card.iid, card.cardId)
+      continue
+    }
     if (item.target === 'none') {
       s = playItem(s, p, card.iid)
       continue
@@ -121,6 +136,26 @@ export function aiItems(state: GameState, p: PlayerId): GameState {
     if (pick) s = playItem(s, p, card.iid, pick.uid)
   }
   return s
+}
+
+function aiTowerCard(s: GameState, p: PlayerId, iid: string, id: string): GameState {
+  const enemy = other(p)
+  const own = (l: LaneId) => lineup(s, p, l).length
+  const foes = (l: LaneId) => lineup(s, enemy, l).length
+  const towers = s.players[p].structures.towers
+  if (id === 'glyph') {
+    const threatened = LANES.some((l) => (towers[l].t1 > 0 || towers[l].t2 > 0) && foes(l) > 0 && foes(l) >= own(l) + 2)
+    return threatened ? playItem(s, p, iid) : s
+  }
+  if (id === 'lotus') {
+    const wounded = heroesOnBoard(s, p).filter((u) => u.hp < u.maxHp).length
+    return wounded >= 2 ? playItem(s, p, iid) : s
+  }
+  // Gate: rally everyone to a lane whose T1 has fallen and that enemies are pushing.
+  const lane = [...LANES]
+    .filter((l) => towers[l].t1 === 0 && foes(l) > own(l))
+    .sort((a, b) => foes(b) - own(b) - (foes(a) - own(a)))[0]
+  return lane ? playItem(s, p, iid, lane) : s
 }
 
 export function aiUlts(state: GameState, p: PlayerId): GameState {

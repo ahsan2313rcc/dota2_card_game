@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "sim": "SIM=1 vitest run src/game/simulate.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

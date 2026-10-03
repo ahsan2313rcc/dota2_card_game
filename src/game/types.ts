@@ -23,12 +23,13 @@ export interface HeroCard {
   maxHp?: number
 }
 
-export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit' | 'enemyHero' | 'none'
+export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit' | 'enemyHero' | 'lane' | 'none'
 
 export interface ItemCard {
   id: string
   name: string
-  kind: 'Shop' | 'Neutral' | 'Special'
+  /** Tower cards are earned when a tower falls and do not count toward the hand limit. */
+  kind: 'Shop' | 'Neutral' | 'Tower' | 'Special'
   text: string
   target: ItemTarget
 }
@@ -117,7 +118,15 @@ export interface PlayerState {
   killsThisRound: number
   /** What this player's units target in a camp they hold */
   campFocus: Record<CampId, 'neutral' | 'enemy'>
+  /** Slain heroes, most recent last. Buyback returns one to hand. */
+  grave: string[]
+  /** Face-down card under each tower, claimed by this player when that tower falls */
+  towerCards: Record<LaneId, Record<TowerTier, string>>
+  /** Glyph played this round: towers take no damage */
+  glyph: boolean
 }
+
+export type TowerTier = 't1' | 't2'
 
 export interface UltDeclaration {
   uid: string
@@ -136,8 +145,16 @@ export interface LogEntry {
   tone: LogTone
 }
 
+export interface ComebackRules {
+  buyback: boolean
+  towerCards: boolean
+  fountain: boolean
+}
+
 export interface Settings {
   singleUseUlt: boolean
+  /** Not exposed in the UI; lets simulations compare rule sets. Missing means all on. */
+  rules?: ComebackRules
 }
 
 export interface GameState {
@@ -181,6 +198,7 @@ export const STARTING_HEROES = 5
 export const TOWER_HP = { t1: 3, t2: 5 } as const
 export const TOWER_DAMAGE = { t1: 1, t2: 2 } as const
 export const ANCIENT_HP = 10
+export const BUYBACK_COST = { behind: 2, even: 2, ahead: 3 } as const
 export const ROSHAN_HP = 3
 export const ROSHAN_RESPAWN = 3
 

@@ -9,6 +9,7 @@ import {
   REGULAR_CREEPS,
   ROSHAN,
   SIEGE_CREEPS,
+  TOWER_CARD_IDS,
   ULT_ORDER,
   getHero,
   getItem,
@@ -17,6 +18,7 @@ import {
 import {
   ANCIENT_HP,
   BOARD_LIMIT,
+  BUYBACK_COST,
   HAND_LIMIT,
   LANES,
   PLACE_PER_ROUND,
@@ -40,6 +42,8 @@ import {
   type PlayerState,
   type RoundStatus,
   type Settings,
+  type TowerTier,
+  type ComebackRules,
   type Unit,
   type ZoneId,
 } from './types'
@@ -247,6 +251,26 @@ export function campHolder(s: GameState, camp: CampId): PlayerId | undefined {
   return favoredPlayer(s.round)
 }
 
+const ALL_RULES: ComebackRules = { buyback: true, towerCards: true, fountain: true }
+
+function rules(s: GameState): ComebackRules {
+  return s.settings.rules ?? ALL_RULES
+}
+
+function isTowerCard(c: HandCard) {
+  return c.type === 'item' && getItem(c.cardId).kind === 'Tower'
+}
+
+/** Cards that count toward the hand limit (tower cards are exempt). */
+export function handCount(pl: PlayerState): number {
+  return pl.hand.filter((c) => !isTowerCard(c)).length
+}
+
+export function standingTowers(s: GameState, p: PlayerId): number {
+  const t = s.players[p].structures.towers
+  return LANES.reduce((n, l) => n + (t[l].t1 > 0 ? 1 : 0) + (t[l].t2 > 0 ? 1 : 0), 0)
+}
+
 // ---------- setup ----------
 
 export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date.now()): GameState {
@@ -267,6 +291,13 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     bonusIncomeLanes: [],
     killsThisRound: 0,
     campFocus: { radiantJungle: 'neutral', direJungle: 'neutral', roshan: 'neutral' },
+    grave: [],
+    towerCards: {
+      top: { t1: 'glyph', t2: 'glyph' },
+      mid: { t1: 'lotus', t2: 'lotus' },
+      bot: { t1: 'gate', t2: 'gate' },
+    },
+    glyph: false,
   })
 
   const zones = Object.fromEntries(ZONES.map((z) => [z, { radiant: [], dire: [] }])) as unknown as GameState['zones']
@@ -310,6 +341,10 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
   )
 
   for (const p of PLAYERS) {
+    for (const tier of ['t1', 't2'] as const) {
+      const ids = shuffle(s, [...TOWER_CARD_IDS])
+      LANES.forEach((l, i) => (s.players[p].towerCards[l][tier] = ids[i]))
+    }
     for (let i = 0; i < STARTING_HEROES; i++) {
       const id = s.heroDeck.pop()
       if (id) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: id })
@@ -365,6 +400,18 @@ function startRound(s: GameState) {
   spawnCamps(s)
   for (const p of PLAYERS) {
     const pl = s.players[p]
+    if (rules(s).fountain) {
+      for (const lane of LANES) {
+        const tw = pl.structures.towers[lane]
+        if (tw.t1 > 0 || tw.t2 > 0) continue
+        for (const uid of lineup(s, p, lane)) {
+          const u = s.units[uid]
+          if (u.kind !== 'hero' || u.hp >= u.maxHp) continue
+          u.hp += 1
+          log(s, `${fullName(u)} heals 1 at the Fountain (${ZONE_LABEL[lane]} has no towers left).`, tone(p))
+        }
+      }
+    }
     const cmBonus = heroesOnBoard(s, p).filter((u) => hasPassive(u, 'crystal_maiden')).length
     const gold = 1 + pl.bonusIncomeLanes.length + cmBonus
     pl.gold += gold
@@ -380,7 +427,7 @@ function startRound(s: GameState) {
 export type DrawType = 'hero' | 'item' | 'creep'
 
 function deckSize(s: GameState, type: DrawType) {
-  if (type === 'hero') return s.heroDeck.length + s.heroDiscard.length
+  if (type === 'hero') return s.heroDeck.length + s.heroDiscard.length + PLAYERS.reduce((n, p) => n + s.players[p].grave.length, 0)
   if (type === 'item') return s.itemDeck.length + s.itemDiscard.length
   return s.creepDeck.length + s.creepDiscard.length
 }
@@ -389,7 +436,7 @@ export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): stri
   if (s.phase !== 'draw') return 'Not the draw step'
   const pl = s.players[p]
   if (pl.gold < 1) return 'Need 1 Gold'
-  if (pl.hand.length >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
+  if (handCount(pl) >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
   if (deckSize(s, type) === 0) return 'Deck is empty'
   return null
 }
@@ -397,8 +444,11 @@ export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): stri
 function takeFromDeck(s: GameState, type: DrawType): string | undefined {
   if (type === 'hero') {
     if (s.heroDeck.length === 0) {
-      s.heroDeck = shuffle(s, s.heroDiscard)
+      const graves = PLAYERS.flatMap((p) => s.players[p].grave)
+      if (graves.length) log(s, 'The hero deck is empty: both graves are shuffled back in.', 'info')
+      s.heroDeck = shuffle(s, [...s.heroDiscard, ...graves])
       s.heroDiscard = []
+      for (const p of PLAYERS) s.players[p].grave = []
     }
     return s.heroDeck.pop()
   }
@@ -427,8 +477,54 @@ export function drawCard(state: GameState, p: PlayerId, type: DrawType): GameSta
   return s
 }
 
+/** Buyback cost by standing towers compared with the opponent. */
+export function buybackCost(s: GameState, p: PlayerId): number {
+  const diff = standingTowers(s, p) - standingTowers(s, other(p))
+  return BUYBACK_COST[diff > 0 ? 'ahead' : diff < 0 ? 'behind' : 'even']
+}
+
+export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string): string | null {
+  if (!rules(s).buyback) return 'Buyback is off'
+  if (s.phase !== 'draw') return 'Buyback happens during the Draw step'
+  const pl = s.players[p]
+  if (!pl.grave.includes(heroId)) return 'Not in your grave'
+  if (handCount(pl) >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
+  if (pl.gold < buybackCost(s, p)) return `Need ${buybackCost(s, p)} Gold`
+  return null
+}
+
+export function buyback(state: GameState, p: PlayerId, heroId: string): GameState {
+  if (buybackBlockReason(state, p, heroId)) return state
+  const s = clone(state)
+  const pl = s.players[p]
+  const cost = buybackCost(s, p)
+  pl.gold -= cost
+  pl.grave.splice(pl.grave.lastIndexOf(heroId), 1)
+  pl.hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: heroId })
+  log(s, `${PLAYER_LABEL[p]} buys back ${getHero(heroId).name} for ${cost} Gold.`, tone(p))
+  return s
+}
+
+/** Before the first reveal, a player may rearrange the face-down cards under towers of the same tier. */
+export function swapTowerCards(state: GameState, p: PlayerId, tier: TowerTier, a: LaneId, b: LaneId): GameState {
+  if (state.round !== 1 || (state.phase !== 'draw' && state.phase !== 'assign') || a === b) return state
+  const s = clone(state)
+  const tc = s.players[p].towerCards
+  ;[tc[a][tier], tc[b][tier]] = [tc[b][tier], tc[a][tier]]
+  return s
+}
+
+function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: TowerTier) {
+  if (!rules(s).towerCards) return
+  const pl = s.players[defender]
+  const cardId = pl.towerCards[lane][tier]
+  pl.gold += 1
+  pl.hand.push({ iid: newId(s, 'c'), type: 'item', cardId })
+  log(s, `${PLAYER_LABEL[defender]} rallies: +1 Gold and the tower's hidden card, ${getItem(cardId).name}.`, tone(defender))
+}
+
 function giveCard(s: GameState, p: PlayerId, card: Omit<HandCard, 'iid'>, label: string) {
-  if (s.players[p].hand.length >= HAND_LIMIT) {
+  if (handCount(s.players[p]) >= HAND_LIMIT) {
     log(s, `${PLAYER_LABEL[p]}'s hand is full — ${label} is lost.`, 'info')
     if (card.type === 'item' && getItem(card.cardId).kind !== 'Special') s.itemDiscard.push(card.cardId)
     return
@@ -594,6 +690,8 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
       return all.filter((u) => u.owner !== p).map((u) => u.uid)
     case 'enemyHero':
       return all.filter((u) => u.owner === other(p) && u.kind === 'hero').map((u) => u.uid)
+    case 'lane':
+      return heroesOnBoard(s, p).some((u) => !u.status.rooted) ? [...LANES] : []
   }
 }
 
@@ -613,9 +711,25 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
   const pl = s.players[p]
   pl.hand = pl.hand.filter((c) => c.iid !== handIid)
   const t = targetUid ? s.units[targetUid] : undefined
-  log(s, `${PLAYER_LABEL[p]} plays ${item.name}${t ? ` on ${fullName(t)}` : ''}.`, tone(p))
+  const lane = item.target === 'lane' && targetUid && isLane(targetUid as ZoneId) ? (targetUid as LaneId) : undefined
+  log(s, `${PLAYER_LABEL[p]} plays ${item.name}${t ? ` on ${fullName(t)}` : lane ? ` to ${ZONE_LABEL[lane]}` : ''}.`, tone(p))
 
-  if (t) {
+  if (item.id === 'glyph') {
+    pl.glyph = true
+  } else if (item.id === 'lotus') {
+    for (const u of heroesOnBoard(s, p)) heal(s, u, 'Lotus Pool')
+  } else if (item.id === 'gate' && lane) {
+    const movers = heroesOnBoard(s, p)
+      .filter((u) => u.zone !== lane && !u.status.rooted)
+      .sort(byPriority(s))
+    for (const u of movers) {
+      removeFromBoard(s, u)
+      u.zone = lane
+      u.placedRound = s.round
+      s.zones[lane][p].push(u.uid)
+    }
+    log(s, movers.length ? `${movers.map(unitName).join(', ')} step through the Twin Gate to ${ZONE_LABEL[lane]}.` : 'Nobody could use the Twin Gate.', tone(p))
+  } else if (t) {
     const st = t.status
     switch (item.id) {
       case 'tango':
@@ -673,7 +787,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
   } else if (item.id === 'arcane_ring') {
     pl.xp += 1
   }
-  if (item.kind !== 'Special') s.itemDiscard.push(item.id)
+  if (item.kind === 'Shop' || item.kind === 'Neutral') s.itemDiscard.push(item.id)
   return s
 }
 
@@ -1089,6 +1203,10 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
   const tw = st.towers[lane]
   const dmg = u.kind === 'siege' ? 2 : 1 + u.status.bonusDamage
   const who = fullName(u)
+  if ((tw.t1 > 0 || tw.t2 > 0) && s.players[enemy].glyph) {
+    log(s, `${who}'s attack bounces off the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower (Glyph).`, 'info')
+    return
+  }
   if (tw.t1 > 0 || tw.t2 > 0) {
     const key = towerKey(enemy, lane, tw.t1 > 0 ? 't1' : 't2')
     if (!s.towersHit.includes(key)) s.towersHit.push(key)
@@ -1096,12 +1214,16 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
   if (tw.t1 > 0) {
     tw.t1 = Math.max(0, tw.t1 - dmg)
     log(s, `${who} hits the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 1 tower for ${dmg} (${tw.t1}/${TOWER_HP.t1}).`, 'structure')
-    if (tw.t1 === 0) log(s, `${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 1 tower is destroyed!`, 'structure')
+    if (tw.t1 === 0) {
+      log(s, `${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 1 tower is destroyed!`, 'structure')
+      onTowerLost(s, enemy, lane, 't1')
+    }
   } else if (tw.t2 > 0) {
     tw.t2 = Math.max(0, tw.t2 - dmg)
     log(s, `${who} hits the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 2 tower for ${dmg} (${tw.t2}/${TOWER_HP.t2}).`, 'structure')
     if (tw.t2 === 0) {
       log(s, `${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 2 tower is destroyed!`, 'structure')
+      onTowerLost(s, enemy, lane, 't2')
       const pl = s.players[owner]
       if (!pl.bonusIncomeLanes.includes(lane)) {
         pl.bonusIncomeLanes.push(lane)
@@ -1301,7 +1423,10 @@ export function resolveRound(state: GameState): GameState {
 
   for (const u of Object.values(s.units)) {
     if (u.dead) {
-      if (u.kind === 'hero') s.heroDiscard.push(u.cardId!)
+      if (u.kind === 'hero') {
+        if (rules(s).buyback && u.owner !== 'neutral') s.players[u.owner].grave.push(u.cardId!)
+        else s.heroDiscard.push(u.cardId!)
+      }
       if (u.kind === 'creep' || u.kind === 'siege') s.creepDiscard.push(u.kind)
       removeFromBoard(s, u)
       delete s.units[u.uid]
@@ -1309,6 +1434,7 @@ export function resolveRound(state: GameState): GameState {
       u.status = freshStatus()
     }
   }
+  for (const p of PLAYERS) s.players[p].glyph = false
 
   if (!s.winner) {
     log(s, 'Income', 'phase')

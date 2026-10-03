@@ -1,4 +1,4 @@
-import { ATTRIBUTE_COUNTERS, ROSHAN, getHero, getNeutral } from '@/game/cards'
+import { ATTRIBUTE_COUNTERS, ROSHAN, TORMENTOR, getHero, getNeutral } from '@/game/cards'
 import { PLAYER_LABEL, ZONE_LABEL, attributeOf } from '@/game/engine'
 import type { RoundStatus, Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
@@ -23,7 +23,8 @@ const STATUS: Array<[keyof RoundStatus, string, 'debuff' | 'buff']> = [
   ['accuracy', 'Accuracy', 'buff'],
   ['pierce', 'Pierce', 'buff'],
   ['bonusDamage', '+Damage', 'buff'],
-  ['thorns', 'Thorns', 'buff'],
+  ['invisible', 'Invisible: enemies cannot target', 'buff'],
+  ['haste', 'Haste: attacks first', 'buff'],
   ['bladeMail', 'Blade Mail', 'buff'],
   ['aegis', 'Aegis', 'buff'],
   ['reincarnation', 'Reincarnation', 'buff'],
@@ -68,24 +69,43 @@ export function Inspector({ unit }: { unit?: Unit }) {
     )
   }
 
-  if (unit.kind === 'neutral' || unit.kind === 'roshan') {
-    const isRosh = unit.kind === 'roshan'
+  if (unit.kind === 'neutral' || unit.kind === 'roshan' || unit.kind === 'tormentor') {
     const attr = attributeOf(unit)!
+    const info =
+      unit.kind === 'roshan'
+        ? ROSHAN
+        : unit.kind === 'tormentor'
+          ? TORMENTOR
+          : {
+              name: getNeutral(unit.cardId!).name,
+              text: `${getNeutral(unit.cardId!).text} Bounty: 1 XP, 1 Gold and a rune card. Attacks in the ${attr} bracket and is part of the counter loop.`,
+            }
     return (
       <div className="space-y-2 text-xs">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-amber-200">{isRosh ? ROSHAN.name : getNeutral(unit.cardId!).name}</span>
+          <span className="text-sm font-semibold text-amber-200">{info.name}</span>
           <span className={cn('rounded px-1.5 py-0.5 text-[10px] ring-1', ATTR_STYLE[attr].chip)}>{ATTR_STYLE[attr].label}</span>
         </div>
         <div className="text-zinc-400">
           {ZONE_LABEL[unit.zone]} · {unit.hp}/{unit.maxHp} health
         </div>
-        <p className="text-zinc-300">
-          {isRosh
-            ? ROSHAN.text
-            : `${getNeutral(unit.cardId!).text} Bounty: 1 XP and an item card. Attacks in the ${attr} bracket and is part of the counter loop.`}
+        <p className={cn('text-zinc-300', unit.kind === 'tormentor' && unit.status.broken && 'line-through opacity-60')}>
+          {info.text}
         </p>
         <StatusChips u={unit} />
+      </div>
+    )
+  }
+
+  if (unit.kind === 'illusion') {
+    return (
+      <div className="space-y-1 text-xs text-zinc-300">
+        <div className={cn('font-semibold', SIDE_STYLE[unit.owner as 'radiant' | 'dire'].text)}>
+          Illusion of {getHero(unit.cardId!).name} · {ZONE_LABEL[unit.zone]}
+        </div>
+        <p className="text-zinc-400">
+          A 1 HP decoy standing in front of its hero. It never attacks and vanishes at Cleanup.
+        </p>
       </div>
     )
   }

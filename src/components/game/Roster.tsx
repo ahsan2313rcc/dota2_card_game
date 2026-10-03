@@ -84,8 +84,15 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
     >
       <span className="w-4 text-center text-[10px] text-zinc-500">{index + 1}</span>
       <button type="button" onClick={() => actions.onInspect(u.uid)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-        {u.kind === 'hero' ? (
-          <HeroPortrait cardId={u.cardId!} className={cn('size-7 shrink-0 rounded-full', u.hp < u.maxHp && 'ring-2 ring-red-500')} />
+        {u.kind === 'hero' || u.kind === 'illusion' ? (
+          <HeroPortrait
+            cardId={u.cardId!}
+            className={cn(
+              'size-7 shrink-0 rounded-full',
+              u.kind === 'hero' && u.hp < u.maxHp && 'ring-2 ring-red-500',
+              u.kind === 'illusion' && 'opacity-60 hue-rotate-180',
+            )}
+          />
         ) : (
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[10px] font-bold">
             {u.kind === 'siege' ? 'S' : 'C'}
@@ -96,6 +103,7 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
           <span className="block text-[10px] text-zinc-500">
             {u.hp}/{u.maxHp} hp{u.hp < u.maxHp && u.kind === 'hero' ? ' · Wounded' : ''}
             {u.kind === 'hero' && u.ultUsed ? ' · ULT used' : ''}
+            {u.kind === 'illusion' ? ' · decoy' : ''}
           </span>
         </span>
       </button>

@@ -20,6 +20,8 @@ const STATUSES: Array<[string, string]> = [
   ['Mute', 'Items cannot be played on the hero.'],
   ['Curse', 'Cannot heal.'],
   ['Taunt', 'Must attack the taunting hero (Berserker\'s Call).'],
+  ['Invisible', 'Enemies cannot target the hero with attacks, towers, Ultimates or items. It can still attack.'],
+  ['Haste', 'Attacks before everyone else in Phase 2, overriding Slow.'],
 ]
 
 export function RulesDialog() {
@@ -38,22 +40,30 @@ export function RulesDialog() {
           <Section title="Goal">
             Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1 damage) and a Tier 2 tower
             (5 hits, deals 2 damage). Units only reach the Ancient through a lane whose two towers are down. Razing both
-            towers in a lane gives +1 passive Gold per round.
+            towers in a lane gives +1 passive Gold per round. Fountain: at the start of each round, a side's heroes in a
+            lane where that side has no towers left heal 1.
           </Section>
           <Section title="Round">
             <ol className="list-decimal space-y-0.5 pl-5">
-              <li>Upkeep: +1 Gold, +1 XP (plus bonuses). Empty jungle camps respawn a neutral.</li>
-              <li>Draw: spend 1 Gold per hero, creep or item card (hand limit 7). You start with 5 heroes.</li>
-              <li>Map: no map or rune cards in the starter set yet.</li>
+              <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
               <li>
-                Assign: place up to 3 heroes (board limit 5) into lanes, jungles or Roshan's pit, and creep cards into lanes.
-                Position 1 defends first.
+                Draw: spend 1 Gold per hero, creep or item card (hand limit 7). You start with 5 heroes. Buyback returns a
+                slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing than the enemy.
+              </li>
+              <li>
+                Assign: place up to 3 heroes (board limit 5) into lanes or jungles, and creep cards into lanes. Position 1
+                defends first.
               </li>
               <li>Reveal: both sides flip.</li>
-              <li>Item: play items on heroes — free, single use, and they resolve immediately.</li>
+              <li>Item: play items, runes and tower cards — free, single use, and they resolve immediately.</li>
               <li>Ult: spend 1 XP to declare a living hero's Ultimate (single-use toggle in the header).</li>
               <li>Resolution: Ultimates (STR → INT → UNI → AGI), basic attacks (AGI → UNI → INT → STR → creeps, Slowed last), then tower aggro.</li>
-              <li>Cleanup: wounds persist, dead heroes and creeps go to the shared discard piles, all round effects end.</li>
+              <li>
+                Rotation: each side may move one hero to an adjacent zone along Top · Dire Jungle · Mid · Radiant Jungle ·
+                Bot (Day: Radiant first, Night: Dire first). Rooted or stunned heroes stay. From a lane with no allied towers
+                a hero may walk lane to lane (Top · Mid · Bot).
+              </li>
+              <li>Cleanup: wounds persist, slain heroes go to their owner's grave, illusions vanish, all round effects end.</li>
               <li>Income: +1 Gold per enemy hero killed, +1 XP per lane holding a living hero.</li>
             </ol>
           </Section>
@@ -63,12 +73,23 @@ export function RulesDialog() {
             AGI) kills instantly — neutrals have attributes too. In Phase 3, every standing tower that took damage this round
             deals its damage (T1: 1, T2: 2) to the attacking side's Position 1.
           </Section>
-          <Section title="Jungle & Roshan">
-            Each jungle sits between a side's safe lane and mid and holds one neutral (Golem STR, Thunderhide AGI, Ice Shaman
-            INT with Slow, Dragon UNI with Blind). The side that arrived first holds the camp and chooses whether to hit the
-            neutral or the contester; the contester must attack the holder. The neutral hits Position 1 of each side. A
-            neutral kill gives 1 XP and an item card. Roshan (UNI, 3 hits) hits every hero in the pit, Roars to disarm the pit
-            while at full health, and drops 3 XP plus the Aegis. He respawns 3 rounds later.
+          <Section title="Jungle, Roshan & Tormentor">
+            Two jungles hold one camp each, drawn from a 15-card jungle deck: Golem (STR), Thunderhide (AGI), Ice Shaman (INT,
+            Slow) and Dragon (UNI, Blind) ×3, one Roshan and two Tormentors. The side that arrived first holds the camp and
+            chooses whether to hit the neutral or the contester; the contester must attack the holder (ties go to the
+            jungle's owner). A neutral kill gives 1 XP, 1 Gold and a rune card. Roshan (UNI, 3 hits) hits every enemy in the
+            camp, Roars while at full health, and never appears before round 4; he drops 3 XP and flips into the Aegis.
+            The Tormentor (UNI, 2 hits plus a Shield that regenerates every round) never attacks, but its Reflection passive
+            (Break turns it off) returns all damage to the attacker and the same amount to the other side's front line;
+            Shields block reflected damage. It flips into a Refresher Shard. Boss rewards go to the killer even if every
+            attacker dies; if contested they go to the sole survivor, otherwise to the jungle's owner.
+          </Section>
+          <Section title="Runes & tower cards">
+            Twenty rune cards (two each): Bounty (+1 Gold), Regeneration, Double Damage, Shield, Arcane (next Ultimate is
+            free), Illusion (1 HP decoy in front of a hero), Invisibility, Haste, Wisdom (+1 XP) and Water (cleanse). Under
+            each side's T1 and T2 towers lie Glyph (your towers take no damage this round), Lotus (heal all your heroes) and
+            Twin Gate (teleport all your heroes to one lane), shuffled; you may swap them within a tier in round 1. When a
+            tower falls its owner gains 1 Gold and that card, which does not count toward the hand limit.
           </Section>
           <Section title="Status effects">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
@@ -81,10 +102,10 @@ export function RulesDialog() {
             </dl>
           </Section>
           <Section title="Tiebreakers">
-            Safe lane, then Mid, Off lane, own jungle, enemy jungle and Roshan (Radiant safe = Bottom, Dire safe = Top). Still
+            Safe lane, then Mid, Off lane, own jungle and enemy jungle (Radiant safe = Bottom, Dire safe = Top). Still
             tied? Odd rounds are Day (Radiant first), even rounds are Night (Dire first).
           </Section>
-          <Section title="Not in the prototype yet">Runes and map cards, hot-seat or online multiplayer.</Section>
+          <Section title="Not in the prototype yet">Map cards, hot-seat or online multiplayer.</Section>
         </div>
       </DialogContent>
     </Dialog>

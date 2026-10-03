@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Coins, Moon, RotateCcw, ScrollText, Sparkles, Sun, Swords, Trophy } from 'lucide-react'
+import { Coins, Footprints, Moon, RotateCcw, ScrollText, Skull, Sparkles, Sun, Swords, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import { CombatLog, LogLines } from '@/components/game/CombatLog'
 import { HandCard } from '@/components/game/HandCard'
@@ -9,6 +9,7 @@ import { PhaseTracker } from '@/components/game/PhaseTracker'
 import { PlayerBar } from '@/components/game/PlayerBar'
 import { Roster } from '@/components/game/Roster'
 import { RulesDialog } from '@/components/game/RulesDialog'
+import { TowerCards } from '@/components/game/TowerCards'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -17,10 +18,17 @@ import { Toaster } from '@/components/ui/sonner'
 import { getHero, getItem } from '@/game/cards'
 import {
   PLAYER_LABEL,
+  ZONE_LABEL,
+  buybackBlockReason,
+  buybackCost,
   drawBlockReason,
+  favoredPlayer,
+  handCount,
   isDay,
   itemBlockReason,
+  itemLanes,
   itemTargets,
+  rotationTargets,
   placeBlockReason,
   ultBlockReason,
   ultNeedsTarget,
@@ -28,12 +36,14 @@ import {
   type DrawType,
 } from '@/game/engine'
 import { HUMAN, useGame } from '@/game/useGame'
-import { HAND_LIMIT, LANES, PLACE_PER_ROUND, ZONES, type GameState, type HandCard as HandCardT, type Unit } from '@/game/types'
+import { HAND_LIMIT, LANES, PLACE_PER_ROUND, ZONES, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
 
 export default function App() {
   const [s, dispatch] = useGame()
   const [selectedHand, setSelectedHand] = useState<string | null>(null)
   const [ultCaster, setUltCaster] = useState<string | null>(null)
+  const [tpHero, setTpHero] = useState<string | null>(null)
+  const [rotator, setRotator] = useState<string | null>(null)
   const [inspected, setInspected] = useState<string>()
   const [reportOpen, setReportOpen] = useState(false)
   const stepKey = `${s.round}:${s.phase}`
@@ -42,17 +52,23 @@ export default function App() {
     setLastStepKey(stepKey)
     setSelectedHand(null)
     setUltCaster(null)
+    setTpHero(null)
+    setRotator(null)
     setReportOpen(s.phase === 'report' || s.phase === 'gameover')
   }
 
   const me = s.players[HUMAN]
   const selectedCard = me.hand.find((c) => c.iid === selectedHand)
+  const selectedItem = selectedCard?.type === 'item' ? getItem(selectedCard.cardId) : undefined
 
   const targetable = useMemo(() => {
-    if (s.phase === 'items' && selectedCard?.type === 'item') return new Set(itemTargets(s, HUMAN, selectedCard.cardId))
+    if (s.phase === 'items' && selectedCard?.type === 'item' && !tpHero) return new Set(itemTargets(s, HUMAN, selectedCard.cardId))
     if (s.phase === 'ults' && ultCaster) return new Set(ultTargets(s, ultCaster))
+    if (s.phase === 'rotate' && !rotator) {
+      return new Set(Object.values(s.units).filter((u) => u.owner === HUMAN && rotationTargets(s, u.uid).length).map((u) => u.uid))
+    }
     return new Set<string>()
-  }, [s, selectedCard, ultCaster])
+  }, [s, selectedCard, ultCaster, tpHero, rotator])
 
   const inspectedUnit = inspected ? s.units[inspected] : undefined
 
@@ -65,6 +81,7 @@ export default function App() {
     }
     if (s.phase === 'assign' && card.type === 'creep') return setSelectedHand(card.iid)
     if (s.phase === 'items' && card.type === 'item') {
+      setTpHero(null)
       const r = itemBlockReason(s, HUMAN, card)
       if (r) return toast.error(`${getItem(card.cardId).name}: ${r}`)
       if (getItem(card.cardId).target === 'none') {
@@ -79,7 +96,11 @@ export default function App() {
 
   function onUnitClick(uid: string) {
     if (targetable.has(uid)) {
-      if (selectedCard?.type === 'item') {
+      if (s.phase === 'rotate') {
+        setRotator(uid)
+      } else if (selectedItem?.target === 'allyHeroToLane') {
+        setTpHero(uid)
+      } else if (selectedCard?.type === 'item') {
         dispatch({ type: 'playItem', handIid: selectedCard.iid, target: uid })
         setSelectedHand(null)
       } else if (ultCaster) {
@@ -88,6 +109,7 @@ export default function App() {
       }
       return
     }
+    if (rotator === uid) setRotator(null)
     setInspected(uid)
   }
 
@@ -102,24 +124,40 @@ export default function App() {
     dispatch({ type: 'declareUlt', uid: u.uid })
   }
 
-  const dropZones =
-    s.phase !== 'assign' || !selectedCard
-      ? []
-      : selectedCard.type === 'creep'
-        ? LANES
-        : selectedCard.type === 'hero' && !placeBlockReason(s, HUMAN)
-          ? ZONES
-          : []
+  let dropZones: readonly ZoneId[] = []
+  let dropLabel = 'Place in'
+  if (s.phase === 'assign' && selectedCard) {
+    if (selectedCard.type === 'creep') dropZones = LANES
+    else if (selectedCard.type === 'hero' && !placeBlockReason(s, HUMAN)) dropZones = ZONES
+  } else if (s.phase === 'items' && selectedCard && selectedItem) {
+    if (selectedItem.target === 'lane') dropZones = itemLanes(s, HUMAN, selectedCard.cardId)
+    else if (selectedItem.target === 'allyHeroToLane' && tpHero) dropZones = itemLanes(s, HUMAN, selectedCard.cardId, tpHero)
+    dropLabel = 'Teleport to'
+  } else if (s.phase === 'rotate' && rotator) {
+    dropZones = rotationTargets(s, rotator)
+    dropLabel = 'Rotate to'
+  }
 
   const ia: MapInteraction = {
     targetable,
     inspected,
     declared: new Set(s.ultDeclarations.filter((d) => d.owner === HUMAN).map((d) => d.uid)),
     onUnitClick,
-    dropZones,
+    dropZones: [...dropZones],
+    dropLabel,
     onDrop: (zone) => {
+      if (s.phase === 'rotate' && rotator) {
+        dispatch({ type: 'rotate', uid: rotator, zone })
+        setRotator(null)
+        return
+      }
       if (!selectedCard) return
-      dispatch({ type: 'place', handIid: selectedCard.iid, zone })
+      if (s.phase === 'items') {
+        if (isLane(zone)) dispatch({ type: 'playItem', handIid: selectedCard.iid, target: tpHero ?? undefined, lane: zone })
+        setTpHero(null)
+      } else {
+        dispatch({ type: 'place', handIid: selectedCard.iid, zone })
+      }
       setSelectedHand(null)
     },
   }
@@ -181,7 +219,7 @@ export default function App() {
         <div className="flex min-w-0 flex-col gap-3">
           <PlayerBar s={s} player="dire" subtitle="AI opponent" />
           <div className="overflow-x-auto">
-            <Minimap s={s} ia={ia} />
+            <Minimap s={s} ia={ia} viewer={HUMAN} />
           </div>
           <PlayerBar s={s} player="radiant" subtitle="You" />
 
@@ -189,12 +227,16 @@ export default function App() {
             s={s}
             selectedCard={selectedCard}
             ultCaster={ultCaster}
+            tpHero={tpHero}
+            rotator={rotator}
             onDraw={(card) => dispatch({ type: 'draw', card })}
+            onBuyback={(heroId) => dispatch({ type: 'buyback', heroId })}
             onAdvance={() => {
               if (s.phase === 'draw') dispatch({ type: 'endDraw' })
               else if (s.phase === 'assign') dispatch({ type: 'endAssign' })
               else if (s.phase === 'items') dispatch({ type: 'endItems' })
               else if (s.phase === 'ults') dispatch({ type: 'resolve' })
+              else if (s.phase === 'rotate') dispatch({ type: 'endRotate' })
               else if (s.phase === 'report') dispatch({ type: 'nextRound' })
               else dispatch({ type: 'new' })
             }}
@@ -203,7 +245,7 @@ export default function App() {
 
           <section>
             <h2 className="mb-2 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-              Your hand ({me.hand.length}/{HAND_LIMIT})
+              Your hand ({handCount(me)}/{HAND_LIMIT}{me.hand.length > handCount(me) ? ' + tower cards' : ''})
             </h2>
             {me.hand.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
@@ -248,6 +290,9 @@ export default function App() {
               />
             </div>
           </Panel>
+          <Panel title="Your towers">
+            <TowerCards s={s} onSwap={(tier, a, b) => dispatch({ type: 'swapTowers', tier, a, b })} />
+          </Panel>
           <Panel title="Inspector">
             <Inspector unit={inspectedUnit} />
           </Panel>
@@ -278,7 +323,7 @@ export default function App() {
             <DialogDescription>
               {s.winner
                 ? `${PLAYER_LABEL[s.winner]} wins in round ${s.round}.`
-                : 'Ultimates, basic attacks, tower aggro, cleanup and income — in order.'}
+                : 'Ultimates, basic attacks, tower aggro, rotation, cleanup and income — in order.'}
             </DialogDescription>
           </DialogHeader>
           <LogLines entries={resolutionEntries} />
@@ -311,14 +356,20 @@ function ActionBar({
   s,
   selectedCard,
   ultCaster,
+  tpHero,
+  rotator,
   onDraw,
+  onBuyback,
   onAdvance,
   onShowReport,
 }: {
   s: GameState
   selectedCard?: HandCardT
   ultCaster: string | null
+  tpHero: string | null
+  rotator: string | null
   onDraw: (card: DrawType) => void
+  onBuyback: (heroId: string) => void
   onAdvance: () => void
   onShowReport: () => void
 }) {
@@ -329,21 +380,27 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = 'Spend 1 Gold per card. Items are free to play later; creeps are cards you place in lanes.'
+      hint = `Spend 1 Gold per card, or buy back a slain hero from your grave for ${buybackCost(s, HUMAN)} Gold. Items are free to play later.`
       cta = 'Done drawing'
       break
     case 'assign':
       title = 'Assign'
       hint = selectedCard
-        ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes, jungles or Roshan)'}.`
+        ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes or jungles)'}.`
         : `Select a hero or creep card, then a green + on the map. Reorder in "Your board". Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round.`
       cta = 'Lock in & reveal'
       break
     case 'items':
       title = 'Items'
-      hint = selectedCard
-        ? `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
-        : 'Select an item card, then a highlighted target. Items are free, single use and resolve immediately.'
+      hint = !selectedCard
+        ? 'Select an item, rune or tower card, then a highlighted target. All are free, single use and resolve immediately.'
+        : getItem(selectedCard.cardId).target === 'lane'
+          ? `Click a green + to choose the lane for ${getItem(selectedCard.cardId).name}.`
+          : getItem(selectedCard.cardId).target === 'allyHeroToLane'
+            ? tpHero
+              ? `Click a green + to teleport ${getHero(s.units[tpHero].cardId!).name}.`
+              : 'Choose a highlighted hero to teleport.'
+            : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
       cta = 'Done with items'
       break
     case 'ults':
@@ -353,6 +410,15 @@ function ActionBar({
         : `Declare Ultimates in "Your board" (1 XP each). Declared: ${s.ultDeclarations.length}. STR casts first, AGI last.`
       cta = 'Resolve combat'
       break
+    case 'rotate': {
+      title = 'Rotation'
+      const first = favoredPlayer(s.round) === HUMAN
+      hint = rotator
+        ? `Click a green + to move ${getHero(s.units[rotator].cardId!).name} from ${ZONE_LABEL[s.units[rotator].zone]}.`
+        : `Move one hero to an adjacent zone (Top · Dire Jungle · Mid · Radiant Jungle · Bot). ${first ? 'Day: you move first.' : 'Night: Dire moved first.'} Heroes in a lane with no allied towers can walk lane to lane.`
+      cta = 'Skip rotation'
+      break
+    }
     case 'report':
       title = 'Round complete'
       hint = 'Review the battle log, then start the next round.'
@@ -366,7 +432,7 @@ function ActionBar({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center">
       <div className="flex-1">
         <div className="text-sm font-semibold text-amber-200">{title}</div>
         <div className="text-xs text-zinc-400">{hint}</div>
@@ -378,6 +444,7 @@ function ActionBar({
               <Coins /> {t[0].toUpperCase() + t.slice(1)} card
             </Button>
           ))}
+        {s.phase === 'rotate' && <Footprints className="size-4 text-amber-300" />}
         {(s.phase === 'report' || s.phase === 'gameover') && (
           <Button variant="ghost" size="sm" onClick={onShowReport}>
             <ScrollText /> Round report
@@ -388,6 +455,21 @@ function ActionBar({
           {cta}
         </Button>
       </div>
+      {s.phase === 'draw' && me.grave.length > 0 && (
+        <div className="flex basis-full flex-wrap items-center gap-2 border-t border-amber-500/10 pt-2 sm:order-last">
+          <span className="flex items-center gap-1 text-xs text-zinc-400">
+            <Skull className="size-3.5" /> Buyback · {buybackCost(s, HUMAN)} Gold
+          </span>
+          {[...new Set(me.grave)].map((id) => {
+            const r = buybackBlockReason(s, HUMAN, id)
+            return (
+              <Button key={id} variant="outline" size="xs" disabled={!!r} title={r ?? undefined} onClick={() => onBuyback(id)}>
+                {getHero(id).name}
+              </Button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

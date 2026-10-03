@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Crown, Flame, Mountain, Snowflake, Sparkles, Zap } from 'lucide-react'
+import { Crown, Flame, Mountain, ShieldHalf, Snowflake, Sparkles, Zap } from 'lucide-react'
 import { getHero, heroPortrait } from '@/game/cards'
 import { fullName } from '@/game/engine'
 import type { Unit } from '@/game/types'
@@ -43,7 +43,17 @@ function debuffed(u: Unit) {
 
 function buffed(u: Unit) {
   const st = u.status
-  return st.immune || st.shield > 0 || st.evade > 0 || st.accuracy || st.bonusDamage > 0 || st.aegis || st.bladeMail || st.thorns
+  return st.immune || st.shield > 0 || st.evade > 0 || st.accuracy || st.bonusDamage > 0 || st.aegis || st.bladeMail || st.invisible || st.haste
+}
+
+const SIZE: Record<Unit['kind'], number> = {
+  hero: 4.8,
+  illusion: 4.2,
+  roshan: 6,
+  tormentor: 5.6,
+  neutral: 5,
+  creep: 3,
+  siege: 3,
 }
 
 interface Props {
@@ -60,7 +70,7 @@ export function UnitToken({ unit, pos, position, targetable, selected, declared,
   const wounded = unit.hp < unit.maxHp
   const side =
     unit.owner === 'radiant' ? 'ring-emerald-400' : unit.owner === 'dire' ? 'ring-red-500' : 'ring-amber-400'
-  const size = unit.kind === 'hero' ? 4.8 : unit.kind === 'roshan' ? 6 : unit.kind === 'neutral' ? 5 : 3
+  const size = SIZE[unit.kind]
 
   return (
     <button
@@ -81,7 +91,8 @@ export function UnitToken({ unit, pos, position, targetable, selected, declared,
           wounded && unit.kind === 'hero' && 'rotate-[18deg] ring-red-400',
           targetable && 'animate-pulse ring-[3px] ring-amber-300',
           selected && 'ring-[3px] ring-sky-300',
-          unit.status.banished && 'opacity-40',
+          (unit.status.banished || unit.status.invisible) && 'opacity-40',
+          unit.kind === 'illusion' && 'opacity-70 outline-2 outline-offset-2 outline-cyan-200 outline-dashed',
         )}
       >
         {unit.kind === 'hero' && <HeroPortrait cardId={unit.cardId!} className="h-full w-full scale-[1.25]" />}
@@ -95,7 +106,16 @@ export function UnitToken({ unit, pos, position, targetable, selected, declared,
             {unit.kind === 'siege' ? 'S' : ''}
           </span>
         )}
+        {unit.kind === 'illusion' && (
+          <HeroPortrait cardId={unit.cardId!} className="h-full w-full scale-[1.25] hue-rotate-180 saturate-50" />
+        )}
         {unit.kind === 'neutral' && <NeutralFace id={unit.cardId!} />}
+        {unit.kind === 'tormentor' && (
+          <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500 to-indigo-950 text-violet-100">
+            <ShieldHalf style={{ width: '55%', height: '55%' }} />
+            {unit.status.shield > 0 && <span className="absolute inset-[6%] rounded-full ring-2 ring-cyan-300/80" />}
+          </span>
+        )}
         {unit.kind === 'roshan' && (
           <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-700 to-stone-900 text-amber-200">
             <Crown style={{ width: '55%', height: '55%' }} />

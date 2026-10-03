@@ -183,16 +183,28 @@ export const ITEMS: ItemCard[] = [
   { id: 'silver_edge', name: 'Silver Edge', kind: 'Shop', text: 'Break an enemy hero this round (their passive does nothing).', target: 'enemyHero' },
   { id: 'atos', name: 'Rod of Atos', kind: 'Shop', text: 'Root an enemy unit this round (it cannot change lane or position).', target: 'enemyUnit' },
   { id: 'euls', name: "Eul's Scepter", kind: 'Shop', text: 'Banish an enemy hero this round: untargetable and invulnerable, but it cannot act.', target: 'enemyHero' },
-  { id: 'chipped_vest', name: 'Chipped Vest', kind: 'Neutral', text: 'This round, units that basic attack this hero take 1 damage.', target: 'allyHero' },
-  { id: 'arcane_ring', name: 'Arcane Ring', kind: 'Neutral', text: 'Gain 1 XP immediately.', target: 'none' },
-  { id: 'ninja_gear', name: 'Ninja Gear', kind: 'Neutral', text: 'Evade: dodge the next basic attack against this hero this round.', target: 'allyHero' },
-  { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'If this hero is slain this round, it revives Healthy. Only dropped by Roshan.', target: 'allyHero' },
+  { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane' },
+  { id: 'rune_gold', name: 'Bounty Rune', kind: 'Rune', text: 'Gain 1 Gold.', target: 'none' },
+  { id: 'rune_regen', name: 'Regeneration Rune', kind: 'Rune', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
+  { id: 'rune_dd', name: 'Double Damage Rune', kind: 'Rune', text: '+1 basic attack damage this round.', target: 'allyHero' },
+  { id: 'rune_shield', name: 'Shield Rune', kind: 'Rune', text: 'Shield: block the next instance of attack damage this round.', target: 'allyHero' },
+  { id: 'rune_arcane', name: 'Arcane Rune', kind: 'Rune', text: 'Your next Ultimate costs 0 XP.', target: 'none' },
+  { id: 'rune_illusion', name: 'Illusion Rune', kind: 'Rune', text: 'Place a 1 HP decoy (0 attack) in front of an allied hero. It vanishes at Cleanup.', target: 'allyHero' },
+  { id: 'rune_invis', name: 'Invisibility Rune', kind: 'Rune', text: 'An allied hero is untargetable by enemies this round. It can still attack.', target: 'allyHero' },
+  { id: 'rune_haste', name: 'Haste Rune', kind: 'Rune', text: 'An allied hero attacks first in Phase 2, regardless of priority or Slow.', target: 'allyHero' },
+  { id: 'rune_wisdom', name: 'Wisdom Rune', kind: 'Rune', text: 'Gain 1 XP.', target: 'none' },
+  { id: 'rune_water', name: 'Water Rune', kind: 'Rune', text: 'Remove all debuffs from an allied hero.', target: 'allyHero' },
+  { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'If this hero is slain this round, it revives Healthy. Flips back to Roshan once used.', target: 'allyHero' },
+  { id: 'refresher_shard', name: 'Refresher Shard', kind: 'Special', text: "Reset an allied hero's Ultimate so it can be cast again. Flips back to a Tormentor once used.", target: 'allyHero' },
   { id: 'glyph', name: 'Glyph of Fortification', kind: 'Tower', text: 'Your towers take no damage this round (so they do not fire either).', target: 'none' },
   { id: 'lotus', name: 'Lotus Pool', kind: 'Tower', text: 'Heal all your heroes to Healthy.', target: 'none' },
   { id: 'gate', name: 'Twin Gate', kind: 'Tower', text: 'Teleport all your heroes on the board (except Rooted ones) to a lane of your choice.', target: 'lane' },
 ]
 
-export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Neutral: 2, Tower: 0, Special: 0 }
+/** Copies per card in the item deck (Shop) and the rune deck (Rune). */
+export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Rune: 2, Tower: 0, Special: 0 }
+/** Dual cards: the boss card flips into its reward when slain, and flips back once the reward is used. */
+export const BOSS_REWARD = { roshan: 'aegis', tormentor: 'refresher_shard' } as const
 /** Each side hides one of each under its three T1 towers, and again under its three T2 towers. */
 export const TOWER_CARD_IDS = ['glyph', 'lotus', 'gate'] as const
 export const REGULAR_CREEPS = 32
@@ -204,12 +216,19 @@ export const NEUTRALS: NeutralCard[] = [
   { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Hits Position 1 of each side for 1 and Slows them.' },
   { id: 'dragon', name: 'Dragon', attribute: 'UNI', hp: 2, text: 'Hits Position 1 of each side for 1 and Blinds them.' },
 ]
-export const NEUTRAL_COPIES = 4
+export const NEUTRAL_COPIES = 3
+export const TORMENTOR_COPIES = 2
 
 export const ROSHAN = {
   name: 'Roshan',
   attribute: 'UNI' as const,
-  text: 'Takes 3 damage to defeat. Hits every hero in the pit for 1. Roar: while at full health he disarms everyone in the pit during Phase 1. Bounty: 3 XP and the Aegis. Respawns 3 rounds after dying.',
+  text: 'Takes 3 damage to defeat. Hits every enemy in his camp for 1. Roar: while at full health he disarms everyone in the camp during Phase 1. Bounty: 3 XP and the Aegis. Never appears before round 4.',
+}
+
+export const TORMENTOR = {
+  name: 'Tormentor',
+  attribute: 'UNI' as const,
+  text: 'Never attacks. 2 HP plus a 1-damage Shield that regenerates every round. Reflection (passive): all damage dealt to it is returned to the attacker, and the same amount to the front of the other side in the camp. Bounty: a Refresher Shard.',
 }
 
 const ICON_SLUG: Record<string, string> = {

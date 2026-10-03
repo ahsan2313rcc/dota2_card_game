@@ -1,6 +1,7 @@
 import {
   ATTACK_ORDER,
   ATTRIBUTE_COUNTERS,
+  BOSS_REWARD,
   HEROES,
   ITEMS,
   ITEM_DECK_COPIES,
@@ -9,6 +10,8 @@ import {
   REGULAR_CREEPS,
   ROSHAN,
   SIEGE_CREEPS,
+  TORMENTOR,
+  TORMENTOR_COPIES,
   TOWER_CARD_IDS,
   ULT_ORDER,
   getHero,
@@ -19,13 +22,15 @@ import {
   ANCIENT_HP,
   BOARD_LIMIT,
   BUYBACK_COST,
+  CAMPS,
   HAND_LIMIT,
   LANES,
   PLACE_PER_ROUND,
   PLAYERS,
+  ROSHAN_EARLIEST_ROUND,
   ROSHAN_HP,
-  ROSHAN_RESPAWN,
   STARTING_HEROES,
+  TORMENTOR_HP,
   TOWER_DAMAGE,
   TOWER_HP,
   ZONES,
@@ -50,10 +55,10 @@ import {
 
 // ---------- basics ----------
 
-/** Tiebreaker order: Safe > Mid > Off > own jungle > enemy jungle > Roshan's pit */
+/** Tiebreaker order: Safe > Mid > Off > own jungle > enemy jungle */
 export const ZONE_PRIORITY: Record<PlayerId, ZoneId[]> = {
-  radiant: ['bot', 'mid', 'top', 'radiantJungle', 'direJungle', 'roshan'],
-  dire: ['top', 'mid', 'bot', 'direJungle', 'radiantJungle', 'roshan'],
+  radiant: ['bot', 'mid', 'top', 'radiantJungle', 'direJungle'],
+  dire: ['top', 'mid', 'bot', 'direJungle', 'radiantJungle'],
 }
 
 export const ZONE_LABEL: Record<ZoneId, string> = {
@@ -62,22 +67,27 @@ export const ZONE_LABEL: Record<ZoneId, string> = {
   bot: 'Bottom',
   radiantJungle: 'Radiant Jungle',
   direJungle: 'Dire Jungle',
-  roshan: "Roshan's Pit",
 }
 export const LANE_LABEL = ZONE_LABEL
 export const PLAYER_LABEL: Record<Owner, string> = { radiant: 'Radiant', dire: 'Dire', neutral: 'Neutral' }
 
-const ADJACENT: Record<ZoneId, ZoneId[]> = {
-  top: ['mid', 'direJungle'],
-  mid: ['top', 'bot', 'radiantJungle', 'direJungle', 'roshan'],
-  bot: ['mid', 'radiantJungle'],
-  radiantJungle: ['bot', 'mid'],
+/** The map is a chain: Top – Dire Jungle – Mid – Radiant Jungle – Bottom. */
+export const ADJACENT: Record<ZoneId, ZoneId[]> = {
+  top: ['direJungle'],
   direJungle: ['top', 'mid'],
-  roshan: ['mid'],
+  mid: ['direJungle', 'radiantJungle'],
+  radiantJungle: ['mid', 'bot'],
+  bot: ['radiantJungle'],
+}
+
+/** Defenders of a lane with no towers left can walk straight along the base: Top – Mid – Bottom. */
+const BASE_ADJACENT: Record<LaneId, LaneId[]> = { top: ['mid'], mid: ['top', 'bot'], bot: ['mid'] }
+
+export function jungleOwner(camp: CampId): PlayerId {
+  return camp === 'radiantJungle' ? 'radiant' : 'dire'
 }
 
 export function laneRole(player: PlayerId, zone: ZoneId): string {
-  if (zone === 'roshan') return 'Pit'
   if (!isLane(zone)) return zone.startsWith(player) ? 'Home jungle' : 'Enemy jungle'
   const idx = ZONE_PRIORITY[player].indexOf(zone)
   return idx === 0 ? 'Safe' : idx === 1 ? 'Mid' : 'Off'
@@ -143,7 +153,8 @@ function freshStatus(): RoundStatus {
     accuracy: false,
     pierce: false,
     bonusDamage: 0,
-    thorns: false,
+    invisible: false,
+    haste: false,
     bladeMail: false,
     aegis: false,
     borrowedTime: false,
@@ -163,6 +174,10 @@ export function unitName(u: Unit): string {
       return getNeutral(u.cardId!).name
     case 'roshan':
       return ROSHAN.name
+    case 'tormentor':
+      return TORMENTOR.name
+    case 'illusion':
+      return `${getHero(u.cardId!).name} Illusion`
     case 'siege':
       return 'Siege Creep'
     case 'creep':
@@ -187,7 +202,13 @@ export function attributeOf(u: Unit): Attribute | undefined {
   if (u.kind === 'hero') return getHero(u.cardId!).attribute
   if (u.kind === 'neutral') return getNeutral(u.cardId!).attribute
   if (u.kind === 'roshan') return ROSHAN.attribute
+  if (u.kind === 'tormentor') return TORMENTOR.attribute
   return undefined
+}
+
+/** Units that take part in Phase 2. */
+function canAttack(u: Unit) {
+  return u.kind !== 'illusion' && u.kind !== 'tormentor'
 }
 
 /** A passive works only while the hero is alive and not Broken. */
@@ -199,8 +220,13 @@ export function lineup(s: GameState, player: PlayerId, zone: ZoneId): string[] {
   return s.zones[zone][player].filter((uid) => s.units[uid] && !s.units[uid].dead)
 }
 
+/** What an opponent can target: Banished and Invisible units are skipped. */
 function targetableLineup(s: GameState, player: PlayerId, zone: ZoneId): string[] {
-  return lineup(s, player, zone).filter((uid) => !s.units[uid].status.banished)
+  return lineup(s, player, zone).filter((uid) => !s.units[uid].status.banished && !s.units[uid].status.invisible)
+}
+
+function hiddenFromEnemies(u: Unit) {
+  return u.status.banished || u.status.invisible
 }
 
 export function campNeutral(s: GameState, zone: ZoneId): Unit | undefined {
@@ -237,7 +263,7 @@ function clone(s: GameState): GameState {
   return structuredClone(s)
 }
 
-/** The side that arrived first holds a camp; ties go to the jungle's owner (or the day/night side at Roshan). */
+/** The side that arrived first holds a camp; ties go to the jungle's owner. */
 export function campHolder(s: GameState, camp: CampId): PlayerId | undefined {
   const arrivals = PLAYERS.map((p) => {
     const rounds = lineup(s, p, camp).map((uid) => s.units[uid].placedRound)
@@ -246,9 +272,7 @@ export function campHolder(s: GameState, camp: CampId): PlayerId | undefined {
   const [r, d] = arrivals
   if (r.first === Infinity && d.first === Infinity) return undefined
   if (r.first !== d.first) return r.first < d.first ? 'radiant' : 'dire'
-  if (camp === 'radiantJungle') return 'radiant'
-  if (camp === 'direJungle') return 'dire'
-  return favoredPlayer(s.round)
+  return jungleOwner(camp)
 }
 
 const ALL_RULES: ComebackRules = { buyback: true, towerCards: true, fountain: true }
@@ -290,7 +314,7 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     },
     bonusIncomeLanes: [],
     killsThisRound: 0,
-    campFocus: { radiantJungle: 'neutral', direJungle: 'neutral', roshan: 'neutral' },
+    campFocus: { radiantJungle: 'neutral', direJungle: 'neutral' },
     grave: [],
     towerCards: {
       top: { t1: 'glyph', t2: 'glyph' },
@@ -298,6 +322,8 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
       bot: { t1: 'gate', t2: 'gate' },
     },
     glyph: false,
+    arcane: false,
+    rotated: false,
   })
 
   const zones = Object.fromEntries(ZONES.map((z) => [z, { radiant: [], dire: [] }])) as unknown as GameState['zones']
@@ -308,12 +334,14 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     players: { radiant: blankPlayer('radiant'), dire: blankPlayer('dire') },
     units: {},
     zones,
-    camps: { radiantJungle: null, direJungle: null, roshan: null },
-    roshanRespawnRound: 1,
+    camps: { radiantJungle: null, direJungle: null },
     heroDeck: [],
     heroDiscard: [],
     itemDeck: [],
     itemDiscard: [],
+    runeDeck: [],
+    runeDiscard: [],
+    bossKills: [],
     creepDeck: [],
     creepDiscard: [],
     neutralDeck: [],
@@ -327,18 +355,19 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
   }
 
   s.heroDeck = shuffle(s, HEROES.map((h) => h.id))
-  s.itemDeck = shuffle(
-    s,
-    ITEMS.flatMap((i) => Array.from({ length: ITEM_DECK_COPIES[i.kind] }, () => i.id)),
-  )
+  const copies = (kind: 'Shop' | 'Rune') =>
+    ITEMS.filter((i) => i.kind === kind).flatMap((i) => Array.from({ length: ITEM_DECK_COPIES[kind] }, () => i.id))
+  s.itemDeck = shuffle(s, copies('Shop'))
+  s.runeDeck = shuffle(s, copies('Rune'))
   s.creepDeck = shuffle(s, [
     ...Array.from({ length: REGULAR_CREEPS }, () => 'creep' as const),
     ...Array.from({ length: SIEGE_CREEPS }, () => 'siege' as const),
   ])
-  s.neutralDeck = shuffle(
-    s,
-    NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),
-  )
+  s.neutralDeck = shuffle(s, [
+    ...NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),
+    'roshan',
+    ...Array.from({ length: TORMENTOR_COPIES }, () => 'tormentor'),
+  ])
 
   for (const p of PLAYERS) {
     for (const tier of ['t1', 't2'] as const) {
@@ -371,24 +400,43 @@ function makeUnit(s: GameState, partial: Pick<Unit, 'kind' | 'owner' | 'zone' | 
   return u
 }
 
-function spawnCamps(s: GameState) {
-  for (const camp of ['radiantJungle', 'direJungle'] as const) {
-    if (campNeutral(s, camp)) continue
+function drawNeutral(s: GameState): string | undefined {
+  for (let guard = 0; guard < 4; guard++) {
     if (s.neutralDeck.length === 0) {
       s.neutralDeck = shuffle(s, s.neutralDiscard)
       s.neutralDiscard = []
     }
     const id = s.neutralDeck.pop()
-    if (!id) continue
-    const n = getNeutral(id)
-    const u = makeUnit(s, { kind: 'neutral', cardId: id, owner: 'neutral', zone: camp, hp: n.hp })
-    s.camps[camp] = u.uid
-    log(s, `A ${n.name} (${n.attribute}) spawns in the ${ZONE_LABEL[camp]}.`, 'neutral')
+    if (id !== 'roshan' || s.round >= ROSHAN_EARLIEST_ROUND) return id
+    log(s, `Roshan stirs too early (before round ${ROSHAN_EARLIEST_ROUND}) and is shuffled back.`, 'neutral')
+    s.neutralDeck = shuffle(s, [...s.neutralDeck, id])
   }
-  if (!campNeutral(s, 'roshan') && s.round >= s.roshanRespawnRound) {
-    const u = makeUnit(s, { kind: 'roshan', owner: 'neutral', zone: 'roshan', hp: ROSHAN_HP })
-    s.camps.roshan = u.uid
-    log(s, 'Roshan awakens in his pit.', 'neutral')
+  return undefined
+}
+
+function spawnCamps(s: GameState) {
+  for (const camp of CAMPS) {
+    const existing = campNeutral(s, camp)
+    if (existing) {
+      if (existing.kind === 'tormentor') existing.status.shield = 1
+      continue
+    }
+    const id = drawNeutral(s)
+    if (!id) continue
+    let u: Unit
+    if (id === 'roshan') {
+      u = makeUnit(s, { kind: 'roshan', cardId: id, owner: 'neutral', zone: camp, hp: ROSHAN_HP })
+      log(s, `Roshan awakens in the ${ZONE_LABEL[camp]}!`, 'neutral')
+    } else if (id === 'tormentor') {
+      u = makeUnit(s, { kind: 'tormentor', cardId: id, owner: 'neutral', zone: camp, hp: TORMENTOR_HP })
+      u.status.shield = 1
+      log(s, `A Tormentor materializes in the ${ZONE_LABEL[camp]}.`, 'neutral')
+    } else {
+      const n = getNeutral(id)
+      u = makeUnit(s, { kind: 'neutral', cardId: id, owner: 'neutral', zone: camp, hp: n.hp })
+      log(s, `A ${n.name} (${n.attribute}) spawns in the ${ZONE_LABEL[camp]}.`, 'neutral')
+    }
+    s.camps[camp] = u.uid
   }
 }
 
@@ -396,6 +444,7 @@ function startRound(s: GameState) {
   s.round++
   s.phase = 'draw'
   s.ultDeclarations = []
+  s.bossKills = []
   log(s, `Round ${s.round} — ${isDay(s.round) ? 'Day (Radiant has priority)' : 'Night (Dire has priority)'}`, 'phase')
   spawnCamps(s)
   for (const p of PLAYERS) {
@@ -418,6 +467,7 @@ function startRound(s: GameState) {
     pl.xp += 1
     pl.placedThisRound = 0
     pl.killsThisRound = 0
+    pl.rotated = false
     log(s, `Upkeep: ${PLAYER_LABEL[p]} gains ${gold} Gold and 1 XP${cmBonus ? ' (Arcane Aura)' : ''}.`, tone(p))
   }
 }
@@ -464,6 +514,23 @@ function takeFromDeck(s: GameState, type: DrawType): string | undefined {
     s.creepDiscard = []
   }
   return s.creepDeck.pop()
+}
+
+function takeRune(s: GameState): string | undefined {
+  if (s.runeDeck.length === 0) {
+    s.runeDeck = shuffle(s, s.runeDiscard)
+    s.runeDiscard = []
+  }
+  return s.runeDeck.pop()
+}
+
+/** Where a played or lost card goes: shop items and runes to their discards, boss rewards flip back into the jungle deck. */
+function discardItem(s: GameState, id: string) {
+  const kind = getItem(id).kind
+  if (kind === 'Shop') s.itemDiscard.push(id)
+  else if (kind === 'Rune') s.runeDiscard.push(id)
+  else if (id === BOSS_REWARD.roshan) s.neutralDiscard.push('roshan')
+  else if (id === BOSS_REWARD.tormentor) s.neutralDiscard.push('tormentor')
 }
 
 export function drawCard(state: GameState, p: PlayerId, type: DrawType): GameState {
@@ -526,7 +593,7 @@ function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: Tower
 function giveCard(s: GameState, p: PlayerId, card: Omit<HandCard, 'iid'>, label: string) {
   if (handCount(s.players[p]) >= HAND_LIMIT) {
     log(s, `${PLAYER_LABEL[p]}'s hand is full — ${label} is lost.`, 'info')
-    if (card.type === 'item' && getItem(card.cardId).kind !== 'Special') s.itemDiscard.push(card.cardId)
+    if (card.type === 'item') discardItem(s, card.cardId)
     return
   }
   s.players[p].hand.push({ ...card, iid: newId(s, 'c') })
@@ -675,44 +742,69 @@ function heal(s: GameState, u: Unit, label: string) {
 
 // ---------- items ----------
 
+const DEBUFFS = ['stunned', 'silenced', 'broken', 'disarmed', 'slowed', 'blinded', 'rooted', 'muted', 'cursed'] as const
+
+/** Units a card can be played on. Muted heroes cannot receive their own side's items. */
 export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[] {
   const item = getItem(itemId)
-  const all = Object.values(s.units).filter((u) => !u.dead && !u.status.banished)
-  const allies = all.filter((u) => u.owner === p && u.kind === 'hero' && !u.status.muted)
+  const live = Object.values(s.units).filter((u) => !u.dead)
+  const allies = live.filter((u) => u.owner === p && u.kind === 'hero' && !u.status.banished && !u.status.muted)
+  const enemies = live.filter((u) => u.owner !== p && !hiddenFromEnemies(u))
   switch (item.target) {
     case 'none':
+    case 'lane':
       return []
     case 'allyWoundedHero':
       return allies.filter((u) => u.hp < u.maxHp).map((u) => u.uid)
     case 'allyHero':
-      return allies.filter((u) => (itemId === 'refresher' ? u.ultUsed : true)).map((u) => u.uid)
+      if (itemId === 'refresher' || itemId === 'refresher_shard') return allies.filter((u) => u.ultUsed).map((u) => u.uid)
+      if (itemId === 'rune_water') return allies.filter((u) => DEBUFFS.some((d) => u.status[d]) || u.status.poisonedBy).map((u) => u.uid)
+      return allies.map((u) => u.uid)
+    case 'allyHeroToLane':
+      return allies.filter((u) => !u.status.rooted).map((u) => u.uid)
     case 'enemyUnit':
-      return all.filter((u) => u.owner !== p).map((u) => u.uid)
+      return enemies.map((u) => u.uid)
     case 'enemyHero':
-      return all.filter((u) => u.owner === other(p) && u.kind === 'hero').map((u) => u.uid)
-    case 'lane':
-      return heroesOnBoard(s, p).some((u) => !u.status.rooted) ? [...LANES] : []
+      return enemies.filter((u) => u.kind === 'hero').map((u) => u.uid)
   }
+}
+
+/** Lanes a lane-targeted card can send heroes to. TP needs the hero first. */
+export function itemLanes(s: GameState, p: PlayerId, itemId: string, heroUid?: string): LaneId[] {
+  const item = getItem(itemId)
+  if (item.target === 'lane') return heroesOnBoard(s, p).some((u) => !u.status.rooted) ? [...LANES] : []
+  if (item.target === 'allyHeroToLane' && heroUid) return LANES.filter((l) => s.units[heroUid]?.zone !== l)
+  return []
 }
 
 export function itemBlockReason(s: GameState, p: PlayerId, card: HandCard): string | null {
   if (s.phase !== 'items') return 'Items are played during the Item step'
   const item = getItem(card.cardId)
+  if (item.target === 'lane') return itemLanes(s, p, card.cardId).length ? null : 'No hero can move'
   if (item.target !== 'none' && itemTargets(s, p, card.cardId).length === 0) return 'No valid targets'
   return null
 }
 
-export function playItem(state: GameState, p: PlayerId, handIid: string, targetUid?: string): GameState {
+function teleport(s: GameState, u: Unit, lane: LaneId) {
+  removeFromBoard(s, u)
+  u.zone = lane
+  u.placedRound = s.round
+  s.zones[lane][u.owner as PlayerId].push(u.uid)
+}
+
+export function playItem(state: GameState, p: PlayerId, handIid: string, targetUid?: string, lane?: LaneId): GameState {
   const card = state.players[p].hand.find((c) => c.iid === handIid && c.type === 'item')
   if (!card || itemBlockReason(state, p, card)) return state
   const item = getItem(card.cardId)
-  if (item.target !== 'none' && (!targetUid || !itemTargets(state, p, card.cardId).includes(targetUid))) return state
+  const needsUnit = item.target !== 'none' && item.target !== 'lane'
+  const needsLane = item.target === 'lane' || item.target === 'allyHeroToLane'
+  if (needsUnit && (!targetUid || !itemTargets(state, p, card.cardId).includes(targetUid))) return state
+  if (needsLane && (!lane || !itemLanes(state, p, card.cardId, targetUid).includes(lane))) return state
   const s = clone(state)
   const pl = s.players[p]
   pl.hand = pl.hand.filter((c) => c.iid !== handIid)
   const t = targetUid ? s.units[targetUid] : undefined
-  const lane = item.target === 'lane' && targetUid && isLane(targetUid as ZoneId) ? (targetUid as LaneId) : undefined
-  log(s, `${PLAYER_LABEL[p]} plays ${item.name}${t ? ` on ${fullName(t)}` : lane ? ` to ${ZONE_LABEL[lane]}` : ''}.`, tone(p))
+  log(s, `${PLAYER_LABEL[p]} plays ${item.name}${t ? ` on ${fullName(t)}` : ''}${lane ? ` to ${ZONE_LABEL[lane]}` : ''}.`, tone(p))
 
   if (item.id === 'glyph') {
     pl.glyph = true
@@ -722,13 +814,14 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     const movers = heroesOnBoard(s, p)
       .filter((u) => u.zone !== lane && !u.status.rooted)
       .sort(byPriority(s))
-    for (const u of movers) {
-      removeFromBoard(s, u)
-      u.zone = lane
-      u.placedRound = s.round
-      s.zones[lane][p].push(u.uid)
-    }
+    for (const u of movers) teleport(s, u, lane)
     log(s, movers.length ? `${movers.map(unitName).join(', ')} step through the Twin Gate to ${ZONE_LABEL[lane]}.` : 'Nobody could use the Twin Gate.', tone(p))
+  } else if (item.id === 'rune_gold') {
+    pl.gold += 1
+  } else if (item.id === 'rune_wisdom') {
+    pl.xp += 1
+  } else if (item.id === 'rune_arcane') {
+    pl.arcane = true
   } else if (t) {
     const st = t.status
     switch (item.id) {
@@ -770,24 +863,50 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
       case 'euls':
         applyStatus(s, p, t, 'banished', "Eul's Scepter", true)
         break
-      case 'chipped_vest':
-        st.thorns = true
-        break
-      case 'ninja_gear':
-        st.evade += 1
+      case 'tp':
+        if (lane) teleport(s, t, lane)
         break
       case 'aegis':
         st.aegis = true
+        break
+      case 'refresher_shard':
+        t.ultUsed = false
+        break
+      case 'rune_regen':
+        heal(s, t, 'Regeneration Rune')
+        break
+      case 'rune_dd':
+        st.bonusDamage += 1
+        break
+      case 'rune_shield':
+        st.shield += 1
+        break
+      case 'rune_illusion': {
+        const decoy = makeUnit(s, { kind: 'illusion', cardId: t.cardId, owner: p, zone: t.zone, hp: 1 })
+        const arr = s.zones[t.zone][p]
+        arr.splice(arr.indexOf(t.uid), 0, decoy.uid)
+        log(s, `An illusion of ${unitName(t)} steps in front of it.`, tone(p))
+        break
+      }
+      case 'rune_invis':
+        st.invisible = true
+        break
+      case 'rune_haste':
+        st.haste = true
+        st.slowed = false
+        break
+      case 'rune_water':
+        for (const d of DEBUFFS) st[d] = false
+        st.poisonedBy = undefined
+        log(s, `${fullName(t)} is cleansed of all debuffs.`, tone(p))
         break
     }
     if (hasPassive(t, 'zeus') && t.owner === p) {
       const front = targetableLineup(s, other(p), t.zone)[0]
       if (front) dealDamage(s, t, front, 1, 'passive', { label: 'Static Field' })
     }
-  } else if (item.id === 'arcane_ring') {
-    pl.xp += 1
   }
-  if (item.kind === 'Shop' || item.kind === 'Neutral') s.itemDiscard.push(item.id)
+  discardItem(s, item.id)
   return s
 }
 
@@ -809,7 +928,7 @@ export function setCampFocus(state: GameState, p: PlayerId, camp: CampId, focus:
 export function ultTargets(s: GameState, uid: string): string[] {
   const u = s.units[uid]
   if (!u?.cardId || u.owner === 'neutral') return []
-  const enemies = Object.values(s.units).filter((x) => x.owner !== u.owner && !x.dead && !x.status.banished)
+  const enemies = Object.values(s.units).filter((x) => x.owner !== u.owner && !x.dead && !hiddenFromEnemies(x))
   const enemyHeroes = enemies.filter((x) => x.kind === 'hero')
   switch (getHero(u.cardId).ult.target) {
     case 'none':
@@ -846,7 +965,7 @@ export function ultBlockReason(s: GameState, uid: string): string | null {
   if (s.ultDeclarations.some((d) => d.uid === uid)) return 'Already declared'
   const r = castPreventedReason(s, u)
   if (r) return r
-  if (s.players[u.owner].xp < 1) return 'Needs 1 XP'
+  if (s.players[u.owner].xp < 1 && !s.players[u.owner].arcane) return 'Needs 1 XP'
   if (ultNeedsTarget(u) && ultTargets(s, uid).length === 0) return 'No valid targets'
   return null
 }
@@ -857,23 +976,32 @@ export function declareUlt(state: GameState, uid: string, target?: string): Game
   if (ultNeedsTarget(u) && (!target || !ultTargets(state, uid).includes(target))) return state
   const owner = u.owner as PlayerId
   const s = clone(state)
-  s.players[owner].xp -= 1
-  s.ultDeclarations.push({ uid, owner, target })
+  const pl = s.players[owner]
+  const free = pl.arcane
+  if (free) pl.arcane = false
+  else pl.xp -= 1
+  s.ultDeclarations.push({ uid, owner, target, free })
   return s
+}
+
+function refundUlt(s: GameState, d: { owner: PlayerId; free?: boolean }) {
+  if (d.free) s.players[d.owner].arcane = true
+  else s.players[d.owner].xp += 1
 }
 
 export function cancelUlt(state: GameState, uid: string): GameState {
   const d = state.ultDeclarations.find((x) => x.uid === uid)
   if (!d || state.phase !== 'ults') return state
   const s = clone(state)
-  s.players[d.owner].xp += 1
+  refundUlt(s, d)
   s.ultDeclarations = s.ultDeclarations.filter((x) => x.uid !== uid)
   return s
 }
 
 // ---------- damage model ----------
 
-type DamageKind = 'ult' | 'attack' | 'tower' | 'item' | 'passive' | 'self'
+/** `reflect` is the Tormentor's returned damage: Shield blocks it, hero passives do not. */
+type DamageKind = 'ult' | 'attack' | 'tower' | 'item' | 'passive' | 'reflect' | 'self'
 
 interface DamageOpts {
   label?: string
@@ -895,6 +1023,32 @@ function removeFromBoard(s: GameState, u: Unit) {
 }
 
 function dealDamage(
+  s: GameState,
+  src: Unit | null,
+  targetUid: string,
+  amount: number,
+  kind: DamageKind,
+  opts: DamageOpts = {},
+): number {
+  const t = s.units[targetUid]
+  const reflecting = !!t && !t.dead && t.kind === 'tormentor' && !t.status.broken && kind !== 'reflect'
+  const shieldBefore = t?.status.shield ?? 0
+  const dealt = applyDamage(s, src, targetUid, amount, kind, opts)
+  if (reflecting && (dealt > 0 || t!.status.shield < shieldBefore)) tormentorReflect(s, t!, src, opts.sourceOwner, dealt || amount)
+  return dealt
+}
+
+/** Reflection: the damage goes back to the attacker, and the same amount to the front of the other side in the camp. */
+function tormentorReflect(s: GameState, torm: Unit, src: Unit | null, sourceOwner: PlayerId | undefined, amount: number) {
+  const side = src && src.owner !== 'neutral' ? src.owner : sourceOwner
+  if (!side) return
+  const label = 'Tormentor Reflection'
+  if (src && !src.dead && src.owner === side) dealDamage(s, torm, src.uid, amount, 'reflect', { label })
+  const front = targetableLineup(s, other(side), torm.zone)[0]
+  if (front) dealDamage(s, torm, front, amount, 'reflect', { label })
+}
+
+function applyDamage(
   s: GameState,
   src: Unit | null,
   targetUid: string,
@@ -948,7 +1102,7 @@ function dealDamage(
       return 0
     }
   }
-  if ((kind === 'attack' || kind === 'tower') && !pierce && st.shield > 0) {
+  if ((kind === 'attack' || kind === 'tower' || kind === 'reflect') && !pierce && st.shield > 0) {
     st.shield--
     log(s, `${fullName(t)}'s Shield blocks ${label}.`, 'info')
     return 0
@@ -957,7 +1111,7 @@ function dealDamage(
     log(s, `${fullName(t)} shrugs off the creep hit (Kraken Shell).`, 'info')
     return 0
   }
-  if (!pierce && kind !== 'self' && hasPassive(t, 'abaddon') && !st.aphoticUsed) {
+  if (!pierce && kind !== 'self' && kind !== 'reflect' && hasPassive(t, 'abaddon') && !st.aphoticUsed) {
     st.aphoticUsed = true
     log(s, `${fullName(t)} absorbs ${label} (Aphotic Shield).`, 'info')
     return 0
@@ -1005,26 +1159,22 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
   removeFromBoard(s, t)
   log(s, `${label} slays ${fullName(t)}.`, 'kill')
 
-  if (killer && killer !== 'neutral' && killer !== t.owner) {
-    const pl = s.players[killer]
-    if (t.kind === 'hero') pl.killsThisRound++
-    if (t.kind === 'neutral') {
-      pl.xp += 1
-      s.neutralDiscard.push(t.cardId!)
-      log(s, `${PLAYER_LABEL[killer]} clears the camp: +1 XP.`, tone(killer))
-      const item = takeFromDeck(s, 'item')
-      if (item) giveCard(s, killer, { type: 'item', cardId: item }, 'an item card')
-    }
-    if (t.kind === 'roshan') {
-      pl.xp += 3
-      s.roshanRespawnRound = s.round + ROSHAN_RESPAWN
-      log(s, `${PLAYER_LABEL[killer]} slays Roshan: +3 XP.`, tone(killer))
-      giveCard(s, killer, { type: 'item', cardId: 'aegis' }, 'the Aegis of the Immortal')
-    }
-  } else if (t.kind === 'neutral') {
+  const byPlayer = killer && killer !== 'neutral' && killer !== t.owner ? killer : undefined
+  if (t.kind === 'hero' && byPlayer) s.players[byPlayer].killsThisRound++
+  if (t.kind === 'neutral') {
     s.neutralDiscard.push(t.cardId!)
-  } else if (t.kind === 'roshan') {
-    s.roshanRespawnRound = s.round + ROSHAN_RESPAWN
+    if (byPlayer) {
+      const pl = s.players[byPlayer]
+      pl.xp += 1
+      pl.gold += 1
+      log(s, `${PLAYER_LABEL[byPlayer]} clears the camp: +1 XP, +1 Gold.`, tone(byPlayer))
+      const rune = takeRune(s)
+      if (rune) giveCard(s, byPlayer, { type: 'item', cardId: rune }, `a rune card (${getItem(rune).name})`)
+    }
+  }
+  if ((t.kind === 'roshan' || t.kind === 'tormentor') && !isLane(t.zone)) {
+    const present = PLAYERS.filter((p) => lineup(s, p, t.zone).length > 0 || p === byPlayer)
+    s.bossKills.push({ camp: t.zone, kind: t.kind, killer: byPlayer, present })
   }
 
   if (src && src.owner !== 'neutral' && !src.dead && isMelee(src) && passiveInZone(s, src.owner, src.zone, 'wraith_king')) {
@@ -1150,10 +1300,33 @@ function castUlt(s: GameState, u: Unit, targetUid?: string) {
   }
 }
 
-function roshanRoar(s: GameState) {
-  const victims = PLAYERS.flatMap((p) => targetableLineup(s, p, 'roshan')).map((x) => s.units[x])
+function roshanRoar(s: GameState, rosh: Unit) {
+  const victims = PLAYERS.flatMap((p) => targetableLineup(s, p, rosh.zone)).map((x) => s.units[x])
   log(s, 'Roshan Roars!', 'neutral')
   for (const v of victims) applyStatus(s, 'neutral', v, 'disarmed', 'Roar', true)
+}
+
+/**
+ * Roshan and Tormentor rewards. Uncontested: the side that fought it, even if all its heroes died.
+ * Contested: the only side with a hero still standing in the camp, otherwise the jungle's owner.
+ */
+function settleBossKills(s: GameState) {
+  for (const k of s.bossKills) {
+    let to: PlayerId
+    if (k.present.length === 1) {
+      to = k.present[0]
+    } else {
+      const survivors = PLAYERS.filter((p) => lineup(s, p, k.camp).some((uid) => s.units[uid].kind === 'hero'))
+      to = survivors.length === 1 ? survivors[0] : jungleOwner(k.camp)
+    }
+    const reward = BOSS_REWARD[k.kind]
+    if (k.kind === 'roshan') {
+      s.players[to].xp += 3
+      log(s, `${PLAYER_LABEL[to]} claims Roshan's bounty: +3 XP.`, tone(to))
+    }
+    giveCard(s, to, { type: 'item', cardId: reward }, `the ${getItem(reward).name}`)
+  }
+  s.bossKills = []
 }
 
 function attackTargets(s: GameState, u: Unit): string[] {
@@ -1262,7 +1435,6 @@ function reflect(s: GameState, attacker: Unit, t: Unit, dealt: number) {
   if (attacker.dead) return
   if (!t.dead && hasPassive(t, 'axe')) dealDamage(s, t, attacker.uid, 1, 'passive', { label: 'Counter Helix' })
   if (!t.dead && hasPassive(t, 'viper')) dealDamage(s, t, attacker.uid, 1, 'passive', { label: 'Corrosive Skin' })
-  if (t.status.thorns) dealDamage(s, t, attacker.uid, 1, 'passive', { label: 'Chipped Vest' })
   if (t.status.bladeMail && dealt > 0) dealDamage(s, t, attacker.uid, dealt, 'passive', { label: 'Blade Mail' })
 }
 
@@ -1314,9 +1486,11 @@ function basicAttack(s: GameState, u: Unit) {
   if (u.status.focusFire) singleAttack(s, u)
 }
 
-/** AGI → UNI → INT → STR → creeps, each bracket sorted by lane priority and day/night. */
-function attackOrder(s: GameState, units: Unit[]): Unit[] {
-  const order: Unit[] = []
+/** Hasted first, then AGI → UNI → INT → STR → creeps; each bracket sorted by lane priority and day/night. */
+function attackOrder(s: GameState, all: Unit[]): Unit[] {
+  const attackers = all.filter(canAttack)
+  const order = attackers.filter((u) => u.status.haste).sort(byPriority(s))
+  const units = attackers.filter((u) => !u.status.haste)
   for (const attr of ATTACK_ORDER) {
     const group = units.filter((u) => attributeOf(u) === attr).sort(byPriority(s))
     if (attr === 'INT') group.sort((a, b) => Number(b.fierySoul && !b.status.broken) - Number(a.fierySoul && !a.status.broken))
@@ -1336,18 +1510,20 @@ function checkWinner(s: GameState) {
   }
 }
 
-/** Phases 1–3 plus cleanup and income. */
+/** Phases 1–3, then the Rotation step. Cleanup and income follow in `endRotation`. */
 export function resolveRound(state: GameState): GameState {
   if (state.phase !== 'ults') return state
   const s = clone(state)
   s.towersHit = []
 
   log(s, 'Phase 1 — Ultimates (STR → INT → UNI → AGI)', 'phase')
-  type Cast = { kind: 'hero'; u: Unit; target?: string } | { kind: 'roar'; u: Unit }
-  const casts: Cast[] = s.ultDeclarations.map((d) => ({ kind: 'hero', u: s.units[d.uid], target: d.target }))
-  const rosh = campNeutral(s, 'roshan')
-  if (rosh && rosh.hp === rosh.maxHp && PLAYERS.some((p) => lineup(s, p, 'roshan').length > 0)) {
-    casts.push({ kind: 'roar', u: rosh })
+  type Cast = { kind: 'hero'; u: Unit; target?: string; free?: boolean } | { kind: 'roar'; u: Unit }
+  const casts: Cast[] = s.ultDeclarations.map((d) => ({ kind: 'hero', u: s.units[d.uid], target: d.target, free: d.free }))
+  for (const camp of CAMPS) {
+    const rosh = campNeutral(s, camp)
+    if (rosh?.kind === 'roshan' && rosh.hp === rosh.maxHp && PLAYERS.some((p) => lineup(s, p, camp).length > 0)) {
+      casts.push({ kind: 'roar', u: rosh })
+    }
   }
   casts.sort((a, b) => {
     const ra = ULT_ORDER.indexOf(attributeOf(a.u)!)
@@ -1358,17 +1534,17 @@ export function resolveRound(state: GameState): GameState {
   for (const c of casts) {
     if (s.winner) break
     if (c.kind === 'roar') {
-      if (!c.u.dead && !c.u.status.stunned) roshanRoar(s)
+      if (!c.u.dead && !c.u.status.stunned) roshanRoar(s, c.u)
       continue
     }
     const u = c.u
     const owner = u.owner as PlayerId
     const reason = castPreventedReason(s, u)
     const target = c.target ? s.units[c.target] : undefined
-    const targetGone = c.target && (!target || target.dead || target.status.banished)
+    const targetGone = c.target && (!target || target.dead || hiddenFromEnemies(target))
     if (reason || targetGone) {
-      s.players[owner].xp += 1
-      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); XP refunded.`, 'info')
+      refundUlt(s, { owner, free: c.free })
+      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.free ? 'Arcane rune' : 'XP'} refunded.`, 'info')
       continue
     }
     log(s, `${fullName(u)} casts ${getHero(u.cardId!).ult.name}${target ? ` on ${fullName(target)}` : ''}.`, tone(owner))
@@ -1377,15 +1553,16 @@ export function resolveRound(state: GameState): GameState {
   }
 
   if (!s.winner) {
-    log(s, 'Phase 2 — Basic attacks (AGI → UNI → INT → STR → Creeps, Slowed last)', 'phase')
+    log(s, 'Phase 2 — Basic attacks (Haste, then AGI → UNI → INT → STR → Creeps, Slowed last)', 'phase')
+    const isSlowed = (u: Unit) => u.status.slowed && !u.status.haste
     const alive = Object.values(s.units).filter((u) => !u.dead)
     const acted = new Set<string>()
-    for (const u of attackOrder(s, alive.filter((x) => !x.status.slowed))) {
-      if (u.status.slowed) continue
+    for (const u of attackOrder(s, alive.filter((x) => !isSlowed(x)))) {
+      if (isSlowed(u)) continue
       acted.add(u.uid)
       basicAttack(s, u)
     }
-    const slowed = Object.values(s.units).filter((u) => !u.dead && u.status.slowed && !acted.has(u.uid))
+    const slowed = Object.values(s.units).filter((u) => !u.dead && isSlowed(u) && !acted.has(u.uid))
     for (const u of attackOrder(s, slowed)) basicAttack(s, u)
   }
 
@@ -1412,6 +1589,64 @@ export function resolveRound(state: GameState): GameState {
     if (!fired) log(s, 'No surviving tower took damage this round, so no tower fires.', 'info')
   }
 
+  settleBossKills(s)
+  if (s.winner) {
+    s.phase = 'gameover'
+    return s
+  }
+  log(s, `Rotation — each side may move one hero (${PLAYER_LABEL[favoredPlayer(s.round)]} first)`, 'phase')
+  for (const p of PLAYERS) s.players[p].rotated = false
+  s.phase = 'rotate'
+  return s
+}
+
+// ---------- rotation ----------
+
+/** Zones a hero can rotate to: the next zone along the map chain, or along the base from a lane with no towers left. */
+export function rotationTargets(s: GameState, uid: string): ZoneId[] {
+  const u = s.units[uid]
+  if (!u || u.dead || u.kind !== 'hero' || u.owner === 'neutral' || s.phase !== 'rotate') return []
+  if (s.players[u.owner].rotated || u.status.rooted || u.status.stunned || u.status.banished) return []
+  const zones = [...ADJACENT[u.zone]]
+  if (isLane(u.zone)) {
+    const tw = s.players[u.owner].structures.towers[u.zone]
+    if (tw.t1 <= 0 && tw.t2 <= 0) zones.push(...BASE_ADJACENT[u.zone])
+  }
+  return zones
+}
+
+export function rotationBlockReason(s: GameState, p: PlayerId): string | null {
+  if (s.phase !== 'rotate') return 'Not the Rotation step'
+  if (s.players[p].rotated) return 'Already rotated this round'
+  return null
+}
+
+export function rotateHero(state: GameState, p: PlayerId, uid: string, zone: ZoneId): GameState {
+  if (rotationBlockReason(state, p) || state.units[uid]?.owner !== p || !rotationTargets(state, uid).includes(zone)) return state
+  const s = clone(state)
+  const u = s.units[uid]
+  const from = u.zone
+  removeFromBoard(s, u)
+  u.zone = zone
+  u.placedRound = s.round
+  s.zones[zone][p].push(u.uid)
+  s.players[p].rotated = true
+  log(s, `${fullName(u)} rotates from ${ZONE_LABEL[from]} to ${ZONE_LABEL[zone]}.`, tone(p))
+  return s
+}
+
+export function passRotation(state: GameState, p: PlayerId): GameState {
+  if (rotationBlockReason(state, p)) return state
+  const s = clone(state)
+  s.players[p].rotated = true
+  return s
+}
+
+/** Cleanup and income. */
+export function endRotation(state: GameState): GameState {
+  if (state.phase !== 'rotate') return state
+  const s = clone(state)
+
   if (!s.winner) {
     log(s, 'Cleanup', 'phase')
     for (const u of Object.values(s.units)) {
@@ -1428,6 +1663,9 @@ export function resolveRound(state: GameState): GameState {
         else s.heroDiscard.push(u.cardId!)
       }
       if (u.kind === 'creep' || u.kind === 'siege') s.creepDiscard.push(u.kind)
+      removeFromBoard(s, u)
+      delete s.units[u.uid]
+    } else if (u.kind === 'illusion') {
       removeFromBoard(s, u)
       delete s.units[u.uid]
     } else {

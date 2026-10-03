@@ -1,9 +1,9 @@
 import { Plus } from 'lucide-react'
-import { ROSHAN } from '@/game/cards'
+import { getItem } from '@/game/cards'
 import { PLAYER_LABEL, ZONE_LABEL, campHolder, campNeutral, lineup } from '@/game/engine'
 import { ANCIENT_HP, CAMPS, LANES, PLAYERS, TOWER_HP, ZONES, type GameState, type PlayerId, type ZoneId } from '@/game/types'
 import { cn } from '@/lib/utils'
-import { ANCIENT_POS, CAMP_POS, TOWER_POS, slotPos, type Pt } from './mapLayout'
+import { ANCIENT_POS, CAMP_POS, ROTATION_PATH, TOWER_POS, slotPos, type Pt } from './mapLayout'
 import { UnitToken } from './UnitToken'
 
 export interface MapInteraction {
@@ -11,8 +11,9 @@ export interface MapInteraction {
   inspected?: string
   declared: Set<string>
   onUnitClick: (uid: string) => void
-  /** Zones where the selected hand card can be dropped */
+  /** Zones where the selected card or rotating hero can go */
   dropZones: ZoneId[]
+  dropLabel?: string
   onDrop: (zone: ZoneId) => void
 }
 
@@ -44,10 +45,6 @@ function MapBackground() {
           <stop offset="0%" stopColor="#4a2a20" />
           <stop offset="100%" stopColor="#2b1813" />
         </linearGradient>
-        <radialGradient id="pit">
-          <stop offset="0%" stopColor="#4b3a1a" />
-          <stop offset="100%" stopColor="#1f1a10" />
-        </radialGradient>
       </defs>
       <polygon points="0,0 0,100 100,100" fill="url(#rad)" />
       <polygon points="0,0 100,0 100,100" fill="url(#dire)" />
@@ -61,22 +58,43 @@ function MapBackground() {
         <path d="M 16 90 L 90 90 L 90 16" />
         <path d="M 15 85 L 85 15" />
       </g>
-      {(['radiantJungle', 'direJungle'] as const).map((c) => (
+      <polyline
+        points={ROTATION_PATH.map((p) => `${p.x},${p.y}`).join(' ')}
+        fill="none"
+        stroke="#fde68a"
+        strokeWidth="0.45"
+        strokeDasharray="1.2 1.4"
+        opacity="0.45"
+      />
+      {CAMPS.map((c) => (
         <circle key={c} cx={CAMP_POS[c].x} cy={CAMP_POS[c].y} r="4.5" fill="none" stroke="#e8c36a" strokeWidth="0.35" strokeDasharray="1 1" opacity="0.6" />
       ))}
-      <circle cx={CAMP_POS.roshan.x} cy={CAMP_POS.roshan.y} r="5.5" fill="url(#pit)" stroke="#e8c36a" strokeWidth="0.4" opacity="0.9" />
       <rect x="2" y="84" width="14" height="14" rx="3" fill="#1f6b3a" opacity="0.55" />
       <rect x="84" y="2" width="14" height="14" rx="3" fill="#7a2a1c" opacity="0.55" />
     </svg>
   )
 }
 
-function Tower({ pos, hp, max, tier, owner }: { pos: Pt; hp: number; max: number; tier: 1 | 2; owner: PlayerId }) {
+function Tower({
+  pos,
+  hp,
+  max,
+  tier,
+  owner,
+  hidden,
+}: {
+  pos: Pt
+  hp: number
+  max: number
+  tier: 1 | 2
+  owner: PlayerId
+  hidden?: string
+}) {
   const down = hp <= 0
   return (
     <div
       style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: '3.4cqw', height: '3.4cqw' }}
-      title={`${PLAYER_LABEL[owner]} Tier ${tier} tower: ${hp}/${max} · deals ${tier} damage`}
+      title={`${PLAYER_LABEL[owner]} Tier ${tier} tower: ${hp}/${max} · deals ${tier} damage${hidden ? ` · hidden card: ${hidden}` : ''}`}
       className={cn(
         'absolute -translate-x-1/2 -translate-y-1/2 rounded-[0.6cqw] border text-center leading-none',
         down
@@ -115,7 +133,9 @@ function Ancient({ s, owner }: { s: GameState; owner: PlayerId }) {
   )
 }
 
-export function Minimap({ s, ia }: { s: GameState; ia: MapInteraction }) {
+export function Minimap({ s, ia, viewer }: { s: GameState; ia: MapInteraction; viewer: PlayerId }) {
+  const hiddenCard = (p: PlayerId, lane: (typeof LANES)[number], tier: 't1' | 't2') =>
+    p === viewer && s.players[p].structures.towers[lane][tier] > 0 ? getItem(s.players[p].towerCards[lane][tier]).name : undefined
   return (
     <div
       className="relative mx-auto aspect-square w-full max-w-[min(100%,82vh)] min-w-[320px] overflow-hidden rounded-2xl border border-zinc-700/80 shadow-2xl"
@@ -130,8 +150,8 @@ export function Minimap({ s, ia }: { s: GameState; ia: MapInteraction }) {
         LANES.flatMap((lane) => {
           const tw = s.players[p].structures.towers[lane]
           return [
-            <Tower key={`${p}${lane}1`} pos={TOWER_POS[p][lane].t1} hp={tw.t1} max={TOWER_HP.t1} tier={1} owner={p} />,
-            <Tower key={`${p}${lane}2`} pos={TOWER_POS[p][lane].t2} hp={tw.t2} max={TOWER_HP.t2} tier={2} owner={p} />,
+            <Tower key={`${p}${lane}1`} pos={TOWER_POS[p][lane].t1} hp={tw.t1} max={TOWER_HP.t1} tier={1} owner={p} hidden={hiddenCard(p, lane, 't1')} />,
+            <Tower key={`${p}${lane}2`} pos={TOWER_POS[p][lane].t2} hp={tw.t2} max={TOWER_HP.t2} tier={2} owner={p} hidden={hiddenCard(p, lane, 't2')} />,
           ]
         }),
       )}
@@ -155,14 +175,14 @@ export function Minimap({ s, ia }: { s: GameState; ia: MapInteraction }) {
                 style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                 className="absolute -translate-x-1/2 -translate-y-1/2 text-[1.1cqw] text-amber-200/60 italic"
               >
-                {camp === 'roshan' ? `Respawns R${s.roshanRespawnRound}` : 'Empty camp'}
+                Empty camp
               </div>
             )}
             <div
-              style={{ left: `${pos.x}%`, top: `${pos.y + (camp === 'roshan' ? 5 : 4.2)}%` }}
+              style={{ left: `${pos.x}%`, top: `${pos.y + (n?.kind === 'roshan' ? 4.8 : 4.2)}%` }}
               className="pointer-events-none absolute -translate-x-1/2 text-center text-[1.05cqw] leading-tight font-semibold whitespace-nowrap text-amber-100/80 drop-shadow"
             >
-              {camp === 'roshan' ? ROSHAN.name : ZONE_LABEL[camp]}
+              {ZONE_LABEL[camp]}
               {holder && (
                 <span className={cn('block text-[0.95cqw]', holder === 'radiant' ? 'text-emerald-300' : 'text-red-300')}>
                   held by {PLAYER_LABEL[holder]}
@@ -197,7 +217,7 @@ export function Minimap({ s, ia }: { s: GameState; ia: MapInteraction }) {
             key={zone}
             type="button"
             onClick={() => ia.onDrop(zone)}
-            title={`Place in ${ZONE_LABEL[zone]}`}
+            title={`${ia.dropLabel ?? 'Place in'} ${ZONE_LABEL[zone]}`}
             style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: '4.8cqw', height: '4.8cqw' }}
             className="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-dashed border-emerald-300 bg-emerald-500/25 text-emerald-100 transition hover:scale-110 hover:bg-emerald-500/50"
           >

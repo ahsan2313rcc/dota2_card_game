@@ -61,9 +61,16 @@ function HeroFace({ id }: { id: string }) {
 
 const ITEM_TINT = {
   Shop: 'from-amber-600/70 to-amber-900/30',
-  Neutral: 'from-teal-600/70 to-teal-900/30',
+  Rune: 'from-teal-600/70 to-teal-900/30',
   Tower: 'from-sky-600/70 to-slate-900/30',
   Special: 'from-yellow-400/80 to-orange-800/40',
+} as const
+
+const ITEM_NOTE = {
+  Shop: 'Shop item · single use',
+  Rune: 'Rune · instant, single use',
+  Tower: 'Tower card · outside hand limit',
+  Special: 'Boss reward · single use',
 } as const
 
 function ItemFace({ id }: { id: string }) {
@@ -75,7 +82,7 @@ function ItemFace({ id }: { id: string }) {
       </div>
       <div className="flex items-center gap-1 px-2 pt-1.5 text-[10px] text-zinc-400">
         <Package className="size-3" />
-        {it.kind} item · single use
+        {ITEM_NOTE[it.kind]}
       </div>
       <p className="flex-1 px-2 py-1.5 text-[11px] leading-snug text-zinc-300">{it.text}</p>
     </>

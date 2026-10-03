@@ -36,10 +36,6 @@ export const SLOTS: Record<ZoneId, Record<PlayerId, Slot>> = {
     radiant: { origin: { x: 60, y: 82 }, step: { x: -S, y: 0 } },
     dire: { origin: { x: 60, y: 66 }, step: { x: -S, y: 0 } },
   },
-  roshan: {
-    radiant: { origin: { x: 27, y: 53 }, step: { x: -S, y: 0 } },
-    dire: { origin: { x: 27, y: 39 }, step: { x: -S, y: 0 } },
-  },
 }
 
 export function slotPos(zone: ZoneId, player: PlayerId, index: number): Pt {
@@ -50,8 +46,16 @@ export function slotPos(zone: ZoneId, player: PlayerId, index: number): Pt {
 export const CAMP_POS: Record<CampId, Pt> = {
   direJungle: { x: 34, y: 26 },
   radiantJungle: { x: 66, y: 74 },
-  roshan: { x: 33, y: 46 },
 }
+
+/** Rotation chain drawn on the map: Top – Dire Jungle – Mid – Radiant Jungle – Bottom. */
+export const ROTATION_PATH: Pt[] = [
+  { x: 22, y: 14 },
+  CAMP_POS.direJungle,
+  { x: 50, y: 50 },
+  CAMP_POS.radiantJungle,
+  { x: 86, y: 78 },
+]
 
 export const TOWER_POS: Record<PlayerId, Record<LaneId, { t1: Pt; t2: Pt }>> = {
   radiant: {
@@ -69,13 +73,4 @@ export const TOWER_POS: Record<PlayerId, Record<LaneId, { t1: Pt; t2: Pt }>> = {
 export const ANCIENT_POS: Record<PlayerId, Pt> = {
   radiant: { x: 9, y: 91 },
   dire: { x: 91, y: 9 },
-}
-
-export const ZONE_LABEL_POS: Record<ZoneId, Pt> = {
-  top: { x: 4, y: 4 },
-  mid: { x: 50, y: 50 },
-  bot: { x: 96, y: 96 },
-  direJungle: CAMP_POS.direJungle,
-  radiantJungle: CAMP_POS.radiantJungle,
-  roshan: CAMP_POS.roshan,
 }

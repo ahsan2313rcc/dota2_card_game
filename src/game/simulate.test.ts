@@ -1,7 +1,7 @@
 import { it } from 'vitest'
-import { aiAssign, aiDraw, aiItems, aiUlts } from './ai'
-import { endDraw, endItems, newGame, nextRound, resolveRound, reveal } from './engine'
-import { LANES, PLAYERS, type ComebackRules, type GameState, type PlayerId } from './types'
+import { playAiRound } from './ai'
+import { newGame, nextRound } from './engine'
+import { LANES, type ComebackRules, type GameState, type PlayerId } from './types'
 
 // Balance report, skipped by `npm test`. Run with `npm run sim` (GAMES=1000 for more samples).
 
@@ -9,17 +9,6 @@ declare const process: { env: Record<string, string | undefined>; stdout: { writ
 
 const GAMES = Number(process.env.GAMES ?? 500)
 const CHECK_ROUND = 6
-
-function playRound(s: GameState): GameState {
-  for (const p of PLAYERS) s = aiDraw(s, p)
-  s = endDraw(s)
-  for (const p of PLAYERS) s = aiAssign(s, p)
-  s = reveal(s)
-  for (const p of PLAYERS) s = aiItems(s, p)
-  s = endItems(s)
-  for (const p of PLAYERS) s = aiUlts(s, p)
-  return resolveRound(s)
-}
 
 function structureHp(s: GameState, p: PlayerId) {
   const st = s.players[p].structures
@@ -37,7 +26,7 @@ function run(label: string, rules: ComebackRules) {
     let s = newGame({ singleUseUlt: true, rules }, g * 7919)
     let leader: PlayerId | undefined
     for (let r = 0; r < 60 && !s.winner; r++) {
-      s = playRound(s)
+      s = playAiRound(s)
       if (s.round === CHECK_ROUND && !s.winner) {
         const d = structureHp(s, 'radiant') - structureHp(s, 'dire')
         if (Math.abs(d) >= 2) leader = d > 0 ? 'radiant' : 'dire'

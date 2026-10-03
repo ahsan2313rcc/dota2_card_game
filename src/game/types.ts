@@ -1,7 +1,7 @@
 export type PlayerId = 'radiant' | 'dire'
 export type Owner = PlayerId | 'neutral'
 export type LaneId = 'top' | 'mid' | 'bot'
-export type CampId = 'radiantJungle' | 'direJungle' | 'roshan'
+export type CampId = 'radiantJungle' | 'direJungle'
 export type ZoneId = LaneId | CampId
 export type Attribute = 'STR' | 'AGI' | 'INT' | 'UNI'
 export type AttackRange = 'Melee' | 'Ranged'
@@ -23,13 +23,14 @@ export interface HeroCard {
   maxHp?: number
 }
 
-export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit' | 'enemyHero' | 'lane' | 'none'
+/** `lane` picks a lane only; `allyHeroToLane` picks an allied hero, then a lane. */
+export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit' | 'enemyHero' | 'lane' | 'allyHeroToLane' | 'none'
 
 export interface ItemCard {
   id: string
   name: string
-  /** Tower cards are earned when a tower falls and do not count toward the hand limit. */
-  kind: 'Shop' | 'Neutral' | 'Tower' | 'Special'
+  /** Runes drop from neutral camps. Tower cards are earned when a tower falls and do not count toward the hand limit. */
+  kind: 'Shop' | 'Rune' | 'Tower' | 'Special'
   text: string
   target: ItemTarget
 }
@@ -71,7 +72,10 @@ export interface RoundStatus {
   accuracy: boolean
   pierce: boolean
   bonusDamage: number
-  thorns: boolean
+  /** Untargetable by enemies (attacks, towers, Ultimates and items) */
+  invisible: boolean
+  /** Attacks before everyone else in Phase 2; overrides Slow */
+  haste: boolean
   bladeMail: boolean
   aegis: boolean
   taunt?: string
@@ -84,7 +88,8 @@ export interface RoundStatus {
   frostShieldUsed: boolean
 }
 
-export type UnitKind = 'hero' | 'creep' | 'siege' | 'neutral' | 'roshan'
+/** `illusion` is the Illusion rune's 1-HP decoy: it never attacks and vanishes at Cleanup. */
+export type UnitKind = 'hero' | 'creep' | 'siege' | 'neutral' | 'roshan' | 'tormentor' | 'illusion'
 
 export interface Unit {
   uid: string
@@ -124,6 +129,10 @@ export interface PlayerState {
   towerCards: Record<LaneId, Record<TowerTier, string>>
   /** Glyph played this round: towers take no damage */
   glyph: boolean
+  /** Arcane rune: the next Ultimate declared costs 0 XP */
+  arcane: boolean
+  /** Has used (or passed) this round's rotation */
+  rotated: boolean
 }
 
 export type TowerTier = 't1' | 't2'
@@ -132,9 +141,19 @@ export interface UltDeclaration {
   uid: string
   owner: PlayerId
   target?: string
+  /** Paid with the Arcane rune instead of XP */
+  free?: boolean
 }
 
-export type Phase = 'draw' | 'assign' | 'items' | 'ults' | 'report' | 'gameover'
+/** Roshan or a Tormentor slain this round; the reward is settled after combat. */
+export interface BossKill {
+  camp: CampId
+  kind: 'roshan' | 'tormentor'
+  killer?: PlayerId
+  present: PlayerId[]
+}
+
+export type Phase = 'draw' | 'assign' | 'items' | 'ults' | 'rotate' | 'report' | 'gameover'
 
 export type LogTone = 'info' | 'radiant' | 'dire' | 'neutral' | 'damage' | 'kill' | 'structure' | 'phase'
 
@@ -166,11 +185,13 @@ export interface GameState {
   zones: Record<ZoneId, Record<PlayerId, string[]>>
   /** The neutral occupying each camp, if any */
   camps: Record<CampId, string | null>
-  roshanRespawnRound: number
   heroDeck: string[]
   heroDiscard: string[]
   itemDeck: string[]
   itemDiscard: string[]
+  runeDeck: string[]
+  runeDiscard: string[]
+  bossKills: BossKill[]
   creepDeck: CreepKind[]
   creepDiscard: CreepKind[]
   neutralDeck: string[]
@@ -186,7 +207,7 @@ export interface GameState {
 }
 
 export const LANES: LaneId[] = ['top', 'mid', 'bot']
-export const CAMPS: CampId[] = ['radiantJungle', 'direJungle', 'roshan']
+export const CAMPS: CampId[] = ['radiantJungle', 'direJungle']
 export const ZONES: ZoneId[] = [...LANES, ...CAMPS]
 export const PLAYERS: PlayerId[] = ['radiant', 'dire']
 
@@ -200,7 +221,9 @@ export const TOWER_DAMAGE = { t1: 1, t2: 2 } as const
 export const ANCIENT_HP = 10
 export const BUYBACK_COST = { behind: 2, even: 2, ahead: 3 } as const
 export const ROSHAN_HP = 3
-export const ROSHAN_RESPAWN = 3
+/** If Roshan is flipped before this round, he is shuffled back and another camp is drawn. */
+export const ROSHAN_EARLIEST_ROUND = 4
+export const TORMENTOR_HP = 2
 
 export function isLane(z: ZoneId): z is LaneId {
   return z === 'top' || z === 'mid' || z === 'bot'

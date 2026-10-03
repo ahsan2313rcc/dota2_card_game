@@ -49,6 +49,8 @@ import {
   type Settings,
   type TowerTier,
   type UnitDeckCard,
+  type HeroCard,
+  type UltEffect,
   type ComebackRules,
   type Unit,
   type ZoneId,
@@ -215,6 +217,10 @@ function canAttack(u: Unit) {
 /** A passive works only while the hero is alive and not Broken. */
 export function hasPassive(u: Unit | undefined, heroId: string): boolean {
   return !!u && !u.dead && u.cardId === heroId && u.kind === 'hero' && !u.status.broken
+}
+
+function hasKind(u: Unit | undefined, kind: HeroCard['passiveKind']): boolean {
+  return !!u && !u.dead && u.kind === 'hero' && !u.status.broken && !!u.cardId && getHero(u.cardId).passiveKind === kind
 }
 
 export function lineup(s: GameState, player: PlayerId, zone: ZoneId): string[] {
@@ -466,7 +472,7 @@ function startRound(s: GameState) {
         }
       }
     }
-    const cmBonus = heroesOnBoard(s, p).filter((u) => hasPassive(u, 'crystal_maiden')).length
+    const cmBonus = heroesOnBoard(s, p).filter((u) => hasPassive(u, 'crystal_maiden') || hasKind(u, 'gold')).length
     const gold = 1 + pl.bonusIncomeLanes.length + cmBonus
     pl.gold += gold
     pl.xp += 1
@@ -1091,8 +1097,8 @@ function applyDamage(
       log(s, `${fullName(t)} is Immune to ${label}.`, 'info')
       return 0
     }
-    if (kind === 'ult' && hasPassive(t, 'juggernaut')) {
-      log(s, `${fullName(t)} spins through ${label} untouched (Blade Fury).`, 'info')
+    if (kind === 'ult' && (hasPassive(t, 'juggernaut') || hasKind(t, 'spellImmune'))) {
+      log(s, `${fullName(t)} takes no damage from ${label} (${getHero(t.cardId!).passive.name}).`, 'info')
       return 0
     }
   }
@@ -1102,15 +1108,15 @@ function applyDamage(
       log(s, `${fullName(t)} Evades ${label}'s attack.`, 'info')
       return 0
     }
-    if (hasPassive(t, 'phantom_assassin') && !st.blurUsed) {
+    if ((hasPassive(t, 'phantom_assassin') || hasKind(t, 'evade')) && !st.blurUsed) {
       st.blurUsed = true
-      log(s, `${fullName(t)} Evades ${label}'s attack (Blur).`, 'info')
+      log(s, `${fullName(t)} Evades ${label}'s attack (${getHero(t.cardId!).passive.name}).`, 'info')
       return 0
     }
   }
   if (kind === 'attack' && !pierce) {
-    if (hasPassive(t, 'windranger') && src && isMelee(src)) {
-      log(s, `${fullName(t)} takes no damage from ${label}'s melee attack (Windrun).`, 'info')
+    if ((hasPassive(t, 'windranger') || hasKind(t, 'meleeImmune')) && src && isMelee(src)) {
+      log(s, `${fullName(t)} takes no damage from ${label}'s melee attack (${getHero(t.cardId!).passive.name}).`, 'info')
       return 0
     }
     if (t.owner !== 'neutral' && !st.frostShieldUsed && isPos1(s, t) && passiveInZone(s, t.owner, t.zone, 'lich')) {
@@ -1124,13 +1130,13 @@ function applyDamage(
     log(s, `${fullName(t)}'s Shield blocks ${label}.`, 'info')
     return 0
   }
-  if (src && (src.kind === 'creep' || src.kind === 'siege') && hasPassive(t, 'tidehunter')) {
-    log(s, `${fullName(t)} shrugs off the creep hit (Kraken Shell).`, 'info')
+  if (src && (src.kind === 'creep' || src.kind === 'siege') && (hasPassive(t, 'tidehunter') || hasKind(t, 'creepBlock'))) {
+    log(s, `${fullName(t)} shrugs off the creep hit (${getHero(t.cardId!).passive.name}).`, 'info')
     return 0
   }
-  if (!pierce && kind !== 'self' && kind !== 'reflect' && hasPassive(t, 'abaddon') && !st.aphoticUsed) {
+  if (!pierce && kind !== 'self' && kind !== 'reflect' && (hasPassive(t, 'abaddon') || hasKind(t, 'block')) && !st.aphoticUsed) {
     st.aphoticUsed = true
-    log(s, `${fullName(t)} absorbs ${label} (Aphotic Shield).`, 'info')
+    log(s, `${fullName(t)} absorbs ${label} (${getHero(t.cardId!).passive.name}).`, 'info')
     return 0
   }
   if (st.borrowedTime && kind !== 'self') {
@@ -1218,6 +1224,116 @@ function byPriority(s: GameState) {
   }
 }
 
+function resolveUltEffect(s: GameState, u: Unit, effect: UltEffect, target?: Unit) {
+  const hero = getHero(u.cardId!)
+  const ult = hero.ult.name
+  const owner = u.owner as PlayerId
+  const enemies = () => enemyLine(s, u)
+  const hit = (uid: string, n: number) => dealDamage(s, u, uid, n, 'ult', { label: `${hero.name}'s ${ult}` })
+  const mark = (e: Unit, key: BoolStatus) => applyStatus(s, owner, e, key, ult, true)
+  switch (effect) {
+    case 'lane1':
+      for (const e of enemies()) hit(e.uid, 1)
+      break
+    case 'stunLane':
+      for (const e of enemies().filter((e) => e.kind === 'hero')) mark(e, 'stunned')
+      break
+    case 'slowLane':
+      for (const e of enemies()) mark(e, 'slowed')
+      break
+    case 'global1':
+      for (const e of Object.values(s.units).filter((x) => x.owner === other(owner) && x.kind === 'hero' && !x.dead)) hit(e.uid, 1)
+      break
+    case 'taunt':
+      for (const e of enemies()) e.status.taunt = u.uid
+      log(s, `All enemies in ${ZONE_LABEL[u.zone]} must attack ${hero.name}.`, tone(owner))
+      break
+    case 'decoy': {
+      const decoy = makeUnit(s, { kind: 'illusion', cardId: u.cardId, owner, zone: u.zone, hp: 1 })
+      const arr = s.zones[u.zone][owner]
+      arr.splice(arr.indexOf(u.uid), 0, decoy.uid)
+      log(s, `An illusion of ${hero.name} steps in front of it.`, tone(owner))
+      break
+    }
+    case 'shield':
+      u.status.shield += 1
+      break
+    case 'evade':
+      u.status.evade += 1
+      break
+    case 'haste':
+      u.status.haste = true
+      break
+    case 'bonus':
+      u.status.bonusDamage += 1
+      break
+    case 'accuracy':
+      u.status.accuracy = true
+      break
+    case 'pierce':
+      u.status.pierce = true
+      break
+    case 'reincarnation':
+      u.status.reincarnation = true
+      break
+    case 'focus':
+      u.status.focusFire = true
+      break
+    case 'immune':
+      u.status.immune = true
+      break
+    case 'invisible':
+      u.status.invisible = true
+      break
+    case 'heal':
+      heal(s, u, ult)
+      break
+    case 'dmg1':
+      if (target) hit(target.uid, 1)
+      break
+    case 'dmg2':
+    case 'dmg2h':
+      if (target) hit(target.uid, 2)
+      break
+    case 'stun':
+      if (target) mark(target, 'stunned')
+      break
+    case 'stunDmg':
+      if (target) {
+        hit(target.uid, 1)
+        mark(target, 'stunned')
+      }
+      break
+    case 'silence':
+      if (target) mark(target, 'silenced')
+      break
+    case 'disarm':
+      if (target) mark(target, 'disarmed')
+      break
+    case 'slow':
+      if (target) mark(target, 'slowed')
+      break
+    case 'root':
+      if (target) mark(target, 'rooted')
+      break
+    case 'break':
+      if (target) mark(target, 'broken')
+      break
+    case 'blind':
+      if (target) mark(target, 'blinded')
+      break
+    case 'mute':
+      if (target) mark(target, 'muted')
+      break
+    case 'curse':
+      if (target) {
+        hit(target.uid, 1)
+        mark(target, 'cursed')
+      }
+      break
+  }
+}
+
 function castUlt(s: GameState, u: Unit, targetUid?: string) {
   const hero = getHero(u.cardId!)
   const ult = hero.ult.name
@@ -1225,6 +1341,11 @@ function castUlt(s: GameState, u: Unit, targetUid?: string) {
   const enemies = () => enemyLine(s, u)
   const target = targetUid ? s.units[targetUid] : undefined
   const hit = (uid: string, n: number) => dealDamage(s, u, uid, n, 'ult', { label: `${hero.name}'s ${ult}` })
+
+  if (hero.ult.effect) {
+    resolveUltEffect(s, u, hero.ult.effect, target)
+    return
+  }
 
   switch (u.cardId) {
     case 'axe':
@@ -1364,7 +1485,7 @@ function attackTargets(s: GameState, u: Unit): string[] {
     }
   }
   if (pool.length === 0) return []
-  if (hasPassive(u, 'sniper')) {
+  if (hasPassive(u, 'sniper') || hasKind(u, 'snipe')) {
     const units = pool.map((x) => s.units[x])
     const pick =
       units.find((x) => counters(u, x)) ??
@@ -1373,7 +1494,7 @@ function attackTargets(s: GameState, u: Unit): string[] {
       units[0]
     return [pick.uid]
   }
-  if (hasPassive(u, 'sven') || hasPassive(u, 'luna')) return pool.slice(0, 2)
+  if (hasPassive(u, 'sven') || hasPassive(u, 'luna') || hasKind(u, 'cleave')) return pool.slice(0, 2)
   return [pool[0]]
 }
 
@@ -1450,8 +1571,8 @@ function neutralAttack(s: GameState, u: Unit) {
 
 function reflect(s: GameState, attacker: Unit, t: Unit, dealt: number) {
   if (attacker.dead) return
-  if (!t.dead && hasPassive(t, 'axe')) dealDamage(s, t, attacker.uid, 1, 'passive', { label: 'Counter Helix' })
-  if (!t.dead && hasPassive(t, 'viper')) dealDamage(s, t, attacker.uid, 1, 'passive', { label: 'Corrosive Skin' })
+  if (!t.dead && (hasPassive(t, 'axe') || hasPassive(t, 'viper') || hasKind(t, 'thorns')))
+    dealDamage(s, t, attacker.uid, 1, 'passive', { label: getHero(t.cardId!).passive.name })
   if (t.status.bladeMail && dealt > 0) dealDamage(s, t, attacker.uid, dealt, 'passive', { label: 'Blade Mail' })
 }
 
@@ -1482,8 +1603,9 @@ function singleAttack(s: GameState, u: Unit) {
     const dealt = dealDamage(s, u, tid, dmg, 'attack')
     if (dealt > 0 && !u.status.broken) {
       if (u.cardId === 'lina') u.fierySoul = true
-      if (u.cardId === 'anti_mage' && t.kind === 'hero' && !t.dead) applyStatus(s, u.owner, t, 'silenced', 'Mana Break', false)
-      if (u.cardId === 'venomancer' && !t.dead) t.status.poisonedBy = u.owner as PlayerId
+      if ((u.cardId === 'anti_mage' || hasKind(u, 'silenceOnHit')) && t.kind === 'hero' && !t.dead)
+        applyStatus(s, u.owner, t, 'silenced', getHero(u.cardId!).passive.name, false)
+      if ((u.cardId === 'venomancer' || hasKind(u, 'poison')) && !t.dead) t.status.poisonedBy = u.owner as PlayerId
     }
     reflect(s, u, t, dealt)
   }

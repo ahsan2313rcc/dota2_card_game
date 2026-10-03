@@ -1,6 +1,7 @@
 import type { HeroCard, ItemCard, NeutralCard } from './types'
+import { POOL_HEROES, POOL_ICON_SLUG } from './heroPool'
 
-// Starter set: 5 heroes per attribute. Add new heroes here; mechanics keyed by id live in engine.ts.
+// The full Dota roster. The first 20 are the hand-scripted starter heroes; the rest live in heroPool.ts.
 export const HEROES: HeroCard[] = [
   // STR
   {
@@ -167,6 +168,7 @@ export const HEROES: HeroCard[] = [
     passive: { name: 'Mana Break', text: 'Damaging an enemy hero with a basic attack silences them for the round.' },
     ult: { name: 'Mana Void', text: 'Deal 1 damage to all enemy heroes in this lane for each enemy INT hero in the lane.', target: 'none' },
   },
+  ...POOL_HEROES,
 ]
 
 // Items are free to play and single use: the card is discarded once it resolves.
@@ -237,6 +239,7 @@ const ICON_SLUG: Record<string, string> = {
   zeus: 'zuus',
   windranger: 'windrunner',
   anti_mage: 'antimage',
+  ...POOL_ICON_SLUG,
 }
 
 export function heroPortrait(id: string) {

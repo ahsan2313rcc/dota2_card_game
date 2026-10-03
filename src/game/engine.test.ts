@@ -38,7 +38,7 @@ function forceCamp(s: GameState, camp: CampId, kind: 'neutral' | 'roshan' | 'tor
   const u = campNeutral(s, camp)!
   const hp = kind === 'roshan' ? 3 : 2
   Object.assign(u, { kind, cardId, hp, maxHp: hp })
-  if (kind === 'tormentor') u.status.shield = 1
+  u.status.shield = kind === 'tormentor' ? 1 : 0
   return u
 }
 
@@ -82,6 +82,19 @@ describe('setup and core rules', () => {
     for (const camp of CAMPS) expect(campNeutral(s, camp)).toBeDefined()
     expect(s.runeDeck).toHaveLength(20)
     expect(s.neutralDeck.length + 2).toBe(15)
+  })
+
+  it('includes one copy of every Dota hero, and a pool ultimate deals its damage', () => {
+    expect(HEROES).toHaveLength(127)
+    expect(new Set(HEROES.map((h) => h.id)).size).toBe(127)
+    let s = setup(3, [hero('es', 'earthshaker')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'es', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = reveal(s)
+    s.players.radiant.xp = 1
+    s = declareUlt(s, heroesOnBoard(s, 'radiant')[0].uid)
+    s = resolveRound(endItems(s))
+    expect(heroesOnBoard(s, 'dire')[0].hp).toBe(1)
   })
 
   it('limits hero placements to 3 per round', () => {

@@ -13,13 +13,62 @@ export type UltTarget =
   | 'enemyHeroAdjacentLane'
   | 'enemyUnitAnyLane'
 
+/** Shared passive rules. The starter heroes use bespoke ids; the rest of the roster picks one of these. */
+export type PassiveKind =
+  | 'thorns'
+  | 'cleave'
+  | 'evade'
+  | 'meleeImmune'
+  | 'spellImmune'
+  | 'block'
+  | 'creepBlock'
+  | 'gold'
+  | 'poison'
+  | 'silenceOnHit'
+  | 'snipe'
+
+/** Shared ultimate rules for heroes outside the hand-scripted starter set. */
+export type UltEffect =
+  | 'lane1'
+  | 'stunLane'
+  | 'slowLane'
+  | 'dmg1'
+  | 'dmg2'
+  | 'dmg2h'
+  | 'stun'
+  | 'stunDmg'
+  | 'silence'
+  | 'disarm'
+  | 'slow'
+  | 'root'
+  | 'break'
+  | 'blind'
+  | 'mute'
+  | 'curse'
+  | 'shield'
+  | 'evade'
+  | 'haste'
+  | 'bonus'
+  | 'accuracy'
+  | 'pierce'
+  | 'reincarnation'
+  | 'focus'
+  | 'immune'
+  | 'invisible'
+  | 'heal'
+  | 'global1'
+  | 'taunt'
+  | 'decoy'
+
 export interface HeroCard {
   id: string
   name: string
   attribute: Attribute
   range: AttackRange
   passive: { name: string; text: string }
-  ult: { name: string; text: string; target: UltTarget }
+  ult: { name: string; text: string; target: UltTarget; effect?: UltEffect }
+  /** When set, this hero uses a shared passive rule in addition to its name. */
+  passiveKind?: PassiveKind
   maxHp?: number
 }
 

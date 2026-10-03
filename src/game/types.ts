@@ -55,7 +55,6 @@ export interface RoundStatus {
   aphoticUsed: boolean
   frostShieldUsed: boolean
   vanguardUsed: boolean
-  attackedStructure: boolean
 }
 
 export interface Unit {
@@ -124,6 +123,8 @@ export interface GameState {
   itemDiscard: string[]
   creepDeck: Array<'creep' | 'siege'>
   ultDeclarations: UltDeclaration[]
+  /** Towers damaged during the current resolution, keyed `${defender}:${lane}:${tier}` */
+  towersHit: string[]
   log: LogEntry[]
   nextId: number
   seed: number

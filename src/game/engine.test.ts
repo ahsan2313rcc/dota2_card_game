@@ -71,6 +71,22 @@ describe('engine', () => {
     expect(s.log.some((l) => l.text.includes('Laguna Blade fizzles'))).toBe(true)
   })
 
+  it('a damaged tower fires at the attacking side Position 1; undamaged towers stay silent', () => {
+    let s = endDraw(newGame(undefined, 5))
+    s.players.radiant.hand = [{ iid: 'a', type: 'hero', cardId: 'axe' }]
+    s.players.dire.hand = []
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = reveal(s)
+    for (const uid of s.lanes.mid.dire) delete s.units[uid]
+    s.lanes.mid.dire = []
+    s = resolveRound(endItems(s))
+    const axe = heroesOnBoard(s, 'radiant')[0]
+    expect(s.players.dire.structures.towers.mid.t1).toBe(1)
+    expect(axe.hp).toBe(1)
+    expect(s.log.some((l) => l.text.startsWith('Dire Mid Tier 1 tower deals 1 to Radiant Axe'))).toBe(true)
+    expect(s.log.some((l) => /(Top|Bottom) Tier \d tower (deals|slays)/.test(l.text))).toBe(false)
+  })
+
   it('plays many full AI-vs-AI games without breaking invariants', () => {
     let finished = 0
     for (let seed = 1; seed <= 60; seed++) {

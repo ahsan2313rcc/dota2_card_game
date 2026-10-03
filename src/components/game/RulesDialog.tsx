@@ -37,7 +37,7 @@ export function RulesDialog() {
           <Section title="Combat">
             Heroes take 2 hits: Healthy → Wounded (tilted) → slain. Basic attacks hit enemy Position 1; with no defenders left
             the attacker hits the lane's next structure. A hero basic attacking the attribute it counters (AGI → INT → STR →
-            AGI) kills instantly. Towers fire at the first surviving enemy that hit them this round.
+            AGI) kills instantly. In Phase 3, every standing tower that took damage this round deals its damage (T1: 1, T2: 2) to the attacking side's Position 1. Towers that took no damage do not fire.
           </Section>
           <Section title="Tiebreakers">
             Within an attribute bracket: Safe lane before Mid before Off lane (Radiant safe = Bottom, Dire safe = Top). Still

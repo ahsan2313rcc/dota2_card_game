@@ -45,6 +45,7 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 
 - Each round, every lane gets one creep card per side from the shared creep deck (32 regular, 8 siege). Creeps line up behind the heroes and leave at cleanup.
 - Basic attacks hit enemy Position 1. Once a lane has no defenders left, attackers hit the next structure in that lane (T1, then T2, then the Ancient).
+- Tower aggro: in Phase 3, each standing tower that took damage this round deals 1 (T1) or 2 (T2) damage to the first unit (Position 1) of the side that damaged it. An undamaged tower does not fire.
 - Slowed units attack after everyone else in Phase 2.
 - If an Ultimate fizzles (caster stunned, silenced or dead, or the target is gone), its XP is refunded.
 - Items are played during the Item step and resolve immediately. Equipment stays on the hero (1 per hero).

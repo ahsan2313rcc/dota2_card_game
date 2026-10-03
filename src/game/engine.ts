@@ -105,7 +105,6 @@ function freshStatus(): RoundStatus {
     aphoticUsed: false,
     frostShieldUsed: false,
     vanguardUsed: false,
-    attackedStructure: false,
   }
 }
 
@@ -192,6 +191,7 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     itemDiscard: [],
     creepDeck: [],
     ultDeclarations: [],
+    towersHit: [],
     log: [],
     nextId: 1,
     seed: seed | 0,
@@ -814,13 +814,20 @@ function attackDamage(s: GameState, u: Unit): number {
   return 1 + u.equipment.filter((e) => e === 'desolator').length
 }
 
+function towerKey(defender: PlayerId, lane: LaneId, tier: 't1' | 't2') {
+  return `${defender}:${lane}:${tier}`
+}
+
 function attackStructure(s: GameState, u: Unit) {
   const enemy = other(u.owner)
   const st = s.players[enemy].structures
   const tw = st.towers[u.lane]
   const dmg = u.kind === 'siege' ? 2 : u.kind === 'hero' ? 1 + u.equipment.filter((e) => e === 'desolator').length : 1
-  u.status.attackedStructure = true
   const who = fullName(u)
+  if (tw.t1 > 0 || tw.t2 > 0) {
+    const key = towerKey(enemy, u.lane, tw.t1 > 0 ? 't1' : 't2')
+    if (!s.towersHit.includes(key)) s.towersHit.push(key)
+  }
   if (tw.t1 > 0) {
     tw.t1 = Math.max(0, tw.t1 - dmg)
     log(s, `${who} hits the ${PLAYER_LABEL[enemy]} ${LANE_LABEL[u.lane]} Tier 1 tower for ${dmg} (${tw.t1}/${TOWER_HP.t1}).`, 'structure')
@@ -900,6 +907,7 @@ export function resolveRound(state: GameState): GameState {
   if (state.phase !== 'ults') return state
   const s = clone(state)
 
+  s.towersHit = []
   log(s, 'Phase 1 — Ultimates (STR → INT → UNI → AGI)', 'phase')
   const decls = s.ultDeclarations
     .map((d) => ({ d, u: s.units[d.uid] }))
@@ -943,17 +951,21 @@ export function resolveRound(state: GameState): GameState {
     for (const lane of LANES) {
       for (const defender of PLAYERS) {
         const tw = s.players[defender].structures.towers[lane]
-        const tier = tw.t1 > 0 ? 't1' : tw.t2 > 0 ? 't2' : null
-        if (!tier) continue
-        const shooter = lineup(s, other(defender), lane).find((uid) => s.units[uid].status.attackedStructure)
-        if (!shooter) continue
-        fired = true
-        dealDamage(s, null, shooter, TOWER_DAMAGE[tier], 'tower', {
-          label: `${PLAYER_LABEL[defender]} ${LANE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`,
-        })
+        for (const tier of ['t1', 't2'] as const) {
+          // Only a tower that took damage this round and is still standing fires back.
+          if (!s.towersHit.includes(towerKey(defender, lane, tier)) || tw[tier] <= 0) continue
+          const label = `${PLAYER_LABEL[defender]} ${LANE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
+          const front = lineup(s, other(defender), lane)[0]
+          fired = true
+          if (!front) {
+            log(s, `${label} has no attacker left to fire at.`, 'info')
+            continue
+          }
+          dealDamage(s, null, front, TOWER_DAMAGE[tier], 'tower', { label })
+        }
       }
     }
-    if (!fired) log(s, 'No towers were attacked this round.', 'info')
+    if (!fired) log(s, 'No surviving tower took damage this round, so no tower fires.', 'info')
   }
 
   if (!s.winner) {

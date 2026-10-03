@@ -29,5 +29,5 @@ export const ATTR_STYLE: Record<Attribute, { label: string; chip: string; strip:
 
 export const SIDE_STYLE: Record<PlayerId, { text: string; bg: string; border: string }> = {
   radiant: { text: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
-  dire: { text: 'text-orange-300', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
+  dire: { text: 'text-red-300', bg: 'bg-red-500/10', border: 'border-red-500/30' },
 }

@@ -1,80 +1,139 @@
-import { ATTRIBUTE_COUNTERS, getHero, getItem } from '@/game/cards'
-import { LANE_LABEL, PLAYER_LABEL } from '@/game/engine'
-import type { Unit } from '@/game/types'
+import { ATTRIBUTE_COUNTERS, ROSHAN, getHero, getNeutral } from '@/game/cards'
+import { PLAYER_LABEL, ZONE_LABEL, attributeOf } from '@/game/engine'
+import type { RoundStatus, Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { ATTR_STYLE, SIDE_STYLE } from './styles'
+import { HeroPortrait } from './UnitToken'
 
-const STATUS_LABEL: Array<[keyof Unit['status'], string]> = [
-  ['stunned', 'Stunned'],
-  ['silenced', 'Silenced'],
-  ['disarmed', 'Disarmed'],
-  ['slowed', 'Slowed (attacks last)'],
-  ['bkb', 'Black King Bar'],
-  ['bladeMail', 'Blade Mail'],
-  ['poisoned', 'Poisoned'],
-  ['noHeal', 'Cannot heal'],
+const STATUS: Array<[keyof RoundStatus, string, 'debuff' | 'buff']> = [
+  ['stunned', 'Stunned: no Ultimate, no attack', 'debuff'],
+  ['silenced', 'Silenced: no Ultimate', 'debuff'],
+  ['broken', 'Broken: passive off', 'debuff'],
+  ['disarmed', 'Disarmed: no attack', 'debuff'],
+  ['slowed', 'Slowed: attacks last', 'debuff'],
+  ['blinded', 'Blinded: attacks miss', 'debuff'],
+  ['rooted', 'Rooted: cannot move', 'debuff'],
+  ['muted', 'Muted: no items', 'debuff'],
+  ['cursed', 'Cursed: cannot heal', 'debuff'],
+  ['banished', 'Banished: untargetable, cannot act', 'debuff'],
+  ['immune', 'Immune: ignores Ultimates', 'buff'],
+  ['invulnerable', 'Invulnerable', 'buff'],
+  ['shield', 'Shield', 'buff'],
+  ['evade', 'Evade', 'buff'],
+  ['accuracy', 'Accuracy', 'buff'],
+  ['pierce', 'Pierce', 'buff'],
+  ['bonusDamage', '+Damage', 'buff'],
+  ['thorns', 'Thorns', 'buff'],
+  ['bladeMail', 'Blade Mail', 'buff'],
+  ['aegis', 'Aegis', 'buff'],
+  ['reincarnation', 'Reincarnation', 'buff'],
+  ['borrowedTime', 'Borrowed Time', 'buff'],
+  ['focusFire', 'Focus Fire', 'buff'],
 ]
+
+function StatusChips({ u }: { u: Unit }) {
+  const active = STATUS.filter(([k]) => {
+    const v = u.status[k]
+    return typeof v === 'number' ? v > 0 : !!v
+  })
+  if (u.status.poisonedBy) active.push(['poisonedBy', 'Poisoned: 1 damage at cleanup', 'debuff'])
+  if (active.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1">
+      {active.map(([k, l, kind]) => (
+        <span
+          key={k}
+          className={cn(
+            'rounded px-1.5 py-0.5 text-[10px]',
+            kind === 'debuff' ? 'bg-fuchsia-500/15 text-fuchsia-200' : 'bg-cyan-500/15 text-cyan-200',
+          )}
+        >
+          {l}
+          {typeof u.status[k] === 'number' && (u.status[k] as number) > 1 ? ` ×${u.status[k]}` : ''}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 export function Inspector({ unit }: { unit?: Unit }) {
   if (!unit) {
     return (
       <p className="text-xs leading-relaxed text-zinc-500">
-        Click any card on the board to inspect it. Counter loop: <span className="text-green-300">AGI</span> →{' '}
+        Click any icon on the map to inspect it. Counter loop: <span className="text-green-300">AGI</span> →{' '}
         <span className="text-sky-300">INT</span> → <span className="text-red-300">STR</span> →{' '}
-        <span className="text-green-300">AGI</span>. A hero's basic attack against the attribute it counters is an
-        instant kill. <span className="text-violet-300">UNI</span> heroes sit outside the loop.
+        <span className="text-green-300">AGI</span>. A basic attack against the attribute it counters is an instant kill.{' '}
+        <span className="text-violet-300">UNI</span> sits outside the loop. Pink dots mark debuffs, cyan dots mark buffs.
       </p>
     )
   }
-  const side = SIDE_STYLE[unit.owner]
-  if (unit.kind !== 'hero' || !unit.cardId) {
+
+  if (unit.kind === 'neutral' || unit.kind === 'roshan') {
+    const isRosh = unit.kind === 'roshan'
+    const attr = attributeOf(unit)!
     return (
-      <div className="space-y-1 text-xs text-zinc-300">
-        <div className={cn('font-semibold', side.text)}>
-          {PLAYER_LABEL[unit.owner]} {unit.kind === 'siege' ? 'Siege Creep' : 'Creep'} · {LANE_LABEL[unit.lane]}
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-amber-200">{isRosh ? ROSHAN.name : getNeutral(unit.cardId!).name}</span>
+          <span className={cn('rounded px-1.5 py-0.5 text-[10px] ring-1', ATTR_STYLE[attr].chip)}>{ATTR_STYLE[attr].label}</span>
         </div>
-        <p className="text-zinc-400">
-          {unit.kind === 'siege'
-            ? 'Dies to 1 damage. Deals 1 damage to units and 2 damage to towers.'
-            : 'Dies to 1 damage. Deals 1 damage in combat.'}{' '}
-          Creeps attack after all heroes and leave the lane at cleanup.
+        <div className="text-zinc-400">
+          {ZONE_LABEL[unit.zone]} · {unit.hp}/{unit.maxHp} health
+        </div>
+        <p className="text-zinc-300">
+          {isRosh
+            ? ROSHAN.text
+            : `${getNeutral(unit.cardId!).text} Bounty: 1 XP and an item card. Attacks in the ${attr} bracket and is part of the counter loop.`}
         </p>
+        <StatusChips u={unit} />
       </div>
     )
   }
-  const h = getHero(unit.cardId)
+
+  const side = SIDE_STYLE[unit.owner as 'radiant' | 'dire']
+  if (unit.kind !== 'hero') {
+    return (
+      <div className="space-y-1 text-xs text-zinc-300">
+        <div className={cn('font-semibold', side.text)}>
+          {PLAYER_LABEL[unit.owner]} {unit.kind === 'siege' ? 'Siege Creep' : 'Creep'} · {ZONE_LABEL[unit.zone]}
+        </div>
+        <p className="text-zinc-400">
+          {unit.kind === 'siege'
+            ? 'Dies to 1 damage. Deals 1 damage to units and 2 hits to towers.'
+            : 'Dies to 1 damage. Deals 1 damage in combat.'}{' '}
+          Attacks after all heroes and stays in the lane until killed.
+        </p>
+        <StatusChips u={unit} />
+      </div>
+    )
+  }
+
+  const h = getHero(unit.cardId!)
   const a = ATTR_STYLE[h.attribute]
-  const statuses = STATUS_LABEL.filter(([k]) => unit.status[k])
   const counters = ATTRIBUTE_COUNTERS[h.attribute]
   return (
     <div className="space-y-2 text-xs">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-zinc-100">{h.name}</span>
-        <span className={cn('rounded px-1.5 py-0.5 text-[10px] ring-1', a.chip)}>{a.label}</span>
+      <div className="flex items-center gap-2">
+        <HeroPortrait cardId={h.id} className="h-10 w-16 shrink-0 rounded-md" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-semibold text-zinc-100">{h.name}</span>
+            <span className={cn('rounded px-1.5 py-0.5 text-[10px] ring-1', a.chip)}>{a.label}</span>
+          </div>
+          <div className="text-zinc-400">
+            <span className={side.text}>{PLAYER_LABEL[unit.owner]}</span> · {ZONE_LABEL[unit.zone]} · {h.range} · {unit.hp}/
+            {unit.maxHp} hp{counters && <> · counters {counters}</>}
+          </div>
+        </div>
       </div>
-      <div className="text-zinc-400">
-        <span className={side.text}>{PLAYER_LABEL[unit.owner]}</span> · {LANE_LABEL[unit.lane]} · {h.range} ·{' '}
-        {unit.hp}/{unit.maxHp} health {counters && <>· counters {counters}</>}
-      </div>
-      <p className="text-zinc-300">
+      <p className={cn('text-zinc-300', unit.status.broken && 'line-through opacity-60')}>
         <span className="font-semibold text-zinc-100">PSV {h.passive.name}:</span> {h.passive.text}
       </p>
       <p className="text-zinc-300">
         <span className="font-semibold text-amber-300">ULT {h.ult.name}:</span> {h.ult.text}{' '}
         <span className="text-zinc-500">({unit.ultUsed ? 'used' : 'ready'})</span>
       </p>
-      {unit.equipment.length > 0 && (
-        <p className="text-amber-200">Equipped: {unit.equipment.map((e) => getItem(e).name).join(', ')}</p>
-      )}
-      {statuses.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {statuses.map(([k, l]) => (
-            <span key={k} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
-              {l}
-            </span>
-          ))}
-        </div>
-      )}
+      <StatusChips u={unit} />
     </div>
   )
 }

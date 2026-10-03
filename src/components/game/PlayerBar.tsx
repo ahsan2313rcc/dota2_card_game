@@ -35,7 +35,7 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', player === 'radiant' ? 'bg-emerald-400' : 'bg-orange-400')}
+              className={cn('h-full rounded-full transition-all duration-500', player === 'radiant' ? 'bg-emerald-400' : 'bg-red-400')}
               style={{ width: `${ancientPct}%` }}
             />
           </div>

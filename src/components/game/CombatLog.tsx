@@ -4,7 +4,8 @@ import type { LogEntry, LogTone } from '@/game/types'
 const TONE: Record<LogTone, string> = {
   info: 'text-zinc-400',
   radiant: 'text-emerald-300',
-  dire: 'text-orange-300',
+  dire: 'text-red-300',
+  neutral: 'text-amber-200',
   damage: 'text-red-300',
   kill: 'text-red-400 font-semibold',
   structure: 'text-amber-300',

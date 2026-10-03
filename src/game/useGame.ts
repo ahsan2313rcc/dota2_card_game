@@ -79,6 +79,23 @@ function reducer(s: GameState, a: Action): GameState {
   }
 }
 
+/** Debug helper: `?autoplay=5` lets the AI play both sides for 5 rounds; `&seed=42` pins the shuffle. */
+function initialState(): GameState {
+  const params = new URLSearchParams(window.location.search)
+  const seed = Number(params.get('seed')) || undefined
+  let s = newGame(undefined, seed)
+  const rounds = Number(params.get('autoplay')) || 0
+  for (let i = 0; i < rounds && !s.winner; i++) {
+    s = endDraw(aiDraw(aiDraw(s, HUMAN), AI))
+    s = reveal(aiAssign(aiAssign(s, HUMAN), AI))
+    s = endItems(aiItems(aiItems(s, HUMAN), AI))
+    s = resolveRound(aiUlts(aiUlts(s, HUMAN), AI))
+    if (!s.winner && i < rounds - 1) s = nextRound(s)
+  }
+  if (rounds > 0 && s.phase === 'report') s = nextRound(s)
+  return s
+}
+
 export function useGame() {
-  return useReducer(reducer, undefined, () => newGame())
+  return useReducer(reducer, undefined, initialState)
 }

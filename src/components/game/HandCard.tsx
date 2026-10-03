@@ -24,14 +24,14 @@ export function HandCard({ card, selected, disabledReason, onClick }: Props) {
         disabledReason && 'opacity-60',
       )}
     >
-      {card.type === 'hero' && <HeroFace id={card.cardId} />}
+      {card.type === 'hero' && <HeroFace id={card.cardId} buybackUsed={card.buybackUsed} />}
       {card.type === 'item' && <ItemFace id={card.cardId} />}
       {card.type === 'creep' && <CreepFace siege={card.cardId === 'siege'} />}
     </button>
   )
 }
 
-function HeroFace({ id }: { id: string }) {
+function HeroFace({ id, buybackUsed }: { id: string; buybackUsed?: boolean }) {
   const h = getHero(id)
   const a = ATTR_STYLE[h.attribute]
   return (
@@ -46,6 +46,7 @@ function HeroFace({ id }: { id: string }) {
         <span className={cn('rounded px-1 ring-1', a.chip)}>{h.attribute}</span>
         <span className="text-zinc-400">{h.range}</span>
         {h.maxHp && <span className="text-zinc-400">· {h.maxHp} hits</span>}
+        {buybackUsed && <span className="text-zinc-500">· buyback spent</span>}
       </div>
       <div className="flex flex-1 flex-col gap-1 overflow-hidden px-2 py-1.5 text-[10px] leading-snug">
         <p className="text-zinc-300">

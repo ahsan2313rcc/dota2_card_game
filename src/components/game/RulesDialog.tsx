@@ -47,9 +47,11 @@ export function RulesDialog() {
             <ol className="list-decimal space-y-0.5 pl-5">
               <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
               <li>
-                Draw: spend 1 Gold to take the top card of the mixed hero and creep deck, or 1 Gold for an item (hand limit
-                7). You don't choose whether the mixed draw is a hero or a creep. You start with 5 heroes. Buyback returns a
-                slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing than the enemy.
+                Draw: both sides spend 1 Gold to take the top card of the one shared hero and creep deck, or 1 Gold for an
+                item (hand limit 7). You don't choose whether that draw is a hero or a creep. You start with 5 heroes.
+                Buyback returns a slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing
+                than the enemy. Each hero can be bought back only once; the next time it dies, the card goes back into the
+                shared deck.
               </li>
               <li>
                 Assign: place up to 3 heroes (board limit 5) into lanes or jungles, and creep cards into lanes. Position 1
@@ -64,7 +66,10 @@ export function RulesDialog() {
                 Bot (Day: Radiant first, Night: Dire first). Rooted or stunned heroes stay. From a lane with no allied towers
                 a hero may walk lane to lane (Top · Mid · Bot).
               </li>
-              <li>Cleanup: wounds persist, slain heroes go to their owner's grave, illusions vanish, all round effects end.</li>
+              <li>
+                Cleanup: wounds persist. A slain hero goes to its owner's grave the first time, or back into the shared deck
+                if it was already bought back. Illusions vanish and round effects end.
+              </li>
               <li>Income: +1 Gold per enemy hero killed, +1 XP per lane holding a living hero.</li>
             </ol>
           </Section>

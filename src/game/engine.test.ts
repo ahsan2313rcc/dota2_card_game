@@ -62,15 +62,15 @@ describe('setup and core rules', () => {
         expect(LANES.map((l) => s.players[p].towerCards[l][tier]).sort()).toEqual([...TOWER_CARD_IDS].sort())
       }
     }
-    const creeps = s.unitDeck.filter((id) => id === 'creep' || id === 'siege')
-    expect(creeps.filter((id) => id === 'creep')).toHaveLength(REGULAR_CREEPS)
-    expect(creeps.filter((id) => id === 'siege')).toHaveLength(SIEGE_CREEPS)
+    const creeps = s.unitDeck.filter((c) => c.cardId === 'creep' || c.cardId === 'siege')
+    expect(creeps.filter((c) => c.cardId === 'creep')).toHaveLength(REGULAR_CREEPS)
+    expect(creeps.filter((c) => c.cardId === 'siege')).toHaveLength(SIEGE_CREEPS)
     expect(s.unitDeck.length - creeps.length).toBe(HEROES.length * HERO_COPIES - STARTING_HEROES * 2)
     // Opening heroes are dealt before the deck is shuffled, so the top is not a run of creeps.
     let heroDraws = 0
     for (let seed = 1; seed <= 40; seed++) {
       const top = newGame(undefined, seed).unitDeck.slice(-8)
-      heroDraws += top.filter((id) => id !== 'creep' && id !== 'siege').length
+      heroDraws += top.filter((c) => c.cardId !== 'creep' && c.cardId !== 'siege').length
     }
     expect(heroDraws).toBeGreaterThan(40 * 8 * 0.5)
     for (const camp of CAMPS) expect(campNeutral(s, camp)).toBeDefined()
@@ -89,13 +89,20 @@ describe('setup and core rules', () => {
     let s = newGame(undefined, 3)
     s.players.radiant.hand = []
     s.players.radiant.gold = 2
-    s.unitDeck = ['axe', 'siege']
+    const before = s.unitDeck.length
+    s.unitDeck = [
+      { cardId: 'axe', buybackUsed: false },
+      { cardId: 'siege', buybackUsed: false },
+    ]
     s = drawCard(s, 'radiant', 'unit')
     expect(s.players.radiant.hand.at(-1)).toMatchObject({ type: 'creep', cardId: 'siege' })
-    s = drawCard(s, 'radiant', 'unit')
-    expect(s.players.radiant.hand.at(-1)).toMatchObject({ type: 'hero', cardId: 'axe' })
+    expect(s.unitDeck).toHaveLength(1)
+    s = drawCard(s, 'dire', 'unit')
+    expect(s.players.dire.hand.at(-1)).toMatchObject({ type: 'hero', cardId: 'axe' })
+    expect(s.unitDeck).toHaveLength(0)
+    expect(before).toBeGreaterThan(0)
     s.unitDeck = []
-    s.unitDiscard = ['creep']
+    s.unitDiscard = [{ cardId: 'creep', buybackUsed: false }]
     s.players.radiant.grave = ['sniper']
     s.players.dire.grave = []
     s.players.radiant.gold = 1
@@ -107,7 +114,7 @@ describe('setup and core rules', () => {
 
   it('creeps are cards: drawn for 1 Gold, played into a lane, and they stay until killed', () => {
     let s = newGame(undefined, 9)
-    s.unitDeck.push('creep')
+    s.unitDeck.push({ cardId: 'creep', buybackUsed: false })
     s = drawCard(s, 'radiant', 'unit')
     expect(s.players.radiant.gold).toBe(0)
     const creep = s.players.radiant.hand.find((c) => c.type === 'creep')!
@@ -345,7 +352,23 @@ describe('comeback rules and rotation', () => {
     const after = buyback(s, 'radiant', 'axe')
     expect(after.players.radiant.gold).toBe(2)
     expect(after.players.radiant.grave).toHaveLength(0)
-    expect(after.players.radiant.hand.some((c) => c.cardId === 'axe')).toBe(true)
+    expect(after.players.radiant.hand.some((c) => c.cardId === 'axe' && c.buybackUsed)).toBe(true)
+  })
+
+  it('a hero can be bought back only once, then returns to the shared deck', () => {
+    let s = newGame(undefined, 68)
+    s.players.radiant.hand = []
+    s.players.radiant.grave = ['axe']
+    s.players.radiant.gold = 5
+    s = buyback(s, 'radiant', 'axe')
+    const card = s.players.radiant.hand.find((c) => c.cardId === 'axe')!
+    s.phase = 'assign'
+    s = placeHero(s, 'radiant', card.iid, 'mid')
+    heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'axe')!.dead = true
+    s.phase = 'rotate'
+    s = endRotation(s)
+    expect(s.players.radiant.grave).not.toContain('axe')
+    expect(s.unitDiscard.some((c) => c.cardId === 'axe' && c.buybackUsed)).toBe(true)
   })
 
   it('rotation follows the map chain, with a base shortcut from a lane that lost both towers', () => {

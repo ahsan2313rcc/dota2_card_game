@@ -49,6 +49,7 @@ import {
   type RoundStatus,
   type Settings,
   type TowerTier,
+  type UnitDeckCard,
   type ComebackRules,
   type Unit,
   type ZoneId,
@@ -359,7 +360,7 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
   s.runeDeck = shuffle(s, copies('Rune'))
   const heroPile = shuffle(
     s,
-    HEROES.flatMap((h) => Array.from({ length: HERO_COPIES }, () => h.id)),
+    HEROES.flatMap((h) => Array.from({ length: HERO_COPIES }, () => unitCard(h.id))),
   )
   s.neutralDeck = shuffle(s, [
     ...NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),
@@ -373,16 +374,16 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
       LANES.forEach((l, i) => (s.players[p].towerCards[l][tier] = ids[i]))
     }
     for (let i = 0; i < STARTING_HEROES; i++) {
-      const id = heroPile.pop()
-      if (id) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: id })
+      const card = heroPile.pop()
+      if (card) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: card.cardId })
     }
   }
-  // Shuffle the leftover heroes together with the creeps. Pulling heroes out of an
-  // already mixed deck left every skipped creep on top, so the first draws were all creeps.
+  // One pile for both players. Leftover heroes are shuffled with the creeps after the deal,
+  // so the top of the deck is not the creeps that were skipped while dealing.
   s.unitDeck = shuffle(s, [
     ...heroPile,
-    ...Array.from({ length: REGULAR_CREEPS }, () => 'creep'),
-    ...Array.from({ length: SIEGE_CREEPS }, () => 'siege'),
+    ...Array.from({ length: REGULAR_CREEPS }, () => unitCard('creep')),
+    ...Array.from({ length: SIEGE_CREEPS }, () => unitCard('siege')),
   ])
   log(s, 'The battle for the Ancients begins. Each side is dealt 5 heroes.', 'phase')
   startRound(s)
@@ -485,6 +486,10 @@ function isCreepId(id: string): id is CreepKind {
   return id === 'creep' || id === 'siege'
 }
 
+function unitCard(cardId: string, buybackUsed = false): UnitDeckCard {
+  return { cardId, buybackUsed }
+}
+
 function deckSize(s: GameState, type: DrawType) {
   if (type === 'item') return s.itemDeck.length + s.itemDiscard.length
   return s.unitDeck.length + s.unitDiscard.length + PLAYERS.reduce((n, p) => n + s.players[p].grave.length, 0)
@@ -499,7 +504,7 @@ export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): stri
   return null
 }
 
-function takeFromDeck(s: GameState, type: DrawType): string | undefined {
+function takeFromDeck(s: GameState, type: DrawType): string | UnitDeckCard | undefined {
   if (type === 'item') {
     if (s.itemDeck.length === 0) {
       s.itemDeck = shuffle(s, s.itemDiscard)
@@ -508,8 +513,8 @@ function takeFromDeck(s: GameState, type: DrawType): string | undefined {
     return s.itemDeck.pop()
   }
   if (s.unitDeck.length === 0) {
-    const graves = PLAYERS.flatMap((p) => s.players[p].grave)
-    if (graves.length) log(s, 'The deck is empty: discards and both graves are shuffled back in.', 'info')
+    const graves = PLAYERS.flatMap((p) => s.players[p].grave.map((cardId) => unitCard(cardId)))
+    if (graves.length) log(s, 'The shared deck is empty: discards and both graves are shuffled back in.', 'info')
     s.unitDeck = shuffle(s, [...s.unitDiscard, ...graves])
     s.unitDiscard = []
     for (const p of PLAYERS) s.players[p].grave = []
@@ -537,13 +542,23 @@ function discardItem(s: GameState, id: string) {
 export function drawCard(state: GameState, p: PlayerId, type: DrawType): GameState {
   if (drawBlockReason(state, p, type)) return state
   const s = clone(state)
-  const id = takeFromDeck(s, type)
-  if (!id) return state
+  const drawn = takeFromDeck(s, type)
+  if (!drawn) return state
   s.players[p].gold -= 1
-  const cardType = type === 'item' ? 'item' : isCreepId(id) ? 'creep' : 'hero'
-  s.players[p].hand.push({ iid: newId(s, 'c'), type: cardType, cardId: id })
-  const name = type === 'item' ? 'an item' : cardType === 'hero' ? getHero(id).name : id === 'siege' ? 'a Siege Creep' : 'a Lane Creep'
-  log(s, `${PLAYER_LABEL[p]} spends 1 Gold and draws ${name}.`, tone(p))
+  if (typeof drawn === 'string') {
+    s.players[p].hand.push({ iid: newId(s, 'c'), type: 'item', cardId: drawn })
+    log(s, `${PLAYER_LABEL[p]} spends 1 Gold and draws an item.`, tone(p))
+    return s
+  }
+  const cardType = isCreepId(drawn.cardId) ? 'creep' : 'hero'
+  s.players[p].hand.push({
+    iid: newId(s, 'c'),
+    type: cardType,
+    cardId: drawn.cardId,
+    buybackUsed: drawn.buybackUsed || undefined,
+  })
+  const name = cardType === 'hero' ? getHero(drawn.cardId).name : drawn.cardId === 'siege' ? 'a Siege Creep' : 'a Lane Creep'
+  log(s, `${PLAYER_LABEL[p]} spends 1 Gold and draws ${name} from the shared deck.`, tone(p))
   return s
 }
 
@@ -570,8 +585,8 @@ export function buyback(state: GameState, p: PlayerId, heroId: string): GameStat
   const cost = buybackCost(s, p)
   pl.gold -= cost
   pl.grave.splice(pl.grave.lastIndexOf(heroId), 1)
-  pl.hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: heroId })
-  log(s, `${PLAYER_LABEL[p]} buys back ${getHero(heroId).name} for ${cost} Gold.`, tone(p))
+  pl.hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: heroId, buybackUsed: true })
+  log(s, `${PLAYER_LABEL[p]} buys back ${getHero(heroId).name} for ${cost} Gold. It cannot be bought back again.`, tone(p))
   return s
 }
 
@@ -628,7 +643,7 @@ export function placeHero(state: GameState, p: PlayerId, handIid: string, zone: 
   pl.hand = pl.hand.filter((c) => c.iid !== handIid)
   pl.placedThisRound++
   const hp = getHero(card.cardId).maxHp ?? 2
-  const u = makeUnit(s, { kind: 'hero', cardId: card.cardId, handIid, owner: p, zone, hp })
+  const u = makeUnit(s, { kind: 'hero', cardId: card.cardId, handIid, owner: p, zone, hp, buybackUsed: card.buybackUsed })
   s.zones[zone][p].push(u.uid)
   return s
 }
@@ -652,7 +667,7 @@ export function unplace(state: GameState, uid: string): GameState {
   const owner = u.owner as PlayerId
   const pl = s.players[owner]
   if (u.kind === 'hero') {
-    pl.hand.push({ iid: u.handIid ?? newId(s, 'c'), type: 'hero', cardId: u.cardId! })
+    pl.hand.push({ iid: u.handIid ?? newId(s, 'c'), type: 'hero', cardId: u.cardId!, buybackUsed: u.buybackUsed })
     pl.placedThisRound--
   } else {
     pl.hand.push({ iid: u.handIid ?? newId(s, 'c'), type: 'creep', cardId: u.kind })
@@ -1662,10 +1677,10 @@ export function endRotation(state: GameState): GameState {
   for (const u of Object.values(s.units)) {
     if (u.dead) {
       if (u.kind === 'hero') {
-        if (rules(s).buyback && u.owner !== 'neutral') s.players[u.owner].grave.push(u.cardId!)
-        else s.unitDiscard.push(u.cardId!)
+        if (rules(s).buyback && u.owner !== 'neutral' && !u.buybackUsed) s.players[u.owner].grave.push(u.cardId!)
+        else s.unitDiscard.push(unitCard(u.cardId!, !!u.buybackUsed))
       }
-      if (u.kind === 'creep' || u.kind === 'siege') s.unitDiscard.push(u.kind)
+      if (u.kind === 'creep' || u.kind === 'siege') s.unitDiscard.push(unitCard(u.kind))
       removeFromBoard(s, u)
       delete s.units[u.uid]
     } else if (u.kind === 'illusion') {

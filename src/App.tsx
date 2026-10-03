@@ -177,6 +177,9 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-300">
             <span className="font-semibold">Round {s.round}</span>
+            <span className="text-zinc-400" title="Radiant and Dire draw heroes and creeps from this one pile">
+              Shared deck {s.unitDeck.length}
+            </span>
             {isDay(s.round) ? (
               <span className="flex items-center gap-1 text-amber-300">
                 <Sun className="size-4" /> Day
@@ -380,7 +383,7 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold to draw the top card of the mixed hero and creep deck, or an item. Buyback is ${buybackCost(s, HUMAN)} Gold.`
+      hint = `Spend 1 Gold to draw the top card of the shared deck (both sides use it), or an item. Buyback is ${buybackCost(s, HUMAN)} Gold, once per hero.`
       cta = 'Done drawing'
       break
     case 'assign':
@@ -458,7 +461,7 @@ function ActionBar({
       {s.phase === 'draw' && me.grave.length > 0 && (
         <div className="flex basis-full flex-wrap items-center gap-2 border-t border-amber-500/10 pt-2 sm:order-last">
           <span className="flex items-center gap-1 text-xs text-zinc-400">
-            <Skull className="size-3.5" /> Buyback · {buybackCost(s, HUMAN)} Gold
+            <Skull className="size-3.5" /> Buyback once · {buybackCost(s, HUMAN)} Gold
           </span>
           {[...new Set(me.grave)].map((id) => {
             const r = buybackBlockReason(s, HUMAN, id)

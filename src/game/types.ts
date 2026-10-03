@@ -49,6 +49,14 @@ export interface HandCard {
   iid: string
   type: 'hero' | 'item' | 'creep'
   cardId: string
+  /** This hero has already been bought back once. Its next death returns it to the shared deck. */
+  buybackUsed?: boolean
+}
+
+/** A card in the shared hero-and-creep deck. Both players draw from this one pile. */
+export interface UnitDeckCard {
+  cardId: string
+  buybackUsed: boolean
 }
 
 /** Everything here lasts until Cleanup. */
@@ -104,6 +112,8 @@ export interface Unit {
   ultUsed: boolean
   placedRound: number
   fierySoul: boolean
+  /** Set once this hero has been bought back. A later death returns the card to the shared deck. */
+  buybackUsed?: boolean
   status: RoundStatus
 }
 
@@ -185,9 +195,9 @@ export interface GameState {
   zones: Record<ZoneId, Record<PlayerId, string[]>>
   /** The neutral occupying each camp, if any */
   camps: Record<CampId, string | null>
-  /** Heroes and creeps share one deck. `'creep'` and `'siege'` are creep cards; every other id is a hero. */
-  unitDeck: string[]
-  unitDiscard: string[]
+  /** One hero-and-creep deck for both players. `'creep'` and `'siege'` card ids are creeps. */
+  unitDeck: UnitDeckCard[]
+  unitDiscard: UnitDeckCard[]
   itemDeck: string[]
   itemDiscard: string[]
   runeDeck: string[]

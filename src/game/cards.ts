@@ -1,4 +1,4 @@
-import type { HeroCard, ItemCard } from './types'
+import type { HeroCard, ItemCard, NeutralCard } from './types'
 
 // Starter set: 5 heroes per attribute. Add new heroes here; mechanics keyed by id live in engine.ts.
 export const HEROES: HeroCard[] = [
@@ -17,7 +17,7 @@ export const HEROES: HeroCard[] = [
     attribute: 'STR',
     range: 'Melee',
     passive: { name: 'Great Cleave', text: "Sven's basic attack damages both Position 1 and Position 2." },
-    ult: { name: "God's Strength", text: "Sven's attack this round cannot be evaded and bypasses damage negation.", target: 'none' },
+    ult: { name: "God's Strength", text: "Sven's attacks this round gain Accuracy (cannot be evaded or blinded) and Pierce (bypass shields and damage negation).", target: 'none' },
   },
   {
     id: 'tidehunter',
@@ -169,19 +169,62 @@ export const HEROES: HeroCard[] = [
   },
 ]
 
+// Items are free to play and single use: the card is discarded once it resolves.
 export const ITEMS: ItemCard[] = [
-  { id: 'tango', name: 'Tango', cost: 0, kind: 'Consumable', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
-  { id: 'dagon', name: 'Dagon', cost: 1, kind: 'Consumable', text: 'Deal 1 damage to any enemy unit on the board.', target: 'enemyUnit' },
-  { id: 'blade_mail', name: 'Blade Mail', cost: 1, kind: 'Consumable', text: 'This round, basic attack damage taken is also dealt back to the attacker.', target: 'allyHero' },
-  { id: 'vanguard', name: 'Vanguard', cost: 1, kind: 'Equipment', text: 'Equip: negates the first physical damage taken each round.', target: 'allyHero' },
-  { id: 'bkb', name: 'Black King Bar', cost: 2, kind: 'Consumable', text: 'This round: immune to enemy Ultimates, Stun, Silence and Disarm.', target: 'allyHero' },
-  { id: 'desolator', name: 'Desolator', cost: 2, kind: 'Equipment', text: 'Equip: +1 basic attack damage.', target: 'allyHero' },
-  { id: 'refresher', name: 'Refresher Orb', cost: 2, kind: 'Consumable', text: "Reset an allied hero's Ultimate so it can be cast again.", target: 'allyHero' },
+  { id: 'tango', name: 'Tango', kind: 'Shop', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
+  { id: 'dagon', name: 'Dagon', kind: 'Shop', text: 'Deal 1 damage to any enemy unit on the board (including neutrals).', target: 'enemyUnit' },
+  { id: 'blade_mail', name: 'Blade Mail', kind: 'Shop', text: 'This round, basic attack damage taken is dealt back to the attacker.', target: 'allyHero' },
+  { id: 'vanguard', name: 'Vanguard', kind: 'Shop', text: 'Shield: block the next instance of attack damage this round.', target: 'allyHero' },
+  { id: 'bkb', name: 'Black King Bar', kind: 'Shop', text: 'Immunity this round: ignore enemy Ultimate and item damage and their debuffs.', target: 'allyHero' },
+  { id: 'desolator', name: 'Desolator', kind: 'Shop', text: '+1 basic attack damage this round.', target: 'allyHero' },
+  { id: 'refresher', name: 'Refresher Orb', kind: 'Shop', text: "Reset an allied hero's Ultimate so it can be cast again.", target: 'allyHero' },
+  { id: 'mkb', name: 'Monkey King Bar', kind: 'Shop', text: 'Accuracy this round: attacks cannot be evaded and ignore Blind.', target: 'allyHero' },
+  { id: 'orchid', name: 'Orchid Malevolence', kind: 'Shop', text: 'Silence and Mute an enemy hero this round.', target: 'enemyHero' },
+  { id: 'silver_edge', name: 'Silver Edge', kind: 'Shop', text: 'Break an enemy hero this round (their passive does nothing).', target: 'enemyHero' },
+  { id: 'atos', name: 'Rod of Atos', kind: 'Shop', text: 'Root an enemy unit this round (it cannot change lane or position).', target: 'enemyUnit' },
+  { id: 'euls', name: "Eul's Scepter", kind: 'Shop', text: 'Banish an enemy hero this round: untargetable and invulnerable, but it cannot act.', target: 'enemyHero' },
+  { id: 'chipped_vest', name: 'Chipped Vest', kind: 'Neutral', text: 'This round, units that basic attack this hero take 1 damage.', target: 'allyHero' },
+  { id: 'arcane_ring', name: 'Arcane Ring', kind: 'Neutral', text: 'Gain 1 XP immediately.', target: 'none' },
+  { id: 'ninja_gear', name: 'Ninja Gear', kind: 'Neutral', text: 'Evade: dodge the next basic attack against this hero this round.', target: 'allyHero' },
+  { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'If this hero is slain this round, it revives Healthy. Only dropped by Roshan.', target: 'allyHero' },
 ]
 
-export const ITEM_COPIES = 3
+export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Neutral: 2, Special: 0 }
 export const REGULAR_CREEPS = 32
 export const SIEGE_CREEPS = 8
+
+export const NEUTRALS: NeutralCard[] = [
+  { id: 'golem', name: 'Golem', attribute: 'STR', hp: 2, text: 'Hits Position 1 of each side for 1.' },
+  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hits Position 1 of each side for 1.' },
+  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Hits Position 1 of each side for 1 and Slows them.' },
+  { id: 'dragon', name: 'Dragon', attribute: 'UNI', hp: 2, text: 'Hits Position 1 of each side for 1 and Blinds them.' },
+]
+export const NEUTRAL_COPIES = 4
+
+export const ROSHAN = {
+  name: 'Roshan',
+  attribute: 'UNI' as const,
+  text: 'Takes 3 damage to defeat. Hits every hero in the pit for 1. Roar: while at full health he disarms everyone in the pit during Phase 1. Bounty: 3 XP and the Aegis. Respawns 3 rounds after dying.',
+}
+
+const ICON_SLUG: Record<string, string> = {
+  wraith_king: 'skeleton_king',
+  zeus: 'zuus',
+  windranger: 'windrunner',
+  anti_mage: 'antimage',
+}
+
+export function heroPortrait(id: string) {
+  return `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${ICON_SLUG[id] ?? id}.png`
+}
+
+const neutralById = new Map(NEUTRALS.map((n) => [n.id, n]))
+
+export function getNeutral(id: string): NeutralCard {
+  const n = neutralById.get(id)
+  if (!n) throw new Error(`Unknown neutral ${id}`)
+  return n
+}
 
 const heroById = new Map(HEROES.map((h) => [h.id, h]))
 const itemById = new Map(ITEMS.map((i) => [i.id, i]))

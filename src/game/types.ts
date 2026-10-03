@@ -1,5 +1,8 @@
 export type PlayerId = 'radiant' | 'dire'
+export type Owner = PlayerId | 'neutral'
 export type LaneId = 'top' | 'mid' | 'bot'
+export type CampId = 'radiantJungle' | 'direJungle' | 'roshan'
+export type ZoneId = LaneId | CampId
 export type Attribute = 'STR' | 'AGI' | 'INT' | 'UNI'
 export type AttackRange = 'Melee' | 'Ranged'
 
@@ -20,55 +23,79 @@ export interface HeroCard {
   maxHp?: number
 }
 
-export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit'
+export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit' | 'enemyHero' | 'none'
 
 export interface ItemCard {
   id: string
   name: string
-  cost: number
-  kind: 'Consumable' | 'Equipment'
+  kind: 'Shop' | 'Neutral' | 'Special'
   text: string
   target: ItemTarget
 }
 
+export interface NeutralCard {
+  id: string
+  name: string
+  attribute: Attribute
+  hp: number
+  text: string
+}
+
+export type CreepKind = 'creep' | 'siege'
+
 export interface HandCard {
   iid: string
-  type: 'hero' | 'item'
+  type: 'hero' | 'item' | 'creep'
   cardId: string
 }
 
+/** Everything here lasts until Cleanup. */
 export interface RoundStatus {
   stunned: boolean
   silenced: boolean
+  broken: boolean
   disarmed: boolean
   slowed: boolean
-  taunt?: string
-  bkb: boolean
+  blinded: boolean
+  rooted: boolean
+  banished: boolean
+  immune: boolean
+  invulnerable: boolean
+  muted: boolean
+  cursed: boolean
+  /** Charges: each blocks one instance of attack damage */
+  shield: number
+  /** Charges: each dodges one incoming basic attack */
+  evade: number
+  accuracy: boolean
+  pierce: boolean
+  bonusDamage: number
+  thorns: boolean
   bladeMail: boolean
+  aegis: boolean
+  taunt?: string
   borrowedTime: boolean
   reincarnation: boolean
-  godsStrength: boolean
   focusFire: boolean
-  poisoned: boolean
-  noHeal: boolean
+  poisonedBy?: PlayerId
   blurUsed: boolean
   aphoticUsed: boolean
   frostShieldUsed: boolean
-  vanguardUsed: boolean
 }
+
+export type UnitKind = 'hero' | 'creep' | 'siege' | 'neutral' | 'roshan'
 
 export interface Unit {
   uid: string
-  kind: 'hero' | 'creep' | 'siege'
+  kind: UnitKind
   cardId?: string
   handIid?: string
-  owner: PlayerId
-  lane: LaneId
+  owner: Owner
+  zone: ZoneId
   hp: number
   maxHp: number
   dead: boolean
   ultUsed: boolean
-  equipment: string[]
   placedRound: number
   fierySoul: boolean
   status: RoundStatus
@@ -88,6 +115,8 @@ export interface PlayerState {
   structures: Structures
   bonusIncomeLanes: LaneId[]
   killsThisRound: number
+  /** What this player's units target in a camp they hold */
+  campFocus: Record<CampId, 'neutral' | 'enemy'>
 }
 
 export interface UltDeclaration {
@@ -98,7 +127,7 @@ export interface UltDeclaration {
 
 export type Phase = 'draw' | 'assign' | 'items' | 'ults' | 'report' | 'gameover'
 
-export type LogTone = 'info' | 'radiant' | 'dire' | 'damage' | 'kill' | 'structure' | 'phase'
+export type LogTone = 'info' | 'radiant' | 'dire' | 'neutral' | 'damage' | 'kill' | 'structure' | 'phase'
 
 export interface LogEntry {
   id: number
@@ -116,12 +145,19 @@ export interface GameState {
   phase: Phase
   players: Record<PlayerId, PlayerState>
   units: Record<string, Unit>
-  lanes: Record<LaneId, Record<PlayerId, string[]>>
+  /** Player lineups per zone, Position 1 first */
+  zones: Record<ZoneId, Record<PlayerId, string[]>>
+  /** The neutral occupying each camp, if any */
+  camps: Record<CampId, string | null>
+  roshanRespawnRound: number
   heroDeck: string[]
   heroDiscard: string[]
   itemDeck: string[]
   itemDiscard: string[]
-  creepDeck: Array<'creep' | 'siege'>
+  creepDeck: CreepKind[]
+  creepDiscard: CreepKind[]
+  neutralDeck: string[]
+  neutralDiscard: string[]
   ultDeclarations: UltDeclaration[]
   /** Towers damaged during the current resolution, keyed `${defender}:${lane}:${tier}` */
   towersHit: string[]
@@ -133,6 +169,8 @@ export interface GameState {
 }
 
 export const LANES: LaneId[] = ['top', 'mid', 'bot']
+export const CAMPS: CampId[] = ['radiantJungle', 'direJungle', 'roshan']
+export const ZONES: ZoneId[] = [...LANES, ...CAMPS]
 export const PLAYERS: PlayerId[] = ['radiant', 'dire']
 
 export const HAND_LIMIT = 7
@@ -143,3 +181,9 @@ export const STARTING_HEROES = 5
 export const TOWER_HP = { t1: 3, t2: 5 } as const
 export const TOWER_DAMAGE = { t1: 1, t2: 2 } as const
 export const ANCIENT_HP = 10
+export const ROSHAN_HP = 3
+export const ROSHAN_RESPAWN = 3
+
+export function isLane(z: ZoneId): z is LaneId {
+  return z === 'top' || z === 'mid' || z === 'bot'
+}

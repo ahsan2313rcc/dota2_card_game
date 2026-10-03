@@ -9,30 +9,34 @@ import {
   moveInLineup,
   newGame,
   nextRound,
+  placeCreep,
   placeHero,
   playItem,
   resolveRound,
   reveal,
+  setCampFocus,
   setSettings,
-  unplaceHero,
+  unplace,
+  type DrawType,
 } from './engine'
-import type { GameState, LaneId, Settings } from './types'
+import { isLane, type CampId, type GameState, type Settings, type ZoneId } from './types'
 
 export const HUMAN = 'radiant' as const
 export const AI = 'dire' as const
 
 export type Action =
   | { type: 'new'; settings?: Settings }
-  | { type: 'draw'; card: 'hero' | 'item' }
+  | { type: 'draw'; card: DrawType }
   | { type: 'endDraw' }
-  | { type: 'place'; handIid: string; lane: LaneId }
+  | { type: 'place'; handIid: string; zone: ZoneId }
   | { type: 'unplace'; uid: string }
   | { type: 'move'; uid: string; dir: -1 | 1 }
   | { type: 'endAssign' }
-  | { type: 'playItem'; handIid: string; target: string }
+  | { type: 'playItem'; handIid: string; target?: string }
   | { type: 'endItems' }
   | { type: 'declareUlt'; uid: string; target?: string }
   | { type: 'cancelUlt'; uid: string }
+  | { type: 'campFocus'; camp: CampId; focus: 'neutral' | 'enemy' }
   | { type: 'resolve' }
   | { type: 'nextRound' }
   | { type: 'settings'; settings: Partial<Settings> }
@@ -45,10 +49,13 @@ function reducer(s: GameState, a: Action): GameState {
       return drawCard(s, HUMAN, a.card)
     case 'endDraw':
       return endDraw(aiDraw(s, AI))
-    case 'place':
-      return placeHero(s, HUMAN, a.handIid, a.lane)
+    case 'place': {
+      const card = s.players[HUMAN].hand.find((c) => c.iid === a.handIid)
+      if (card?.type === 'creep') return isLane(a.zone) ? placeCreep(s, HUMAN, a.handIid, a.zone) : s
+      return placeHero(s, HUMAN, a.handIid, a.zone)
+    }
     case 'unplace':
-      return unplaceHero(s, a.uid)
+      return unplace(s, a.uid)
     case 'move':
       return moveInLineup(s, a.uid, a.dir)
     case 'endAssign':
@@ -61,6 +68,8 @@ function reducer(s: GameState, a: Action): GameState {
       return declareUlt(s, a.uid, a.target)
     case 'cancelUlt':
       return cancelUlt(s, a.uid)
+    case 'campFocus':
+      return setCampFocus(s, HUMAN, a.camp, a.focus)
     case 'resolve':
       return resolveRound(aiUlts(s, AI))
     case 'nextRound':

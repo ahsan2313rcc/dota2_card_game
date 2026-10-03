@@ -49,9 +49,12 @@ export function aiDraw(state: GameState, p: PlayerId): GameState {
     const hand = s.players[p].hand
     const heroes = hand.filter((c) => c.type === 'hero').length
     const creeps = hand.filter((c) => c.type === 'creep').length
-    const want = heroes < 2 ? 'hero' : creeps < 1 ? 'creep' : 'item'
-    if (drawBlockReason(s, p, want)) break
-    s = drawCard(s, p, want)
+    // Heroes and creeps come from one deck, so the AI cannot pick which it gets.
+    const want = heroes < 2 || creeps < 1 ? 'unit' : 'item'
+    const fallback = want === 'unit' ? 'item' : 'unit'
+    const type = !drawBlockReason(s, p, want) ? want : !drawBlockReason(s, p, fallback) ? fallback : null
+    if (!type) break
+    s = drawCard(s, p, type)
   }
   return s
 }

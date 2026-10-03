@@ -335,15 +335,13 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     units: {},
     zones,
     camps: { radiantJungle: null, direJungle: null },
-    heroDeck: [],
-    heroDiscard: [],
+    unitDeck: [],
+    unitDiscard: [],
     itemDeck: [],
     itemDiscard: [],
     runeDeck: [],
     runeDiscard: [],
     bossKills: [],
-    creepDeck: [],
-    creepDiscard: [],
     neutralDeck: [],
     neutralDiscard: [],
     ultDeclarations: [],
@@ -354,14 +352,14 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     settings,
   }
 
-  s.heroDeck = shuffle(s, HEROES.map((h) => h.id))
   const copies = (kind: 'Shop' | 'Rune') =>
     ITEMS.filter((i) => i.kind === kind).flatMap((i) => Array.from({ length: ITEM_DECK_COPIES[kind] }, () => i.id))
   s.itemDeck = shuffle(s, copies('Shop'))
   s.runeDeck = shuffle(s, copies('Rune'))
-  s.creepDeck = shuffle(s, [
-    ...Array.from({ length: REGULAR_CREEPS }, () => 'creep' as const),
-    ...Array.from({ length: SIEGE_CREEPS }, () => 'siege' as const),
+  s.unitDeck = shuffle(s, [
+    ...HEROES.map((h) => h.id),
+    ...Array.from({ length: REGULAR_CREEPS }, () => 'creep'),
+    ...Array.from({ length: SIEGE_CREEPS }, () => 'siege'),
   ])
   s.neutralDeck = shuffle(s, [
     ...NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),
@@ -374,10 +372,12 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
       const ids = shuffle(s, [...TOWER_CARD_IDS])
       LANES.forEach((l, i) => (s.players[p].towerCards[l][tier] = ids[i]))
     }
-    for (let i = 0; i < STARTING_HEROES; i++) {
-      const id = s.heroDeck.pop()
-      if (id) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: id })
+    // Opening hands stay heroes. Later draws take whatever is on top of the mixed deck.
+    const dealt: string[] = []
+    for (let i = s.unitDeck.length - 1; i >= 0 && dealt.length < STARTING_HEROES; i--) {
+      if (!isCreepId(s.unitDeck[i])) dealt.push(s.unitDeck.splice(i, 1)[0])
     }
+    for (const id of dealt) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: id })
   }
   log(s, 'The battle for the Ancients begins. Each side is dealt 5 heroes.', 'phase')
   startRound(s)
@@ -474,12 +474,15 @@ function startRound(s: GameState) {
 
 // ---------- draw ----------
 
-export type DrawType = 'hero' | 'item' | 'creep'
+export type DrawType = 'unit' | 'item'
+
+function isCreepId(id: string): id is CreepKind {
+  return id === 'creep' || id === 'siege'
+}
 
 function deckSize(s: GameState, type: DrawType) {
-  if (type === 'hero') return s.heroDeck.length + s.heroDiscard.length + PLAYERS.reduce((n, p) => n + s.players[p].grave.length, 0)
   if (type === 'item') return s.itemDeck.length + s.itemDiscard.length
-  return s.creepDeck.length + s.creepDiscard.length
+  return s.unitDeck.length + s.unitDiscard.length + PLAYERS.reduce((n, p) => n + s.players[p].grave.length, 0)
 }
 
 export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): string | null {
@@ -492,16 +495,6 @@ export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): stri
 }
 
 function takeFromDeck(s: GameState, type: DrawType): string | undefined {
-  if (type === 'hero') {
-    if (s.heroDeck.length === 0) {
-      const graves = PLAYERS.flatMap((p) => s.players[p].grave)
-      if (graves.length) log(s, 'The hero deck is empty: both graves are shuffled back in.', 'info')
-      s.heroDeck = shuffle(s, [...s.heroDiscard, ...graves])
-      s.heroDiscard = []
-      for (const p of PLAYERS) s.players[p].grave = []
-    }
-    return s.heroDeck.pop()
-  }
   if (type === 'item') {
     if (s.itemDeck.length === 0) {
       s.itemDeck = shuffle(s, s.itemDiscard)
@@ -509,11 +502,14 @@ function takeFromDeck(s: GameState, type: DrawType): string | undefined {
     }
     return s.itemDeck.pop()
   }
-  if (s.creepDeck.length === 0) {
-    s.creepDeck = shuffle(s, s.creepDiscard)
-    s.creepDiscard = []
+  if (s.unitDeck.length === 0) {
+    const graves = PLAYERS.flatMap((p) => s.players[p].grave)
+    if (graves.length) log(s, 'The deck is empty: discards and both graves are shuffled back in.', 'info')
+    s.unitDeck = shuffle(s, [...s.unitDiscard, ...graves])
+    s.unitDiscard = []
+    for (const p of PLAYERS) s.players[p].grave = []
   }
-  return s.creepDeck.pop()
+  return s.unitDeck.pop()
 }
 
 function takeRune(s: GameState): string | undefined {
@@ -539,8 +535,10 @@ export function drawCard(state: GameState, p: PlayerId, type: DrawType): GameSta
   const id = takeFromDeck(s, type)
   if (!id) return state
   s.players[p].gold -= 1
-  s.players[p].hand.push({ iid: newId(s, 'c'), type, cardId: id })
-  log(s, `${PLAYER_LABEL[p]} spends 1 Gold to draw ${type === 'item' ? 'an item' : `a ${type}`} card.`, tone(p))
+  const cardType = type === 'item' ? 'item' : isCreepId(id) ? 'creep' : 'hero'
+  s.players[p].hand.push({ iid: newId(s, 'c'), type: cardType, cardId: id })
+  const name = type === 'item' ? 'an item' : cardType === 'hero' ? getHero(id).name : id === 'siege' ? 'a Siege Creep' : 'a Lane Creep'
+  log(s, `${PLAYER_LABEL[p]} spends 1 Gold and draws ${name}.`, tone(p))
   return s
 }
 
@@ -1660,9 +1658,9 @@ export function endRotation(state: GameState): GameState {
     if (u.dead) {
       if (u.kind === 'hero') {
         if (rules(s).buyback && u.owner !== 'neutral') s.players[u.owner].grave.push(u.cardId!)
-        else s.heroDiscard.push(u.cardId!)
+        else s.unitDiscard.push(u.cardId!)
       }
-      if (u.kind === 'creep' || u.kind === 'siege') s.creepDiscard.push(u.kind)
+      if (u.kind === 'creep' || u.kind === 'siege') s.unitDiscard.push(u.kind)
       removeFromBoard(s, u)
       delete s.units[u.uid]
     } else if (u.kind === 'illusion') {

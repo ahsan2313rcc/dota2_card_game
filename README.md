@@ -44,15 +44,16 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 
 ## Implemented rules
 
-- **Round steps:** Upkeep, Draw (1 Gold per card: hero, creep or item; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP each), Resolution, Rotation, Cleanup, Income.
-- **Starting hand:** heroes only.
+- **Round steps:** Upkeep, Draw (1 Gold for the top card of the mixed hero-and-creep deck, or 1 Gold for an item; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP each), Resolution, Rotation, Cleanup, Income.
+- **Starting hand:** 5 heroes, dealt out of the mixed deck before the rest is drawn.
 - **Combat:** Ultimates resolve STR → INT → UNI → AGI. Basic attacks resolve AGI → UNI → INT → STR, then creeps. Slowed units attack after everyone else, in the same order. Towers fire last.
 - **Counter loop:** AGI → INT → STR → AGI. A basic attack on the attribute it counters kills instantly. UNI sits outside the loop.
 - **Tiebreakers:** Safe lane, Mid, Off lane, then jungle. If still tied, Day (odd rounds) favors Radiant and Night (even rounds) favors Dire.
 - **Structures:** T1 takes 3 hits and deals 1 damage. T2 takes 5 hits and deals 2 damage. The Ancient takes 10 hits and deals 0. A tower fires only if it was damaged this round, and it hits Position 1 of the side that damaged it. Razing both towers in a lane gives +1 passive Gold per round.
 - **Economy:** +1 Gold and +1 XP passive. +1 Gold per enemy hero kill. +1 XP for each lane that holds a living hero.
 - **Comeback rules:** Slain heroes go to their owner's grave; Buyback returns one to hand for 2 Gold (3 if you have more towers standing than the enemy). Losing a tower gives +1 Gold and the face-down tower card under it (Glyph, Lotus or Twin Gate, one of each per tier, swappable within a tier in round 1); tower cards don't count toward the hand limit. Fountain: a side's heroes in a lane where it has no towers heal 1 at the start of the round. Costs live in `BUYBACK_COST` and each rule can be toggled via `Settings.rules` for simulations.
-- **Creep cards:** drawn and played into a lane like heroes. They stay until they die and line up behind heroes. Siege creeps hit structures for 2.
+- **One unit deck:** every hero and every creep card (32 lane creeps, 8 siege) is shuffled together. A draw is whichever is on top. Dead creeps, and heroes when buyback is off, go to that deck's discard and reshuffle with both graves when it runs out.
+- **Creep cards:** played into a lane. They stay until they die and line up behind heroes. Siege creeps hit structures for 2.
 - **Items:** free to play, single use, and resolve immediately in the Item step. Shop items (including the Town Portal Scroll), runes, tower cards and the boss rewards (Aegis, Refresher Shard).
 - **Runes:** 20 cards (2 each of Bounty, Regeneration, Double Damage, Shield, Arcane, Illusion, Invisibility, Haste, Wisdom, Water), dropped only by regular neutrals.
 - **Jungle:** each jungle has one camp drawn from a 15-card jungle deck: 4 neutral types ×3 (2 HP, with an attribute), Roshan and 2 Tormentors. The side that arrived first holds the camp (ties go to the jungle's owner) and picks a target each round. A contesting hero must attack the holder. A neutral kill gives +1 XP, +1 Gold and a rune card.

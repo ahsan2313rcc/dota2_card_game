@@ -249,7 +249,7 @@ export default function App() {
             </h2>
             {me.hand.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
-                Your hand is empty. Spend Gold during the Draw step to buy hero, creep or item cards.
+                Your hand is empty. Spend Gold during the Draw step. A draw from the mixed deck is a hero or a creep.
               </p>
             ) : (
               <div className="flex gap-3 overflow-x-auto pt-2 pb-3">
@@ -380,7 +380,7 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold per card, or buy back a slain hero from your grave for ${buybackCost(s, HUMAN)} Gold. Items are free to play later.`
+      hint = `Spend 1 Gold to draw the top card of the mixed hero and creep deck, or an item. Buyback is ${buybackCost(s, HUMAN)} Gold.`
       cta = 'Done drawing'
       break
     case 'assign':
@@ -439,9 +439,9 @@ function ActionBar({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {s.phase === 'draw' &&
-          (['hero', 'creep', 'item'] as const).map((t) => (
+          (['unit', 'item'] as const).map((t) => (
             <Button key={t} variant="outline" size="sm" disabled={!!drawBlockReason(s, HUMAN, t)} onClick={() => onDraw(t)}>
-              <Coins /> {t[0].toUpperCase() + t.slice(1)} card
+              <Coins /> {t === 'unit' ? 'Hero or creep' : 'Item card'}
             </Button>
           ))}
         {s.phase === 'rotate' && <Footprints className="size-4 text-amber-300" />}

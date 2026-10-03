@@ -47,7 +47,8 @@ export function RulesDialog() {
             <ol className="list-decimal space-y-0.5 pl-5">
               <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
               <li>
-                Draw: spend 1 Gold per hero, creep or item card (hand limit 7). You start with 5 heroes. Buyback returns a
+                Draw: spend 1 Gold to take the top card of the mixed hero and creep deck, or 1 Gold for an item (hand limit
+                7). You don't choose whether the mixed draw is a hero or a creep. You start with 5 heroes. Buyback returns a
                 slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing than the enemy.
               </li>
               <li>

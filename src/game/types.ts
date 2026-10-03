@@ -185,15 +185,14 @@ export interface GameState {
   zones: Record<ZoneId, Record<PlayerId, string[]>>
   /** The neutral occupying each camp, if any */
   camps: Record<CampId, string | null>
-  heroDeck: string[]
-  heroDiscard: string[]
+  /** Heroes and creeps share one deck. `'creep'` and `'siege'` are creep cards; every other id is a hero. */
+  unitDeck: string[]
+  unitDiscard: string[]
   itemDeck: string[]
   itemDiscard: string[]
   runeDeck: string[]
   runeDiscard: string[]
   bossKills: BossKill[]
-  creepDeck: CreepKind[]
-  creepDiscard: CreepKind[]
   neutralDeck: string[]
   neutralDiscard: string[]
   ultDeclarations: UltDeclaration[]

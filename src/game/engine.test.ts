@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { playAiRound } from './ai'
-import { TOWER_CARD_IDS } from './cards'
+import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyback,
   buybackCost,
@@ -23,7 +23,7 @@ import {
   rotateHero,
   rotationTargets,
 } from './engine'
-import { BOARD_LIMIT, CAMPS, HAND_LIMIT, LANES, PLAYERS, ZONES, type CampId, type GameState, type HandCard } from './types'
+import { BOARD_LIMIT, CAMPS, HAND_LIMIT, LANES, PLAYERS, STARTING_HEROES, ZONES, type CampId, type GameState, type HandCard } from './types'
 
 /** Fresh game in the assign step with chosen hands. */
 function setup(seed: number, radiant: HandCard[], dire: HandCard[] = []): GameState {
@@ -62,6 +62,10 @@ describe('setup and core rules', () => {
         expect(LANES.map((l) => s.players[p].towerCards[l][tier]).sort()).toEqual([...TOWER_CARD_IDS].sort())
       }
     }
+    const creeps = s.unitDeck.filter((id) => id === 'creep' || id === 'siege')
+    expect(creeps.filter((id) => id === 'creep')).toHaveLength(REGULAR_CREEPS)
+    expect(creeps.filter((id) => id === 'siege')).toHaveLength(SIEGE_CREEPS)
+    expect(s.unitDeck.length - creeps.length).toBe(HEROES.length - STARTING_HEROES * 2)
     for (const camp of CAMPS) expect(campNeutral(s, camp)).toBeDefined()
     expect(s.runeDeck).toHaveLength(20)
     expect(s.neutralDeck.length + 2).toBe(15)
@@ -74,8 +78,30 @@ describe('setup and core rules', () => {
     expect(s.players.radiant.hand).toHaveLength(2)
   })
 
+  it('a draw takes the top of the mixed deck, hero or creep', () => {
+    let s = newGame(undefined, 3)
+    s.players.radiant.hand = []
+    s.players.radiant.gold = 2
+    s.unitDeck = ['axe', 'siege']
+    s = drawCard(s, 'radiant', 'unit')
+    expect(s.players.radiant.hand.at(-1)).toMatchObject({ type: 'creep', cardId: 'siege' })
+    s = drawCard(s, 'radiant', 'unit')
+    expect(s.players.radiant.hand.at(-1)).toMatchObject({ type: 'hero', cardId: 'axe' })
+    s.unitDeck = []
+    s.unitDiscard = ['creep']
+    s.players.radiant.grave = ['sniper']
+    s.players.dire.grave = []
+    s.players.radiant.gold = 1
+    s = drawCard(s, 'radiant', 'unit')
+    expect(['creep', 'sniper']).toContain(s.players.radiant.hand.at(-1)!.cardId)
+    expect(s.players.radiant.grave).toEqual([])
+    expect(s.unitDiscard).toEqual([])
+  })
+
   it('creeps are cards: drawn for 1 Gold, played into a lane, and they stay until killed', () => {
-    let s = drawCard(newGame(undefined, 9), 'radiant', 'creep')
+    let s = newGame(undefined, 9)
+    s.unitDeck.push('creep')
+    s = drawCard(s, 'radiant', 'unit')
     expect(s.players.radiant.gold).toBe(0)
     const creep = s.players.radiant.hand.find((c) => c.type === 'creep')!
     s = endDraw(s)

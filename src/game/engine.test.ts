@@ -151,13 +151,13 @@ describe('setup and core rules', () => {
     expect(lineup(s, 'radiant', 'top')).toHaveLength(1)
   })
 
-  it('counter loop: AGI basic attack instantly kills a healthy INT hero', () => {
-    let s = setup(1, [hero('a', 'juggernaut')], [hero('b', 'crystal_maiden')])
+  it('counter loop: AGI basic attack instantly kills a healthy STR hero', () => {
+    let s = setup(1, [hero('a', 'juggernaut')], [hero('b', 'sven')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = fight(s)
     expect(heroesOnBoard(s, 'dire')).toHaveLength(0)
-    expect(logHas(s, 'AGI counters INT')).toBe(true)
+    expect(logHas(s, 'AGI counters STR')).toBe(true)
   })
 
   it('stun skips the Ultimate: Ravage (STR) lands before Laguna Blade (INT)', () => {
@@ -200,7 +200,7 @@ describe('items, runes and statuses', () => {
   })
 
   it('Break turns off passives (Silver Edge stops Counter Helix)', () => {
-    let s = setup(13, [hero('a', 'juggernaut'), item('i', 'silver_edge')], [hero('b', 'axe')])
+    let s = setup(13, [hero('a', 'crystal_maiden'), item('i', 'silver_edge')], [hero('b', 'axe')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
@@ -221,7 +221,7 @@ describe('items, runes and statuses', () => {
   })
 
   it('Illusion rune: the decoy stands in front and soaks the lethal counter-attack', () => {
-    let s = setup(29, [hero('a', 'crystal_maiden'), item('i', 'rune_illusion')], [hero('b', 'juggernaut')])
+    let s = setup(29, [hero('a', 'sven'), item('i', 'rune_illusion')], [hero('b', 'juggernaut')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
@@ -234,27 +234,27 @@ describe('items, runes and statuses', () => {
   })
 
   it('Invisibility rune: enemies cannot target the hero, but it still attacks', () => {
-    let s = setup(31, [hero('a', 'crystal_maiden'), item('i', 'rune_invis')], [hero('b', 'juggernaut')])
+    let s = setup(31, [hero('a', 'crystal_maiden'), item('i', 'rune_invis')], [hero('b', 'sven')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
     s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'radiant')[0].uid)
     s = resolveRound(endItems(s))
     expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(2)
-    expect(logHas(s, 'Crystal Maiden deals 1 to Dire Juggernaut')).toBe(true)
+    expect(logHas(s, 'Crystal Maiden deals 1 to Dire Sven')).toBe(true)
   })
 
-  it('Haste rune: a hasted INT hero strikes before the AGI hero that counters it', () => {
-    let s = setup(37, [hero('a', 'lina'), item('i', 'rune_haste')], [hero('b', 'sniper')])
+  it('Haste rune: a hasted STR hero strikes before the AGI hero that counters it', () => {
+    let s = setup(37, [hero('a', 'axe'), item('i', 'rune_haste')], [hero('b', 'juggernaut')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
     s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'radiant')[0].uid)
     s = resolveRound(endItems(s))
-    const linaHit = s.log.findIndex((l) => l.text.startsWith('Lina deals 1 to Dire Sniper'))
-    const sniperHit = s.log.findIndex((l) => l.text.startsWith('AGI counters INT'))
-    expect(linaHit).toBeGreaterThan(-1)
-    expect(sniperHit).toBeGreaterThan(linaHit)
+    const axeHit = s.log.findIndex((l) => l.text.startsWith('Axe deals 1 to Dire Juggernaut'))
+    const juggHit = s.log.findIndex((l) => l.text.startsWith('AGI counters STR'))
+    expect(axeHit).toBeGreaterThan(-1)
+    expect(juggHit).toBeGreaterThan(axeHit)
   })
 
   it('Arcane rune: the next Ultimate costs 0 XP', () => {
@@ -273,7 +273,7 @@ describe('items, runes and statuses', () => {
 describe('jungle, Roshan and Tormentor', () => {
   it('clearing a neutral camp grants 1 XP, 1 Gold and a rune card', () => {
     let s = setup(19, [hero('a', 'juggernaut')])
-    forceCamp(s, 'radiantJungle', 'neutral', 'ice_shaman')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
     const { xp, gold } = s.players.radiant
     s = fight(s)

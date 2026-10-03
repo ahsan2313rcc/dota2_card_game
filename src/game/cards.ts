@@ -277,9 +277,9 @@ export function getItem(id: string): ItemCard {
 }
 
 export const ATTRIBUTE_COUNTERS: Record<string, string | undefined> = {
-  AGI: 'INT',
-  INT: 'STR',
-  STR: 'AGI',
+  AGI: 'STR',
+  STR: 'INT',
+  INT: 'AGI',
 }
 
 export const ULT_ORDER = ['STR', 'INT', 'UNI', 'AGI'] as const

@@ -77,7 +77,7 @@ export function RulesDialog() {
           </Section>
           <Section title="Combat">
             Heroes take 2 hits: Healthy → Wounded (tilted) → slain. Basic attacks hit enemy Position 1; with no defenders left
-            the attacker hits the lane's next structure. A basic attack against the attribute it counters (AGI → INT → STR →
+            the attacker hits the lane's next structure. A basic attack against the attribute it counters (AGI → STR → INT →
             AGI) kills instantly — neutrals have attributes too. In Phase 3, every standing tower that took damage this round
             deals its damage (T1: 1, T2: 2) to the attacking side's Position 1.
           </Section>

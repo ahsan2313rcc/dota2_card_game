@@ -47,7 +47,7 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 - **Round steps:** Upkeep, Draw (1 Gold for the top card of the mixed hero-and-creep deck, or 1 Gold for an item; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP each), Resolution, Rotation, Cleanup, Income.
 - **Starting hand:** 5 cards dealt from the top of the shared deck.
 - **Combat:** Ultimates resolve STR → INT → UNI → AGI. Basic attacks resolve AGI → UNI → INT → STR, then creeps. Slowed units attack after everyone else, in the same order. Towers fire last.
-- **Counter loop:** AGI → INT → STR → AGI. A basic attack on the attribute it counters kills instantly. UNI sits outside the loop.
+- **Counter loop:** AGI → STR → INT → AGI. A basic attack on the attribute it counters kills instantly. UNI sits outside the loop.
 - **Tiebreakers:** Safe lane, Mid, Off lane, then jungle. If still tied, Day (odd rounds) favors Radiant and Night (even rounds) favors Dire.
 - **Structures:** T1 takes 3 hits and deals 1 damage. T2 takes 5 hits and deals 2 damage. The Ancient takes 10 hits and deals 0. A tower fires only if it was damaged this round, and it hits Position 1 of the side that damaged it. Razing both towers in a lane gives +1 passive Gold per round.
 - **Economy:** +1 Gold and +1 XP passive. +1 Gold per enemy hero kill. +1 XP for each lane that holds a living hero.

@@ -186,6 +186,13 @@ export const ITEMS: ItemCard[] = [
   { id: 'atos', name: 'Rod of Atos', kind: 'Shop', text: 'Root an enemy unit this round (it cannot change lane or position).', target: 'enemyUnit' },
   { id: 'euls', name: "Eul's Scepter", kind: 'Shop', text: 'Banish an enemy hero this round: untargetable and invulnerable, but it cannot act.', target: 'enemyHero' },
   { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane' },
+  { id: 'ghost', name: 'Ghost Scepter', kind: 'Shop', text: 'An allied hero gains Evade this round.', target: 'allyHero' },
+  { id: 'heart', name: 'Heart of Tarrasque', kind: 'Shop', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
+  { id: 'sheepstick', name: 'Scythe of Vyse', kind: 'Shop', text: 'Hex an enemy hero: Silence and Disarm them this round.', target: 'enemyHero' },
+  { id: 'skadi', name: 'Eye of Skadi', kind: 'Shop', text: 'Slow an enemy unit this round.', target: 'enemyUnit' },
+  { id: 'glimmer_cape', name: 'Glimmer Cape', kind: 'Shop', text: 'An allied hero is untargetable by enemies this round.', target: 'allyHero' },
+  { id: 'phase_boots', name: 'Phase Boots', kind: 'Shop', text: 'An allied hero gains Haste this round.', target: 'allyHero' },
+  { id: 'daedalus', name: 'Daedalus', kind: 'Shop', text: 'An allied hero gains +1 attack damage and Pierce this round.', target: 'allyHero' },
   { id: 'rune_gold', name: 'Bounty Rune', kind: 'Rune', text: 'Gain 1 Gold.', target: 'none' },
   { id: 'rune_regen', name: 'Regeneration Rune', kind: 'Rune', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
   { id: 'rune_dd', name: 'Double Damage Rune', kind: 'Rune', text: '+1 basic attack damage this round.', target: 'allyHero' },
@@ -209,9 +216,9 @@ export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Run
 export const BOSS_REWARD = { roshan: 'aegis', tormentor: 'refresher_shard' } as const
 /** Each side hides one of each under its three T1 towers, and again under its three T2 towers. */
 export const TOWER_CARD_IDS = ['glyph', 'lotus', 'gate'] as const
-/** Lane creeps and siege creeps shuffled into the hero deck. Each hero is included once. */
-export const REGULAR_CREEPS = 8
-export const SIEGE_CREEPS = 2
+/** Shuffled into the one hero deck: 127 heroes + these creeps = 160 cards. */
+export const REGULAR_CREEPS = 25
+export const SIEGE_CREEPS = 8
 
 export const NEUTRALS: NeutralCard[] = [
   { id: 'golem', name: 'Golem', attribute: 'STR', hp: 2, text: 'Hits Position 1 of each side for 1.' },

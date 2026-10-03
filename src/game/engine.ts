@@ -363,10 +363,11 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     ITEMS.filter((i) => i.kind === kind).flatMap((i) => Array.from({ length: ITEM_DECK_COPIES[kind] }, () => i.id))
   s.itemDeck = shuffle(s, copies('Shop'))
   s.runeDeck = shuffle(s, copies('Rune'))
-  const heroPile = shuffle(
-    s,
-    HEROES.map((h) => unitCard(h.id)),
-  )
+  s.unitDeck = shuffle(s, [
+    ...HEROES.map((h) => unitCard(h.id)),
+    ...Array.from({ length: REGULAR_CREEPS }, () => unitCard('creep')),
+    ...Array.from({ length: SIEGE_CREEPS }, () => unitCard('siege')),
+  ])
   s.neutralDeck = shuffle(s, [
     ...NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),
     'roshan',
@@ -379,18 +380,17 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
       LANES.forEach((l, i) => (s.players[p].towerCards[l][tier] = ids[i]))
     }
     for (let i = 0; i < STARTING_HEROES; i++) {
-      const card = heroPile.pop()
-      if (card) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: card.cardId })
+      const card = s.unitDeck.pop()
+      if (!card) break
+      s.players[p].hand.push({
+        iid: newId(s, 'c'),
+        type: isCreepId(card.cardId) ? 'creep' : 'hero',
+        cardId: card.cardId,
+        buybackUsed: card.buybackUsed || undefined,
+      })
     }
   }
-  // One pile for both players. Leftover heroes are shuffled with the creeps after the deal,
-  // so the top of the deck is not the creeps that were skipped while dealing.
-  s.unitDeck = shuffle(s, [
-    ...heroPile,
-    ...Array.from({ length: REGULAR_CREEPS }, () => unitCard('creep')),
-    ...Array.from({ length: SIEGE_CREEPS }, () => unitCard('siege')),
-  ])
-  log(s, 'The battle for the Ancients begins. Each side is dealt 5 heroes.', 'phase')
+  log(s, 'The battle for the Ancients begins. 160 cards are shuffled. Each side is dealt 5 from that deck.', 'phase')
   startRound(s)
   return s
 }
@@ -888,6 +888,30 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         break
       case 'tp':
         if (lane) teleport(s, t, lane)
+        break
+      case 'ghost':
+        st.evade += 1
+        break
+      case 'heart':
+        heal(s, t, 'Heart of Tarrasque')
+        break
+      case 'sheepstick':
+        applyStatus(s, p, t, 'silenced', 'Scythe of Vyse', true)
+        applyStatus(s, p, t, 'disarmed', 'Scythe of Vyse', true)
+        break
+      case 'skadi':
+        applyStatus(s, p, t, 'slowed', 'Eye of Skadi', true)
+        break
+      case 'glimmer_cape':
+        st.invisible = true
+        break
+      case 'phase_boots':
+        st.haste = true
+        st.slowed = false
+        break
+      case 'daedalus':
+        st.bonusDamage += 1
+        st.pierce = true
         break
       case 'aegis':
         st.aegis = true

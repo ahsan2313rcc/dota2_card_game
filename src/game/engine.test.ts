@@ -51,28 +51,28 @@ const item = (iid: string, cardId: string): HandCard => ({ iid, type: 'item', ca
 const logHas = (s: GameState, text: string) => s.log.some((l) => l.text.includes(text))
 
 describe('setup and core rules', () => {
-  it('deals hero-only hands, fills both jungles, and hides one of each tower card per tier', () => {
+  it('shuffles 160 cards, deals 5 to each side, and hides one of each tower card per tier', () => {
     const s = newGame(undefined, 42)
     expect(s.round).toBe(1)
+    const dealt = PLAYERS.flatMap((p) => s.players[p].hand)
+    const pile = [...s.unitDeck.map((c) => c.cardId), ...dealt.map((c) => c.cardId)]
+    expect(pile).toHaveLength(HEROES.length + REGULAR_CREEPS + SIEGE_CREEPS)
+    expect(pile.filter((id) => id === 'creep')).toHaveLength(REGULAR_CREEPS)
+    expect(pile.filter((id) => id === 'siege')).toHaveLength(SIEGE_CREEPS)
+    const heroIds = pile.filter((id) => id !== 'creep' && id !== 'siege')
+    expect(heroIds).toHaveLength(HEROES.length)
+    expect(new Set(heroIds).size).toBe(HEROES.length)
+    expect(s.unitDeck).toHaveLength(pile.length - STARTING_HEROES * 2)
+    expect(s.itemDeck).toHaveLength(40)
+    expect(s.runeDeck).toHaveLength(20)
     for (const p of PLAYERS) {
       expect(s.players[p].hand).toHaveLength(5)
-      expect(s.players[p].hand.every((c) => c.type === 'hero')).toBe(true)
       expect(s.players[p].gold).toBe(1)
       for (const tier of ['t1', 't2'] as const) {
         expect(LANES.map((l) => s.players[p].towerCards[l][tier]).sort()).toEqual([...TOWER_CARD_IDS].sort())
       }
     }
-    const creeps = s.unitDeck.filter((c) => c.cardId === 'creep' || c.cardId === 'siege')
-    expect(creeps.filter((c) => c.cardId === 'creep')).toHaveLength(REGULAR_CREEPS)
-    expect(creeps.filter((c) => c.cardId === 'siege')).toHaveLength(SIEGE_CREEPS)
-    expect(s.unitDeck.length - creeps.length).toBe(HEROES.length - STARTING_HEROES * 2)
-    const heroIds = [
-      ...PLAYERS.flatMap((p) => s.players[p].hand.map((c) => c.cardId)),
-      ...s.unitDeck.map((c) => c.cardId).filter((id) => id !== 'creep' && id !== 'siege'),
-    ]
-    expect(heroIds).toHaveLength(HEROES.length)
-    expect(new Set(heroIds).size).toBe(HEROES.length)
-    // Opening heroes are dealt before the deck is shuffled, so the top is not a run of creeps.
+    // Heroes and creeps are shuffled together, so the top of the deck is not a run of creeps.
     let heroDraws = 0
     for (let seed = 1; seed <= 40; seed++) {
       const top = newGame(undefined, seed).unitDeck.slice(-8)
@@ -98,7 +98,7 @@ describe('setup and core rules', () => {
   })
 
   it('limits hero placements to 3 per round', () => {
-    let s = endDraw(newGame(undefined, 7))
+    let s = setup(7, ['axe', 'sven', 'pudge', 'tidehunter', 'wraith_king'].map((id, i) => hero(String(i), id)))
     for (const c of [...s.players.radiant.hand]) s = placeHero(s, 'radiant', c.iid, 'mid')
     expect(heroesOnBoard(s, 'radiant')).toHaveLength(3)
     expect(s.players.radiant.hand).toHaveLength(2)
@@ -136,10 +136,12 @@ describe('setup and core rules', () => {
     s.unitDeck.push({ cardId: 'creep', buybackUsed: false })
     s = drawCard(s, 'radiant', 'unit')
     expect(s.players.radiant.gold).toBe(0)
-    const creep = s.players.radiant.hand.find((c) => c.type === 'creep')!
+    const drawn = s.players.radiant.hand.at(-1)!
+    expect(drawn).toMatchObject({ type: 'creep', cardId: 'creep' })
     s = endDraw(s)
-    s.players.radiant.hand.push({ iid: 'extra', type: 'creep', cardId: 'creep' })
-    s = placeCreep(s, 'radiant', creep.iid, 'top')
+    // The dealt opening hand can contain a siege creep. This check uses two lane creeps.
+    s.players.radiant.hand = [drawn, { iid: 'extra', type: 'creep', cardId: 'creep' }]
+    s = placeCreep(s, 'radiant', drawn.iid, 'top')
     s = placeCreep(s, 'radiant', 'extra', 'top')
     s = finish(s)
     // The tower shoots Position 1; the second creep survives into the next round.

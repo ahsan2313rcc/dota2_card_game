@@ -45,14 +45,15 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 ## Implemented rules
 
 - **Round steps:** Upkeep, Draw (1 Gold for the top card of the mixed hero-and-creep deck, or 1 Gold for an item; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP each), Resolution, Rotation, Cleanup, Income.
-- **Starting hand:** 5 heroes, dealt out of the mixed deck before the rest is drawn.
+- **Starting hand:** 5 cards dealt from the top of the shared deck.
 - **Combat:** Ultimates resolve STR → INT → UNI → AGI. Basic attacks resolve AGI → UNI → INT → STR, then creeps. Slowed units attack after everyone else, in the same order. Towers fire last.
 - **Counter loop:** AGI → INT → STR → AGI. A basic attack on the attribute it counters kills instantly. UNI sits outside the loop.
 - **Tiebreakers:** Safe lane, Mid, Off lane, then jungle. If still tied, Day (odd rounds) favors Radiant and Night (even rounds) favors Dire.
 - **Structures:** T1 takes 3 hits and deals 1 damage. T2 takes 5 hits and deals 2 damage. The Ancient takes 10 hits and deals 0. A tower fires only if it was damaged this round, and it hits Position 1 of the side that damaged it. Razing both towers in a lane gives +1 passive Gold per round.
 - **Economy:** +1 Gold and +1 XP passive. +1 Gold per enemy hero kill. +1 XP for each lane that holds a living hero.
 - **Comeback rules:** Slain heroes go to their owner's grave; Buyback returns one to hand for 2 Gold (3 if you have more towers standing than the enemy), once per hero. A second death puts that card back in the shared deck. Losing a tower gives +1 Gold and the face-down tower card under it (Glyph, Lotus or Twin Gate, one of each per tier, swappable within a tier in round 1); tower cards don't count toward the hand limit. Fountain: a side's heroes in a lane where it has no towers heal 1 at the start of the round. Costs live in `BUYBACK_COST` and each rule can be toggled via `Settings.rules` for simulations.
-- **One shared unit deck:** both players draw from the same pile. It holds one copy of each of the 127 Dota heroes, 8 lane creeps and 2 siege creeps. Five heroes are dealt to each side first, and the rest is shuffled. Dead creeps, and heroes that have already been bought back, go to that deck's discard and reshuffle with both graves when it runs out.
+- **One shared unit deck:** both players draw from the same pile. 127 heroes, 25 lane creeps and 8 siege creeps are shuffled together (160). Five cards are dealt to each side from the top. Dead creeps, and heroes that have already been bought back, go to that deck's discard and reshuffle with both graves when it runs out.
+- **Shared item deck:** 40 cards, two copies of each of 20 shop items. **Shared rune deck:** 20 cards, two copies of each of 10 runes.
 - **Creep cards:** played into a lane. They stay until they die and line up behind heroes. Siege creeps hit structures for 2.
 - **Items:** free to play, single use, and resolve immediately in the Item step. Shop items (including the Town Portal Scroll), runes, tower cards and the boss rewards (Aegis, Refresher Shard).
 - **Runes:** 20 cards (2 each of Bounty, Regeneration, Double Damage, Shield, Arcane, Illusion, Invisibility, Haste, Wisdom, Water), dropped only by regular neutrals.

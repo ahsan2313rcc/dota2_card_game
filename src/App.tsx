@@ -179,10 +179,15 @@ export default function App() {
             <span className="font-semibold">Round {s.round}</span>
             <span
               className="text-zinc-400"
-              title="Both players draw from this one pile. Each hero is included once. Five heroes were already dealt to each side."
+              title="One pile for both players. It started as 160 cards: 127 heroes, 25 creeps and 8 siege creeps, shuffled together. Five cards were dealt to each side."
             >
-              Deck {s.unitDeck.length} · {s.unitDeck.filter((c) => c.cardId !== 'creep' && c.cardId !== 'siege').length} heroes,{' '}
-              {s.unitDeck.filter((c) => c.cardId === 'creep' || c.cardId === 'siege').length} creeps
+              Deck {s.unitDeck.length}
+            </span>
+            <span className="text-zinc-400" title="Both players draw from this shop deck. 20 items, two copies each.">
+              Items {s.itemDeck.length}
+            </span>
+            <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
+              Runes {s.runeDeck.length}
             </span>
             {isDay(s.round) ? (
               <span className="flex items-center gap-1 text-amber-300">

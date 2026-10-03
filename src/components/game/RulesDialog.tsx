@@ -47,8 +47,10 @@ export function RulesDialog() {
             <ol className="list-decimal space-y-0.5 pl-5">
               <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
               <li>
-                Draw: both sides spend 1 Gold to take the top card of the one shared hero and creep deck, or 1 Gold for an
-                item (hand limit 7). You don't choose whether that draw is a hero or a creep. You start with 5 heroes.
+                Draw: both sides spend 1 Gold to take the top card of the one shared deck, or 1 Gold for an item from the
+                shared item deck (hand limit 7). The hero deck is 160 cards shuffled together: all 127 heroes, 25 lane
+                creeps and 8 siege creeps. You start with 5 cards from that deck. The item deck is 40 cards (20 items, two
+                copies). The rune deck is 20 cards (10 runes, two copies).
                 Buyback returns a slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing
                 than the enemy. Each hero can be bought back only once; the next time it dies, the card goes back into the
                 shared deck.

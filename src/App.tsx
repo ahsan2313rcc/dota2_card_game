@@ -12,8 +12,6 @@ import { RulesDialog } from '@/components/game/RulesDialog'
 import { TowerCards } from '@/components/game/TowerCards'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Toaster } from '@/components/ui/sonner'
 import { getHero, getItem } from '@/game/cards'
 import {
@@ -201,16 +199,6 @@ export default function App() {
           </div>
           <PhaseTracker phase={s.phase} />
           <div className="ml-auto flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="single-ult"
-                checked={s.settings.singleUseUlt}
-                onCheckedChange={(v) => dispatch({ type: 'settings', settings: { singleUseUlt: v } })}
-              />
-              <Label htmlFor="single-ult" className="text-xs text-zinc-400">
-                Single-use ULTs
-              </Label>
-            </div>
             <RulesDialog />
             <Button
               variant="outline"
@@ -419,7 +407,7 @@ function ActionBar({
       title = 'Ultimates'
       hint = ultCaster
         ? `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
-        : `Declare Ultimates in "Your board" (1 XP each). Declared: ${s.ultDeclarations.length}. STR casts first, AGI last.`
+        : `Declare Ultimates in "Your board". The first cast of a hero's life costs 1 XP, then 2, then 3. Declared: ${s.ultDeclarations.length}. STR casts first, AGI last.`
       cta = 'Resolve combat'
       break
     case 'rotate': {

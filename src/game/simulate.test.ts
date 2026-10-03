@@ -23,7 +23,7 @@ function run(label: string, rules: ComebackRules) {
   let leaderWon = 0
   let buybacks = 0
   for (let g = 1; g <= GAMES; g++) {
-    let s = newGame({ singleUseUlt: true, rules }, g * 7919)
+    let s = newGame({ rules }, g * 7919)
     let leader: PlayerId | undefined
     for (let r = 0; r < 60 && !s.winner; r++) {
       s = playAiRound(s)

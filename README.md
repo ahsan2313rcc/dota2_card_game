@@ -44,7 +44,7 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 
 ## Implemented rules
 
-- **Round steps:** Upkeep, Draw (1 Gold for the top card of the mixed hero-and-creep deck, or 1 Gold for an item; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP each), Resolution, Rotation, Cleanup, Income.
+- **Round steps:** Upkeep, Draw (1 Gold for the top card of the mixed hero-and-creep deck, or 1 Gold for an item; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP the first time a hero casts, then 2, then 3), Resolution, Rotation, Cleanup, Income.
 - **Starting hand:** 5 cards dealt from the top of the shared deck.
 - **Combat:** Ultimates resolve STR → INT → UNI → AGI. Basic attacks resolve AGI → UNI → INT → STR, then creeps. Slowed units attack after everyone else, in the same order. Towers fire last.
 - **Counter loop:** AGI → STR → INT → AGI. A basic attack on the attribute it counters kills instantly. UNI sits outside the loop.

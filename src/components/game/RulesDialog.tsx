@@ -61,7 +61,11 @@ export function RulesDialog() {
               </li>
               <li>Reveal: both sides flip.</li>
               <li>Item: play items, runes and tower cards — free, single use, and they resolve immediately.</li>
-              <li>Ult: spend 1 XP to declare a living hero's Ultimate (single-use toggle in the header).</li>
+              <li>
+                Ult: a hero can cast every round. The first cast of that deployment costs 1 XP, the next 2, then 3, and so
+                on. Dying and being played again starts the cost back at 1. Refresher Orb and Refresher Shard also reset it
+                to 1. An Arcane rune makes the next cast free, and the cost still climbs.
+              </li>
               <li>Resolution: Ultimates (STR → INT → UNI → AGI), basic attacks (AGI → UNI → INT → STR → creeps, Slowed last), then tower aggro.</li>
               <li>
                 Rotation: each side may move one hero to an adjacent zone along Top · Dire Jungle · Mid · Radiant Jungle ·

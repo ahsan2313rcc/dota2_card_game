@@ -304,7 +304,7 @@ export function standingTowers(s: GameState, p: PlayerId): number {
 
 // ---------- setup ----------
 
-export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date.now()): GameState {
+export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
   const blankPlayer = (id: PlayerId): PlayerState => ({
     id,
     gold: 0,
@@ -402,6 +402,7 @@ function makeUnit(s: GameState, partial: Pick<Unit, 'kind' | 'owner' | 'zone' | 
     maxHp: partial.hp,
     dead: false,
     ultUsed: partial.kind !== 'hero',
+    ultCasts: 0,
     placedRound: s.round,
     fierySoul: false,
     status: freshStatus(),
@@ -780,7 +781,7 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
     case 'allyWoundedHero':
       return allies.filter((u) => u.hp < u.maxHp).map((u) => u.uid)
     case 'allyHero':
-      if (itemId === 'refresher' || itemId === 'refresher_shard') return allies.filter((u) => u.ultUsed).map((u) => u.uid)
+      if (itemId === 'refresher' || itemId === 'refresher_shard') return allies.filter((u) => u.ultCasts > 0).map((u) => u.uid)
       if (itemId === 'rune_water') return allies.filter((u) => DEBUFFS.some((d) => u.status[d]) || u.status.poisonedBy).map((u) => u.uid)
       return allies.map((u) => u.uid)
     case 'allyHeroToLane':
@@ -868,6 +869,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.bonusDamage += 1
         break
       case 'refresher':
+        t.ultCasts = 0
         t.ultUsed = false
         break
       case 'mkb':
@@ -917,6 +919,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.aegis = true
         break
       case 'refresher_shard':
+        t.ultCasts = 0
         t.ultUsed = false
         break
       case 'rune_regen':
@@ -995,9 +998,13 @@ export function ultNeedsTarget(u: Unit) {
   return u.kind === 'hero' && getHero(u.cardId!).ult.target !== 'none'
 }
 
+/** XP the next Ultimate costs. The first cast of a deployment is 1, then 2, then 3, and so on. */
+export function ultCost(u: Unit): number {
+  return u.ultCasts + 1
+}
+
 function castPreventedReason(s: GameState, u: Unit): string | null {
   if (u.dead) return 'Slain'
-  if (s.settings.singleUseUlt && u.ultUsed) return 'Ultimate already used'
   if (u.status.banished) return 'Banished'
   if (u.status.stunned) return 'Stunned'
   if (u.status.silenced) return 'Silenced'
@@ -1012,7 +1019,8 @@ export function ultBlockReason(s: GameState, uid: string): string | null {
   if (s.ultDeclarations.some((d) => d.uid === uid)) return 'Already declared'
   const r = castPreventedReason(s, u)
   if (r) return r
-  if (s.players[u.owner].xp < 1 && !s.players[u.owner].arcane) return 'Needs 1 XP'
+  const cost = ultCost(u)
+  if (s.players[u.owner].xp < cost && !s.players[u.owner].arcane) return `Needs ${cost} XP`
   if (ultNeedsTarget(u) && ultTargets(s, uid).length === 0) return 'No valid targets'
   return null
 }
@@ -1024,16 +1032,17 @@ export function declareUlt(state: GameState, uid: string, target?: string): Game
   const owner = u.owner as PlayerId
   const s = clone(state)
   const pl = s.players[owner]
+  const cost = ultCost(u)
   const free = pl.arcane
   if (free) pl.arcane = false
-  else pl.xp -= 1
-  s.ultDeclarations.push({ uid, owner, target, free })
+  else pl.xp -= cost
+  s.ultDeclarations.push({ uid, owner, target, free, cost: free ? 0 : cost })
   return s
 }
 
-function refundUlt(s: GameState, d: { owner: PlayerId; free?: boolean }) {
+function refundUlt(s: GameState, d: { owner: PlayerId; free?: boolean; cost: number }) {
   if (d.free) s.players[d.owner].arcane = true
-  else s.players[d.owner].xp += 1
+  else s.players[d.owner].xp += d.cost
 }
 
 export function cancelUlt(state: GameState, uid: string): GameState {
@@ -1680,8 +1689,8 @@ export function resolveRound(state: GameState): GameState {
   s.towersHit = []
 
   log(s, 'Phase 1 — Ultimates (STR → INT → UNI → AGI)', 'phase')
-  type Cast = { kind: 'hero'; u: Unit; target?: string; free?: boolean } | { kind: 'roar'; u: Unit }
-  const casts: Cast[] = s.ultDeclarations.map((d) => ({ kind: 'hero', u: s.units[d.uid], target: d.target, free: d.free }))
+  type Cast = { kind: 'hero'; u: Unit; target?: string; free?: boolean; cost: number } | { kind: 'roar'; u: Unit }
+  const casts: Cast[] = s.ultDeclarations.map((d) => ({ kind: 'hero', u: s.units[d.uid], target: d.target, free: d.free, cost: d.cost }))
   for (const camp of CAMPS) {
     const rosh = campNeutral(s, camp)
     if (rosh?.kind === 'roshan' && rosh.hp === rosh.maxHp && PLAYERS.some((p) => lineup(s, p, camp).length > 0)) {
@@ -1706,11 +1715,12 @@ export function resolveRound(state: GameState): GameState {
     const target = c.target ? s.units[c.target] : undefined
     const targetGone = c.target && (!target || target.dead || hiddenFromEnemies(target))
     if (reason || targetGone) {
-      refundUlt(s, { owner, free: c.free })
-      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.free ? 'Arcane rune' : 'XP'} refunded.`, 'info')
+      refundUlt(s, { owner, free: c.free, cost: c.cost })
+      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.free ? 'Arcane rune' : `${c.cost} XP`} refunded.`, 'info')
       continue
     }
     log(s, `${fullName(u)} casts ${getHero(u.cardId!).ult.name}${target ? ` on ${fullName(target)}` : ''}.`, tone(owner))
+    u.ultCasts += 1
     u.ultUsed = true
     castUlt(s, u, c.target)
   }

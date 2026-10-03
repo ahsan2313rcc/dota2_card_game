@@ -27,6 +27,7 @@ import {
   rotationTargets,
   setCampFocus,
   ultBlockReason,
+  ultCost,
   ultNeedsTarget,
   ultTargets,
 } from './engine'
@@ -233,9 +234,10 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
     const focus = enemyHeroesIn(s, p, camp) > 0 ? 'enemy' : 'neutral'
     if (s.players[p].campFocus[camp] !== focus) s = setCampFocus(s, p, camp, focus)
   }
-  const casters = heroesOnBoard(s, p).sort((a, b) => Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a)))
+  const casters = heroesOnBoard(s, p).sort(
+    (a, b) => ultCost(a) - ultCost(b) || Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a)),
+  )
   for (const u of casters) {
-    if (s.players[p].xp < 1) break
     if (ultBlockReason(s, u.uid)) continue
     const enemiesHere = enemyHeroesIn(s, p, u.zone) + (campNeutral(s, u.zone) ? 1 : 0)
     const hero = getHero(u.cardId!)

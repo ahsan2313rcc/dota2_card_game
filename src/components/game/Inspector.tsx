@@ -1,5 +1,5 @@
 import { ATTRIBUTE_COUNTERS, ROSHAN, TORMENTOR, getHero, getNeutral } from '@/game/cards'
-import { PLAYER_LABEL, ZONE_LABEL, attributeOf } from '@/game/engine'
+import { PLAYER_LABEL, ZONE_LABEL, attributeOf, ultCost } from '@/game/engine'
 import type { RoundStatus, Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { ATTR_STYLE, SIDE_STYLE } from './styles'
@@ -151,7 +151,10 @@ export function Inspector({ unit }: { unit?: Unit }) {
       </p>
       <p className="text-zinc-300">
         <span className="font-semibold text-amber-300">ULT {h.ult.name}:</span> {h.ult.text}{' '}
-        <span className="text-zinc-500">({unit.ultUsed ? 'used' : 'ready'})</span>
+        <span className="text-zinc-500">
+          ({unit.ultCasts > 0 ? `cast ${unit.ultCasts}×, next ` : 'next '}
+          {ultCost(unit)} XP)
+        </span>
       </p>
       <StatusChips u={unit} />
     </div>

@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { getHero } from '@/game/cards'
-import { ZONE_LABEL, campHolder, laneRole, lineup, ultBlockReason, unitName } from '@/game/engine'
+import { ZONE_LABEL, campHolder, laneRole, lineup, ultBlockReason, ultCost, unitName } from '@/game/engine'
 import { HUMAN } from '@/game/useGame'
 import { ZONES, isLane, type CampId, type GameState, type Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
@@ -72,9 +72,11 @@ export function Roster({ s, actions }: { s: GameState; actions: RosterActions })
 }
 
 function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; index: number; total: number; actions: RosterActions }) {
-  const declared = s.ultDeclarations.some((d) => d.uid === u.uid)
+  const declaration = s.ultDeclarations.find((d) => d.uid === u.uid)
+  const declared = !!declaration
   const reason = u.kind === 'hero' ? ultBlockReason(s, u.uid) : null
   const picking = actions.ultCaster === u.uid
+  const nextCost = u.kind === 'hero' && u.owner !== 'neutral' && s.players[u.owner].arcane ? 0 : ultCost(u)
   return (
     <li
       className={cn(
@@ -102,7 +104,7 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
           <span className="block truncate text-xs text-zinc-200">{unitName(u)}</span>
           <span className="block text-[10px] text-zinc-500">
             {u.hp}/{u.maxHp} hp{u.hp < u.maxHp && u.kind === 'hero' ? ' · Wounded' : ''}
-            {u.kind === 'hero' && u.ultUsed ? ' · ULT used' : ''}
+            {u.kind === 'hero' ? ` · ULT ${ultCost(u)} XP` : ''}
             {u.kind === 'illusion' ? ' · decoy' : ''}
           </span>
         </span>
@@ -126,7 +128,7 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
         <button
           type="button"
           onClick={() => actions.onUlt(u)}
-          title={declared ? 'Cancel and refund 1 XP' : (reason ?? getHero(u.cardId!).ult.text)}
+          title={declared ? `Cancel and refund ${declaration?.free ? 'the Arcane rune' : `${declaration?.cost ?? 0} XP`}` : (reason ?? getHero(u.cardId!).ult.text)}
           className={cn(
             'shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold transition',
             declared
@@ -138,7 +140,7 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
                   : 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30',
           )}
         >
-          {declared ? 'ULT ✓' : picking ? 'Pick target' : 'ULT · 1 XP'}
+          {declared ? 'ULT ✓' : picking ? 'Pick target' : `ULT · ${nextCost} XP`}
         </button>
       )}
     </li>

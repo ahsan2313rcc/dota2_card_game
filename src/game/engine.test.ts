@@ -5,6 +5,7 @@ import {
   buyback,
   buybackCost,
   campNeutral,
+  cancelUlt,
   declareUlt,
   drawCard,
   endDraw,
@@ -22,6 +23,8 @@ import {
   reveal,
   rotateHero,
   rotationTargets,
+  ultBlockReason,
+  ultCost,
 } from './engine'
 import { BOARD_LIMIT, CAMPS, HAND_LIMIT, LANES, PLAYERS, STARTING_HEROES, ZONES, type CampId, type GameState, type HandCard } from './types'
 
@@ -255,6 +258,35 @@ describe('items, runes and statuses', () => {
     const juggHit = s.log.findIndex((l) => l.text.startsWith('AGI counters STR'))
     expect(axeHit).toBeGreaterThan(-1)
     expect(juggHit).toBeGreaterThan(axeHit)
+  })
+
+  it('an ultimate can be cast again, and each cast costs one more XP', () => {
+    let s = setup(3, [hero('a', 'tidehunter')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'top')
+    s = endItems(reveal(s))
+    const tide = heroesOnBoard(s, 'radiant')[0].uid
+    expect(ultCost(s.units[tide])).toBe(1)
+    s.players.radiant.xp = 1
+    s = declareUlt(s, tide)
+    expect(s.players.radiant.xp).toBe(0)
+    s = resolveRound(s)
+    expect(s.units[tide].ultCasts).toBe(1)
+    expect(ultCost(s.units[tide])).toBe(2)
+    s.phase = 'ults'
+    s.ultDeclarations = []
+    s.players.radiant.xp = 1
+    expect(ultBlockReason(s, tide)).toBe('Needs 2 XP')
+    s.players.radiant.xp = 2
+    s = declareUlt(s, tide)
+    expect(s.players.radiant.xp).toBe(0)
+    s = cancelUlt(s, tide)
+    expect(s.players.radiant.xp).toBe(2)
+    s.phase = 'items'
+    s.players.radiant.hand.push(item('r', 'refresher'))
+    s = playItem(s, 'radiant', 'r', tide)
+    expect(s.units[tide].ultCasts).toBe(0)
+    expect(ultCost(s.units[tide])).toBe(1)
   })
 
   it('Arcane rune: the next Ultimate costs 0 XP', () => {

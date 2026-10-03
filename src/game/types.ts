@@ -158,7 +158,10 @@ export interface Unit {
   hp: number
   maxHp: number
   dead: boolean
+  /** True once this hero has cast at least once during this deployment. */
   ultUsed: boolean
+  /** Successful Ultimate casts during this deployment. The next one costs this many XP, plus one. */
+  ultCasts: number
   placedRound: number
   fierySoul: boolean
   /** Set once this hero has been bought back. A later death returns the card to the shared deck. */
@@ -202,6 +205,8 @@ export interface UltDeclaration {
   target?: string
   /** Paid with the Arcane rune instead of XP */
   free?: boolean
+  /** XP spent on this declaration. Refunded in full if the cast fizzles or is cancelled. */
+  cost: number
 }
 
 /** Roshan or a Tormentor slain this round; the reward is settled after combat. */
@@ -230,7 +235,6 @@ export interface ComebackRules {
 }
 
 export interface Settings {
-  singleUseUlt: boolean
   /** Not exposed in the UI; lets simulations compare rule sets. Missing means all on. */
   rules?: ComebackRules
 }

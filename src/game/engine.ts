@@ -2,7 +2,6 @@ import {
   ATTACK_ORDER,
   ATTRIBUTE_COUNTERS,
   BOSS_REWARD,
-  HERO_COPIES,
   HEROES,
   ITEMS,
   ITEM_DECK_COPIES,
@@ -360,7 +359,7 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
   s.runeDeck = shuffle(s, copies('Rune'))
   const heroPile = shuffle(
     s,
-    HEROES.flatMap((h) => Array.from({ length: HERO_COPIES }, () => unitCard(h.id))),
+    HEROES.map((h) => unitCard(h.id)),
   )
   s.neutralDeck = shuffle(s, [
     ...NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),

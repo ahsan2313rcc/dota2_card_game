@@ -177,8 +177,12 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-300">
             <span className="font-semibold">Round {s.round}</span>
-            <span className="text-zinc-400" title="Radiant and Dire draw heroes and creeps from this one pile">
-              Shared deck {s.unitDeck.length}
+            <span
+              className="text-zinc-400"
+              title="Both players draw from this one pile. Each hero is included once. Five heroes were already dealt to each side."
+            >
+              Deck {s.unitDeck.length} · {s.unitDeck.filter((c) => c.cardId !== 'creep' && c.cardId !== 'siege').length} heroes,{' '}
+              {s.unitDeck.filter((c) => c.cardId === 'creep' || c.cardId === 'siege').length} creeps
             </span>
             {isDay(s.round) ? (
               <span className="flex items-center gap-1 text-amber-300">

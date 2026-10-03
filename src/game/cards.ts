@@ -207,8 +207,14 @@ export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Run
 export const BOSS_REWARD = { roshan: 'aegis', tormentor: 'refresher_shard' } as const
 /** Each side hides one of each under its three T1 towers, and again under its three T2 towers. */
 export const TOWER_CARD_IDS = ['glyph', 'lotus', 'gate'] as const
-export const REGULAR_CREEPS = 32
-export const SIEGE_CREEPS = 8
+/** Copies of each hero in the shared hero-and-creep deck. */
+export const HERO_COPIES = 2
+/**
+ * Creeps are the minority of that deck, about one card in five, matching a 127-hero / 33-creep mix.
+ * They used to be their own deck, which is why these counts were much higher.
+ */
+export const REGULAR_CREEPS = 8
+export const SIEGE_CREEPS = 2
 
 export const NEUTRALS: NeutralCard[] = [
   { id: 'golem', name: 'Golem', attribute: 'STR', hp: 2, text: 'Hits Position 1 of each side for 1.' },

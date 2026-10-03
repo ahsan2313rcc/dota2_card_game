@@ -2,6 +2,7 @@ import {
   ATTACK_ORDER,
   ATTRIBUTE_COUNTERS,
   BOSS_REWARD,
+  HERO_COPIES,
   HEROES,
   ITEMS,
   ITEM_DECK_COPIES,
@@ -356,11 +357,10 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
     ITEMS.filter((i) => i.kind === kind).flatMap((i) => Array.from({ length: ITEM_DECK_COPIES[kind] }, () => i.id))
   s.itemDeck = shuffle(s, copies('Shop'))
   s.runeDeck = shuffle(s, copies('Rune'))
-  s.unitDeck = shuffle(s, [
-    ...HEROES.map((h) => h.id),
-    ...Array.from({ length: REGULAR_CREEPS }, () => 'creep'),
-    ...Array.from({ length: SIEGE_CREEPS }, () => 'siege'),
-  ])
+  const heroPile = shuffle(
+    s,
+    HEROES.flatMap((h) => Array.from({ length: HERO_COPIES }, () => h.id)),
+  )
   s.neutralDeck = shuffle(s, [
     ...NEUTRALS.flatMap((n) => Array.from({ length: NEUTRAL_COPIES }, () => n.id)),
     'roshan',
@@ -372,13 +372,18 @@ export function newGame(settings: Settings = { singleUseUlt: true }, seed = Date
       const ids = shuffle(s, [...TOWER_CARD_IDS])
       LANES.forEach((l, i) => (s.players[p].towerCards[l][tier] = ids[i]))
     }
-    // Opening hands stay heroes. Later draws take whatever is on top of the mixed deck.
-    const dealt: string[] = []
-    for (let i = s.unitDeck.length - 1; i >= 0 && dealt.length < STARTING_HEROES; i--) {
-      if (!isCreepId(s.unitDeck[i])) dealt.push(s.unitDeck.splice(i, 1)[0])
+    for (let i = 0; i < STARTING_HEROES; i++) {
+      const id = heroPile.pop()
+      if (id) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: id })
     }
-    for (const id of dealt) s.players[p].hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: id })
   }
+  // Shuffle the leftover heroes together with the creeps. Pulling heroes out of an
+  // already mixed deck left every skipped creep on top, so the first draws were all creeps.
+  s.unitDeck = shuffle(s, [
+    ...heroPile,
+    ...Array.from({ length: REGULAR_CREEPS }, () => 'creep'),
+    ...Array.from({ length: SIEGE_CREEPS }, () => 'siege'),
+  ])
   log(s, 'The battle for the Ancients begins. Each side is dealt 5 heroes.', 'phase')
   startRound(s)
   return s

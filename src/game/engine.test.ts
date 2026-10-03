@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { playAiRound } from './ai'
-import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
+import { HERO_COPIES, HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyback,
   buybackCost,
@@ -65,7 +65,14 @@ describe('setup and core rules', () => {
     const creeps = s.unitDeck.filter((id) => id === 'creep' || id === 'siege')
     expect(creeps.filter((id) => id === 'creep')).toHaveLength(REGULAR_CREEPS)
     expect(creeps.filter((id) => id === 'siege')).toHaveLength(SIEGE_CREEPS)
-    expect(s.unitDeck.length - creeps.length).toBe(HEROES.length - STARTING_HEROES * 2)
+    expect(s.unitDeck.length - creeps.length).toBe(HEROES.length * HERO_COPIES - STARTING_HEROES * 2)
+    // Opening heroes are dealt before the deck is shuffled, so the top is not a run of creeps.
+    let heroDraws = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      const top = newGame(undefined, seed).unitDeck.slice(-8)
+      heroDraws += top.filter((id) => id !== 'creep' && id !== 'siege').length
+    }
+    expect(heroDraws).toBeGreaterThan(40 * 8 * 0.5)
     for (const camp of CAMPS) expect(campNeutral(s, camp)).toBeDefined()
     expect(s.runeDeck).toHaveLength(20)
     expect(s.neutralDeck.length + 2).toBe(15)

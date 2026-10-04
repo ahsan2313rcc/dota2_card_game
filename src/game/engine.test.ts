@@ -66,7 +66,7 @@ describe('setup and core rules', () => {
     expect(heroIds).toHaveLength(HEROES.length)
     expect(new Set(heroIds).size).toBe(HEROES.length)
     expect(s.unitDeck).toHaveLength(pile.length - STARTING_HEROES * 2)
-    expect(s.itemDeck).toHaveLength(40)
+    expect(s.itemDeck).toHaveLength(60)
     expect(s.runeDeck).toHaveLength(20)
     for (const p of PLAYERS) {
       expect(s.players[p].hand).toHaveLength(5)
@@ -184,30 +184,30 @@ describe('setup and core rules', () => {
     s = fight(s)
     const axe = heroesOnBoard(s, 'radiant')[0]
     expect(s.players.dire.structures.towers.mid.t1).toBe(1)
-    expect(axe.hp).toBe(1)
-    expect(s.log.some((l) => l.text.startsWith('Dire Mid Tier 1 tower deals 1 to Radiant Axe'))).toBe(true)
+    expect(axe.hp).toBe(2)
+    expect(s.log.some((l) => l.text.includes('Tier 1 tower') && l.text.includes('Creep'))).toBe(true)
     expect(s.log.some((l) => /(Top|Bottom) Tier \d tower (deals|slays)/.test(l.text))).toBe(false)
   })
 })
 
 describe('items, runes and statuses', () => {
-  it('items are free and single use', () => {
+  it('shop items cost gold and are single use', () => {
     let s = setup(11, [hero('a', 'sven'), item('i', 'desolator')])
     s = placeHero(s, 'radiant', 'a', 'bot')
     s = reveal(s)
-    const gold = s.players.radiant.gold
+    s.players.radiant.gold = 4
     s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'radiant')[0].uid)
-    expect(s.players.radiant.gold).toBe(gold)
+    expect(s.players.radiant.gold).toBe(2)
     expect(s.players.radiant.hand).toHaveLength(0)
     expect(heroesOnBoard(s, 'radiant')[0].status.bonusDamage).toBe(1)
   })
 
-  it('Break turns off passives (Silver Edge stops Counter Helix)', () => {
-    let s = setup(13, [hero('a', 'crystal_maiden'), item('i', 'silver_edge')], [hero('b', 'axe')])
+  it('Break turns off passives (Axe stops hitting back)', () => {
+    let s = setup(13, [hero('a', 'crystal_maiden')], [hero('b', 'axe')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
-    s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'dire')[0].uid)
+    heroesOnBoard(s, 'dire')[0].status.broken = true
     s = resolveRound(endItems(s))
     expect(logHas(s, 'Counter Helix')).toBe(false)
   })
@@ -217,6 +217,7 @@ describe('items, runes and statuses', () => {
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
+    s.players.radiant.gold = 2
     s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'dire')[0].uid)
     s = resolveRound(endItems(s))
     expect(heroesOnBoard(s, 'dire')).toHaveLength(1)
@@ -283,10 +284,12 @@ describe('items, runes and statuses', () => {
     s = cancelUlt(s, tide)
     expect(s.players.radiant.xp).toBe(2)
     s.phase = 'items'
+    s.players.radiant.gold = 3
     s.players.radiant.hand.push(item('r', 'refresher'))
     s = playItem(s, 'radiant', 'r', tide)
-    expect(s.units[tide].ultCasts).toBe(0)
-    expect(ultCost(s.units[tide])).toBe(1)
+    expect(s.units[tide].ultCasts).toBe(1)
+    expect(s.units[tide].status.echoUlt).toBe(true)
+    expect(ultCost(s.units[tide])).toBe(2)
   })
 
   it('Arcane rune: the next Ultimate costs 0 XP', () => {
@@ -305,7 +308,8 @@ describe('items, runes and statuses', () => {
 describe('jungle, Roshan and Tormentor', () => {
   it('clearing a neutral camp grants 1 XP, 1 Gold and a rune card', () => {
     let s = setup(19, [hero('a', 'juggernaut')])
-    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    const golem = forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    golem.hp = 1
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
     const { xp, gold } = s.players.radiant
     s = fight(s)
@@ -350,10 +354,12 @@ describe('jungle, Roshan and Tormentor', () => {
     let s = setup(47, [hero('a', 'tidehunter')])
     const torm = forceCamp(s, 'radiantJungle', 'tormentor')
     torm.hp = 1
-    torm.status.shield = 0
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
-    heroesOnBoard(s, 'radiant')[0].hp = 1
-    s = fight(s)
+    s = endItems(reveal(s))
+    const tide = heroesOnBoard(s, 'radiant')[0]
+    tide.hp = 1
+    s = declareUlt(s, tide.uid)
+    s = resolveRound(s)
     expect(heroesOnBoard(s, 'radiant')).toHaveLength(0)
     expect(s.players.radiant.hand.some((c) => c.cardId === 'refresher_shard')).toBe(true)
   })
@@ -374,7 +380,7 @@ describe('comeback rules and rotation', () => {
   it('losing a tower gives +1 Gold and its hidden card, which ignores the hand limit', () => {
     let s = setup(59, [hero('a', 'sven')])
     s.players.dire.structures.towers.top.t1 = 1
-    s.players.dire.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'tango'))
+    s.players.dire.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve'))
     const gold = s.players.dire.gold
     const hidden = s.players.dire.towerCards.top.t1
     s = placeHero(s, 'radiant', 'a', 'top')
@@ -447,7 +453,8 @@ describe('simulation', () => {
       for (let r = 0; r < 80 && !s.winner; r++) {
         s = playAiRound(s)
         for (const p of PLAYERS) {
-          expect(heroesOnBoard(s, p).length).toBeLessThanOrEqual(BOARD_LIMIT)
+          const deployed = heroesOnBoard(s, p).filter((u) => !u.copy && u.cardId !== 'spirit_bear')
+          expect(deployed.length).toBeLessThanOrEqual(BOARD_LIMIT)
           expect(handCount(s.players[p])).toBeLessThanOrEqual(HAND_LIMIT)
           expect(s.players[p].gold).toBeGreaterThanOrEqual(0)
           expect(s.players[p].xp).toBeGreaterThanOrEqual(0)

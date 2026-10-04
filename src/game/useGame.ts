@@ -22,6 +22,7 @@ import {
   setCampFocus,
   setSettings,
   swapTowerCards,
+  toggleMorph,
   unplace,
   type DrawType,
 } from './engine'
@@ -50,6 +51,7 @@ export type Action =
   | { type: 'endRotate' }
   | { type: 'nextRound' }
   | { type: 'settings'; settings: Partial<Settings> }
+  | { type: 'morph'; uid: string }
 
 function finishRotation(s: GameState): GameState {
   return endRotation(s.players[AI].rotated ? s : aiRotate(s, AI))
@@ -91,7 +93,7 @@ function reducer(s: GameState, a: Action): GameState {
     case 'resolve': {
       // When the AI has priority it rotates first, so the human sees its move before answering.
       const r = resolveRound(aiUlts(s, AI))
-      return r.phase === 'rotate' && favoredPlayer(r.round) === AI ? aiRotate(r, AI) : r
+      return r.phase === 'rotate' && favoredPlayer(r.round, r.cycle) === AI ? aiRotate(r, AI) : r
     }
     case 'rotate': {
       const r = rotateHero(s, HUMAN, a.uid, a.zone)
@@ -103,6 +105,8 @@ function reducer(s: GameState, a: Action): GameState {
       return nextRound(s)
     case 'settings':
       return setSettings(s, a.settings)
+    case 'morph':
+      return toggleMorph(s, a.uid)
   }
 }
 

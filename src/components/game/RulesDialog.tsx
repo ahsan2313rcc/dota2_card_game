@@ -13,15 +13,21 @@ const STATUSES: Array<[string, string]> = [
   ['Accuracy', 'Attacks cannot be evaded and ignore Blind.'],
   ['Pierce', 'Attacks ignore Shields and damage negation.'],
   ['Root', 'Cannot change lane or position (blocks drags like Meat Hook).'],
-  ['Banish', 'Untargetable and invulnerable; in this prototype the hero also cannot act.'],
-  ['Immunity', 'Blocks enemy Ultimate and item damage and their debuffs.'],
-  ['Shield', 'Blocks one instance of attack damage.'],
+  ['Banish', 'Untargetable and invulnerable.'],
+  ['Immunity', 'Blocks magical damage and debuffs. Self-damage still lands.'],
+  ['Ethereal', 'Blocks physical attack and tower damage. Magical damage against it is increased by 1.'],
+  ['Shield', 'Blocks one instance of physical attack damage. Pierce ignores it.'],
   ['Invulnerable', 'Blocks all damage.'],
-  ['Mute', 'Items cannot be played on the hero.'],
+  ['Mute', 'Cannot use items.'],
   ['Curse', 'Cannot heal.'],
-  ['Taunt', 'Must attack the taunting hero (Berserker\'s Call).'],
-  ['Invisible', 'Enemies cannot target the hero with attacks, towers, Ultimates or items. It can still attack.'],
-  ['Haste', 'Attacks before everyone else in Phase 2, overriding Slow.'],
+  ['Taunt', 'Must attack the taunting unit.'],
+  ['Fear', 'Cannot cast, attack, or move. The passive still runs.'],
+  ['Invisible', 'Untargetable. Reveal removes it.'],
+  ['Reveal', 'Removes the untargetable part of Invisible and Banish.'],
+  ['Amplify', 'Attack damage +1.'],
+  ['Enfeeble', 'Attack damage −1.'],
+  ['Hex', 'Becomes a 1 HP decoy with no attack.'],
+  ['Haste', 'Attacks before everyone else in Phase 2.'],
 ]
 
 export function RulesDialog() {
@@ -49,8 +55,8 @@ export function RulesDialog() {
               <li>
                 Draw: both sides spend 1 Gold to take the top card of the one shared deck, or 1 Gold for an item from the
                 shared item deck (hand limit 7). The hero deck is 160 cards shuffled together: all 127 heroes, 25 lane
-                creeps and 8 siege creeps. You start with 5 cards from that deck. The item deck is 40 cards (20 items, two
-                copies). The rune deck is 20 cards (10 runes, two copies).
+                creeps and 8 siege creeps. You start with 5 cards from that deck. The item deck is 60 shop cards. Playing
+                one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two copies) and stays free.
                 Buyback returns a slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing
                 than the enemy. Each hero can be bought back only once; the next time it dies, the card goes back into the
                 shared deck.
@@ -60,11 +66,12 @@ export function RulesDialog() {
                 defends first.
               </li>
               <li>Reveal: both sides flip.</li>
-              <li>Item: play items, runes and tower cards — free, single use, and they resolve immediately.</li>
+              <li>Item: play items, runes and tower cards. Shop items cost their printed Gold and are single use. Runes and tower cards are free. All resolve immediately.</li>
               <li>
                 Ult: a hero can cast every round. The first cast of that deployment costs 1 XP, the next 2, then 3, and so
-                on. Dying and being played again starts the cost back at 1. Refresher Orb and Refresher Shard also reset it
-                to 1. An Arcane rune makes the next cast free, and the cost still climbs.
+                on. Dying and being played again starts the cost back at 1. Tinker stays at 1. Refresher Orb casts the
+                chosen Ultimate a second time on the same target. Refresher Shard resets the cost to 1. An Arcane rune
+                makes the next cast free, and the cost still climbs.
               </li>
               <li>Resolution: Ultimates (STR → INT → UNI → AGI), basic attacks (AGI → UNI → INT → STR → creeps, Slowed last), then tower aggro.</li>
               <li>
@@ -83,7 +90,9 @@ export function RulesDialog() {
             Heroes take 2 hits: Healthy → Wounded (tilted) → slain. Basic attacks hit enemy Position 1; with no defenders left
             the attacker hits the lane's next structure. A basic attack against the attribute it counters (AGI → STR → INT →
             AGI) kills instantly — neutrals have attributes too. In Phase 3, every standing tower that took damage this round
-            deals its damage (T1: 1, T2: 2) to the attacking side's Position 1.
+            deals its damage (T1: 1, T2: 2) to a creep in the attacking line if one is there, otherwise to Position 1.
+            Physical damage is attacks and towers. Magical damage is ultimates, passives and items. Immunity blocks magical
+            damage and debuffs. Ethereal blocks physical attack damage and takes 1 extra magical damage.
           </Section>
           <Section title="Jungle, Roshan & Tormentor">
             Two jungles hold one camp each, drawn from a 15-card jungle deck: Golem (STR), Thunderhide (AGI), Ice Shaman (INT,

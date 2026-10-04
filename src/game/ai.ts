@@ -30,6 +30,7 @@ import {
   ultCost,
   ultNeedsTarget,
   ultTargets,
+  ultZones,
 } from './engine'
 import { BOARD_LIMIT, CAMPS, LANES, PLAYERS, type CampId, type GameState, type LaneId, type PlayerId, type Unit, type ZoneId } from './types'
 
@@ -140,7 +141,7 @@ export function aiItems(state: GameState, p: PlayerId): GameState {
       case 'dagon':
         pick = targets.find((t) => t.kind === 'hero' && t.hp === 1) ?? targets.find((t) => t.owner === 'neutral' && t.hp === 1)
         break
-      case 'tango':
+      case 'salve':
       case 'refresher':
       case 'refresher_shard':
       case 'rune_regen':
@@ -148,11 +149,11 @@ export function aiItems(state: GameState, p: PlayerId): GameState {
         pick = targets[0]
         break
       case 'orchid':
-      case 'silver_edge':
       case 'euls':
+      case 'bloodthorn':
+      case 'sheepstick':
+      case 'abyssal':
         pick = targets.filter((t) => lineup(s, p, t.zone).length > 0).sort((a, b) => threat(b) - threat(a))[0]
-        break
-      case 'atos':
         break
       default:
         pick = targets.filter(contested).sort((a, b) => Number(lineup(s, p, b.zone)[0] === b.uid) - Number(lineup(s, p, a.zone)[0] === a.uid))[0]
@@ -186,7 +187,7 @@ export function playAiRound(state: GameState): GameState {
   for (const p of PLAYERS) s = aiUlts(s, p)
   s = resolveRound(s)
   if (s.phase !== 'rotate') return s
-  const first = favoredPlayer(s.round)
+  const first = favoredPlayer(s.round, s.cycle)
   for (const p of [first, other(first)]) s = aiRotate(s, p)
   return endRotation(s)
 }
@@ -235,12 +236,19 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
     if (s.players[p].campFocus[camp] !== focus) s = setCampFocus(s, p, camp, focus)
   }
   const casters = heroesOnBoard(s, p).sort(
-    (a, b) => ultCost(a) - ultCost(b) || Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a)),
+    (a, b) => ultCost(a, s) - ultCost(b, s) || Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a)),
   )
   for (const u of casters) {
     if (ultBlockReason(s, u.uid)) continue
     const enemiesHere = enemyHeroesIn(s, p, u.zone) + (campNeutral(s, u.zone) ? 1 : 0)
     const hero = getHero(u.cardId!)
+    const zones = ultZones(s, u.uid)
+    if (zones.length) {
+      const ranked = [...zones].sort((a, b) => lineup(s, other(p), b).length - lineup(s, other(p), a).length)
+      const dest = ranked.find((z) => lineup(s, other(p), z).length > 0)
+      if (dest) s = declareUlt(s, u.uid, dest)
+      continue
+    }
     if (ultNeedsTarget(u)) {
       const targets = ultTargets(s, u.uid)
         .map((x) => s.units[x])

@@ -31,6 +31,7 @@ import {
   ultBlockReason,
   ultNeedsTarget,
   ultTargets,
+  ultZones,
   type DrawType,
 } from '@/game/engine'
 import { HUMAN, useGame } from '@/game/useGame'
@@ -134,6 +135,9 @@ export default function App() {
   } else if (s.phase === 'rotate' && rotator) {
     dropZones = rotationTargets(s, rotator)
     dropLabel = 'Rotate to'
+  } else if (s.phase === 'ults' && ultCaster && ultZones(s, ultCaster).length) {
+    dropZones = ultZones(s, ultCaster)
+    dropLabel = 'Cast toward'
   }
 
   const ia: MapInteraction = {
@@ -144,6 +148,11 @@ export default function App() {
     dropZones: [...dropZones],
     dropLabel,
     onDrop: (zone) => {
+      if (s.phase === 'ults' && ultCaster) {
+        dispatch({ type: 'declareUlt', uid: ultCaster, target: zone })
+        setUltCaster(null)
+        return
+      }
       if (s.phase === 'rotate' && rotator) {
         dispatch({ type: 'rotate', uid: rotator, zone })
         setRotator(null)
@@ -181,13 +190,13 @@ export default function App() {
             >
               Deck {s.unitDeck.length}
             </span>
-            <span className="text-zinc-400" title="Both players draw from this shop deck. 20 items, two copies each.">
+            <span className="text-zinc-400" title="Both players draw from this shop deck. 60 cards. Playing one costs 1, 2 or 3 Gold. Runes and tower cards stay free.">
               Items {s.itemDeck.length}
             </span>
             <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
               Runes {s.runeDeck.length}
             </span>
-            {isDay(s.round) ? (
+            {isDay(s.round, s.cycle) ? (
               <span className="flex items-center gap-1 text-amber-300">
                 <Sun className="size-4" /> Day
               </span>
@@ -285,6 +294,7 @@ export default function App() {
                   onMove: (uid, dir) => dispatch({ type: 'move', uid, dir }),
                   onReturn: (uid) => dispatch({ type: 'unplace', uid }),
                   onUlt,
+                  onMorph: (uid) => dispatch({ type: 'morph', uid }),
                   onFocus: (camp, focus) => dispatch({ type: 'campFocus', camp, focus }),
                 }}
               />
@@ -294,7 +304,7 @@ export default function App() {
             <TowerCards s={s} onSwap={(tier, a, b) => dispatch({ type: 'swapTowers', tier, a, b })} />
           </Panel>
           <Panel title="Inspector">
-            <Inspector unit={inspectedUnit} />
+            <Inspector unit={inspectedUnit} state={s} />
           </Panel>
           <div className="flex min-h-[240px] flex-1 flex-col rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 lg:min-h-0">
             <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
@@ -393,7 +403,7 @@ function ActionBar({
     case 'items':
       title = 'Items'
       hint = !selectedCard
-        ? 'Select an item, rune or tower card, then a highlighted target. All are free, single use and resolve immediately.'
+        ? 'Select an item, rune or tower card, then a highlighted target. Shop items cost 1, 2 or 3 Gold. Runes and tower cards are free. All are single use and resolve immediately.'
         : getItem(selectedCard.cardId).target === 'lane'
           ? `Click a green + to choose the lane for ${getItem(selectedCard.cardId).name}.`
           : getItem(selectedCard.cardId).target === 'allyHeroToLane'
@@ -406,13 +416,15 @@ function ActionBar({
     case 'ults':
       title = 'Ultimates'
       hint = ultCaster
-        ? `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
+        ? ultZones(s, ultCaster).length
+          ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
+          : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
         : `Declare Ultimates in "Your board". The first cast of a hero's life costs 1 XP, then 2, then 3. Declared: ${s.ultDeclarations.length}. STR casts first, AGI last.`
       cta = 'Resolve combat'
       break
     case 'rotate': {
       title = 'Rotation'
-      const first = favoredPlayer(s.round) === HUMAN
+      const first = favoredPlayer(s.round, s.cycle) === HUMAN
       hint = rotator
         ? `Click a green + to move ${getHero(s.units[rotator].cardId!).name} from ${ZONE_LABEL[s.units[rotator].zone]}.`
         : `Move one hero to an adjacent zone (Top · Dire Jungle · Mid · Radiant Jungle · Bot). ${first ? 'Day: you move first.' : 'Night: Dire moved first.'} Heroes in a lane with no allied towers can walk lane to lane.`

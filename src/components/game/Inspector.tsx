@@ -1,6 +1,6 @@
 import { ATTRIBUTE_COUNTERS, ROSHAN, TORMENTOR, getHero, getNeutral } from '@/game/cards'
 import { PLAYER_LABEL, ZONE_LABEL, attributeOf, ultCost } from '@/game/engine'
-import type { RoundStatus, Unit } from '@/game/types'
+import type { GameState, RoundStatus, Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { ATTR_STYLE, SIDE_STYLE } from './styles'
 import { HeroPortrait } from './UnitToken'
@@ -15,9 +15,18 @@ const STATUS: Array<[keyof RoundStatus, string, 'debuff' | 'buff']> = [
   ['rooted', 'Rooted: cannot move', 'debuff'],
   ['muted', 'Muted: no items', 'debuff'],
   ['cursed', 'Cursed: cannot heal', 'debuff'],
-  ['banished', 'Banished: untargetable, cannot act', 'debuff'],
-  ['immune', 'Immune: ignores Ultimates', 'buff'],
-  ['invulnerable', 'Invulnerable', 'buff'],
+  ['banished', 'Banished: untargetable and invulnerable', 'buff'],
+  ['immune', 'Immune: blocks magical damage and debuffs', 'buff'],
+  ['invulnerable', 'Invulnerable: blocks all damage', 'buff'],
+  ['ethereal', 'Ethereal: blocks attack damage, +1 magical', 'buff'],
+  ['feared', 'Feared: no ultimate, attack, or move', 'debuff'],
+  ['hexed', 'Hexed: 1 HP decoy, no attack', 'debuff'],
+  ['enfeeble', 'Enfeebled: attack −1', 'debuff'],
+  ['revealed', 'Revealed', 'debuff'],
+  ['cannotDie', 'Cannot die this turn', 'buff'],
+  ['rangedAttack', 'Attacks as Ranged', 'buff'],
+  ['lifesteal', 'Basic attacks heal', 'buff'],
+  ['rupture', 'Moving deals 2 magical damage', 'debuff'],
   ['shield', 'Shield', 'buff'],
   ['evade', 'Evade', 'buff'],
   ['accuracy', 'Accuracy', 'buff'],
@@ -57,7 +66,7 @@ function StatusChips({ u }: { u: Unit }) {
   )
 }
 
-export function Inspector({ unit }: { unit?: Unit }) {
+export function Inspector({ unit, state }: { unit?: Unit; state?: GameState }) {
   if (!unit) {
     return (
       <p className="text-xs leading-relaxed text-zinc-500">
@@ -119,8 +128,8 @@ export function Inspector({ unit }: { unit?: Unit }) {
         </div>
         <p className="text-zinc-400">
           {unit.kind === 'siege'
-            ? 'Dies to 1 damage. Deals 1 damage to units and 2 hits to towers.'
-            : 'Dies to 1 damage. Deals 1 damage in combat.'}{' '}
+            ? 'Dies to 1 damage. Deals 1 damage to units and +1 to enemy towers.'
+            : 'Dies to 1 damage. Enemy towers shoot a creep in the line before Position 1.'}{' '}
           Attacks after all heroes and stays in the lane until killed.
         </p>
         <StatusChips u={unit} />
@@ -129,8 +138,9 @@ export function Inspector({ unit }: { unit?: Unit }) {
   }
 
   const h = getHero(unit.cardId!)
-  const a = ATTR_STYLE[h.attribute]
-  const counters = ATTRIBUTE_COUNTERS[h.attribute]
+  const shown = attributeOf(unit) ?? h.attribute
+  const a = ATTR_STYLE[shown]
+  const counters = shown === 'UNI' ? undefined : ATTRIBUTE_COUNTERS[shown]
   return (
     <div className="space-y-2 text-xs">
       <div className="flex items-center gap-2">
@@ -153,7 +163,7 @@ export function Inspector({ unit }: { unit?: Unit }) {
         <span className="font-semibold text-amber-300">ULT {h.ult.name}:</span> {h.ult.text}{' '}
         <span className="text-zinc-500">
           ({unit.ultCasts > 0 ? `cast ${unit.ultCasts}×, next ` : 'next '}
-          {ultCost(unit)} XP)
+          {ultCost(unit, state)} XP)
         </span>
       </p>
       <StatusChips u={unit} />

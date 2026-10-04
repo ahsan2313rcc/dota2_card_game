@@ -1,198 +1,44 @@
 import type { HeroCard, ItemCard, NeutralCard } from './types'
-import { POOL_HEROES, POOL_ICON_SLUG } from './heroPool'
+import { POOL_ICON_SLUG } from './heroPool'
+import { ROSTER } from './roster'
 
-// The full Dota roster. The first 20 are the hand-scripted starter heroes; the rest live in heroPool.ts.
-export const HEROES: HeroCard[] = [
-  // STR
-  {
-    id: 'axe',
-    name: 'Axe',
-    attribute: 'STR',
-    range: 'Melee',
-    passive: { name: 'Counter Helix', text: 'When attacked by a basic attack, deal 1 damage back to the attacker.' },
-    ult: { name: "Berserker's Call", text: 'All enemy units in this lane are forced to target Axe during Phase 2.', target: 'none' },
-  },
-  {
-    id: 'sven',
-    name: 'Sven',
-    attribute: 'STR',
-    range: 'Melee',
-    passive: { name: 'Great Cleave', text: "Sven's basic attack damages both Position 1 and Position 2." },
-    ult: { name: "God's Strength", text: "Sven's attacks this round gain Accuracy (cannot be evaded or blinded) and Pierce (bypass shields and damage negation).", target: 'none' },
-  },
-  {
-    id: 'tidehunter',
-    name: 'Tidehunter',
-    attribute: 'STR',
-    range: 'Melee',
-    passive: { name: 'Kraken Shell', text: 'Takes 0 damage from lane Creeps and Siege Creeps.' },
-    ult: { name: 'Ravage', text: 'Stun all enemy heroes in this lane for the round.', target: 'none' },
-  },
-  {
-    id: 'pudge',
-    name: 'Pudge',
-    attribute: 'STR',
-    range: 'Melee',
-    maxHp: 3,
-    passive: { name: 'Flesh Heap', text: 'Pudge can endure 1 additional Wound before being slain.' },
-    ult: { name: 'Meat Hook', text: 'Drag an enemy hero from an adjacent lane into Position 1 of this lane, dealing 1 damage.', target: 'enemyHeroAdjacentLane' },
-  },
-  {
-    id: 'wraith_king',
-    name: 'Wraith King',
-    attribute: 'STR',
-    range: 'Melee',
-    passive: { name: 'Vampiric Aura', text: 'Allied Melee units in this lane heal from Wounded to Healthy upon killing a unit.' },
-    ult: { name: 'Reincarnation', text: 'If slain this round, immediately revive in the Wounded state.', target: 'none' },
-  },
-  // INT
-  {
-    id: 'crystal_maiden',
-    name: 'Crystal Maiden',
-    attribute: 'INT',
-    range: 'Ranged',
-    passive: { name: 'Arcane Aura', text: 'Generate +1 bonus Gold during the Upkeep Phase.' },
-    ult: { name: 'Freezing Field', text: 'Deal 1 damage to all enemies in this lane; CM takes 1 damage.', target: 'none' },
-  },
-  {
-    id: 'lion',
-    name: 'Lion',
-    attribute: 'INT',
-    range: 'Ranged',
-    passive: { name: 'Mana Drain', text: 'Enemy hero in Position 1 of this lane cannot cast their Ultimate this round.' },
-    ult: { name: 'Finger of Death', text: 'Deal 2 direct damage to an enemy hero in this lane (lethal kill).', target: 'enemyHeroInLane' },
-  },
-  {
-    id: 'zeus',
-    name: 'Zeus',
-    attribute: 'INT',
-    range: 'Ranged',
-    passive: { name: 'Static Field', text: 'Whenever you play a Consumable on Zeus, deal 1 damage to enemy Position 1.' },
-    ult: { name: "Thundergod's Wrath", text: 'Deal 1 damage to all enemy heroes across all three lanes.', target: 'none' },
-  },
-  {
-    id: 'lina',
-    name: 'Lina',
-    attribute: 'INT',
-    range: 'Ranged',
-    passive: { name: 'Fiery Soul', text: 'Once Lina strikes a unit, she attacks first in the INT bracket.' },
-    ult: { name: 'Laguna Blade', text: 'Deal 2 direct damage to a single enemy unit in this lane.', target: 'enemyUnitInLane' },
-  },
-  {
-    id: 'lich',
-    name: 'Lich',
-    attribute: 'INT',
-    range: 'Ranged',
-    passive: { name: 'Frost Shield', text: 'Allied unit in Position 1 negates the first basic attack damage taken each round.' },
-    ult: { name: 'Chain Frost', text: 'Deal 1 damage to Position 1, then 1 damage to Position 2.', target: 'none' },
-  },
-  // UNI
-  {
-    id: 'windranger',
-    name: 'Windranger',
-    attribute: 'UNI',
-    range: 'Ranged',
-    passive: { name: 'Windrun', text: 'Takes 0 damage from Melee basic attacks.' },
-    ult: { name: 'Focus Fire', text: 'Attacks her target twice during Phase 2.', target: 'none' },
-  },
-  {
-    id: 'abaddon',
-    name: 'Abaddon',
-    attribute: 'UNI',
-    range: 'Melee',
-    passive: { name: 'Aphotic Shield', text: 'Negates the first instance of damage Abaddon takes each round.' },
-    ult: { name: 'Borrowed Time', text: 'All damage taken by Abaddon this round heals him instead.', target: 'none' },
-  },
-  {
-    id: 'bane',
-    name: 'Bane',
-    attribute: 'UNI',
-    range: 'Ranged',
-    passive: { name: 'Enfeeble', text: 'Enemy unit in Position 1 of this lane deals 0 basic attack damage.' },
-    ult: { name: "Fiend's Grip", text: 'Stun target enemy hero through Phase 2; Bane heals to Healthy.', target: 'enemyHeroInLane' },
-  },
-  {
-    id: 'venomancer',
-    name: 'Venomancer',
-    attribute: 'UNI',
-    range: 'Ranged',
-    passive: { name: 'Poison Sting', text: 'Enemies damaged by his basic attack take 1 damage at the end of the round.' },
-    ult: { name: 'Poison Nova', text: 'Deal 1 damage to all enemy units in this lane; they cannot be healed.', target: 'none' },
-  },
-  {
-    id: 'viper',
-    name: 'Viper',
-    attribute: 'UNI',
-    range: 'Ranged',
-    passive: { name: 'Corrosive Skin', text: 'Any unit that basic attacks Viper takes 1 damage back.' },
-    ult: { name: 'Viper Strike', text: 'Deal 1 damage, apply Slow, and Disarm a target enemy in this lane.', target: 'enemyUnitInLane' },
-  },
-  // AGI
-  {
-    id: 'phantom_assassin',
-    name: 'Phantom Assassin',
-    attribute: 'AGI',
-    range: 'Melee',
-    passive: { name: 'Blur', text: 'Evades the first physical basic attack directed at PA each round.' },
-    ult: { name: 'Coup de Grace', text: 'Instantly slays target unit in this lane, ignoring attribute loop restrictions.', target: 'enemyUnitInLane' },
-  },
-  {
-    id: 'sniper',
-    name: 'Sniper',
-    attribute: 'AGI',
-    range: 'Ranged',
-    passive: { name: 'Take Aim', text: 'Can target any enemy unit in the lane regardless of position (prefers the juiciest target).' },
-    ult: { name: 'Assassinate', text: 'Deal 2 direct damage to any enemy unit on the board (lethal kill).', target: 'enemyUnitAnyLane' },
-  },
-  {
-    id: 'juggernaut',
-    name: 'Juggernaut',
-    attribute: 'AGI',
-    range: 'Melee',
-    passive: { name: 'Blade Fury', text: 'Takes 0 damage from enemy Ultimates.' },
-    ult: { name: 'Omnislash', text: 'Deal 1 damage to two random enemy units in this lane.', target: 'none' },
-  },
-  {
-    id: 'luna',
-    name: 'Luna',
-    attribute: 'AGI',
-    range: 'Ranged',
-    passive: { name: 'Moon Glaive', text: 'Basic attack hits both Position 1 and Position 2.' },
-    ult: { name: 'Eclipse', text: 'Deal 1 damage to three random enemy units in this lane.', target: 'none' },
-  },
-  {
-    id: 'anti_mage',
-    name: 'Anti-Mage',
-    attribute: 'AGI',
-    range: 'Melee',
-    passive: { name: 'Mana Break', text: 'Damaging an enemy hero with a basic attack silences them for the round.' },
-    ult: { name: 'Mana Void', text: 'Deal 1 damage to all enemy heroes in this lane for each enemy INT hero in the lane.', target: 'none' },
-  },
-  ...POOL_HEROES,
-]
+/** Deck heroes. Spirit Bear is summoned and is not one of the 127. */
+export const HEROES: HeroCard[] = ROSTER.filter((h) => !h.summon)
 
-// Items are free to play and single use: the card is discarded once it resolves.
+// Shop items cost gold and are single use. Runes, tower cards and boss rewards stay free.
 export const ITEMS: ItemCard[] = [
-  { id: 'tango', name: 'Tango', kind: 'Shop', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
-  { id: 'dagon', name: 'Dagon', kind: 'Shop', text: 'Deal 1 damage to any enemy unit on the board (including neutrals).', target: 'enemyUnit' },
-  { id: 'blade_mail', name: 'Blade Mail', kind: 'Shop', text: 'This round, basic attack damage taken is dealt back to the attacker.', target: 'allyHero' },
-  { id: 'vanguard', name: 'Vanguard', kind: 'Shop', text: 'Shield: block the next instance of attack damage this round.', target: 'allyHero' },
-  { id: 'bkb', name: 'Black King Bar', kind: 'Shop', text: 'Immunity this round: ignore enemy Ultimate and item damage and their debuffs.', target: 'allyHero' },
-  { id: 'desolator', name: 'Desolator', kind: 'Shop', text: '+1 basic attack damage this round.', target: 'allyHero' },
-  { id: 'refresher', name: 'Refresher Orb', kind: 'Shop', text: "Reset an allied hero's Ultimate cost back to 1 XP.", target: 'allyHero' },
-  { id: 'mkb', name: 'Monkey King Bar', kind: 'Shop', text: 'Accuracy this round: attacks cannot be evaded and ignore Blind.', target: 'allyHero' },
-  { id: 'orchid', name: 'Orchid Malevolence', kind: 'Shop', text: 'Silence and Mute an enemy hero this round.', target: 'enemyHero' },
-  { id: 'silver_edge', name: 'Silver Edge', kind: 'Shop', text: 'Break an enemy hero this round (their passive does nothing).', target: 'enemyHero' },
-  { id: 'atos', name: 'Rod of Atos', kind: 'Shop', text: 'Root an enemy unit this round (it cannot change lane or position).', target: 'enemyUnit' },
-  { id: 'euls', name: "Eul's Scepter", kind: 'Shop', text: 'Banish an enemy hero this round: untargetable and invulnerable, but it cannot act.', target: 'enemyHero' },
-  { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane' },
-  { id: 'ghost', name: 'Ghost Scepter', kind: 'Shop', text: 'An allied hero gains Evade this round.', target: 'allyHero' },
-  { id: 'heart', name: 'Heart of Tarrasque', kind: 'Shop', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
-  { id: 'sheepstick', name: 'Scythe of Vyse', kind: 'Shop', text: 'Hex an enemy hero: Silence and Disarm them this round.', target: 'enemyHero' },
-  { id: 'skadi', name: 'Eye of Skadi', kind: 'Shop', text: 'Slow an enemy unit this round.', target: 'enemyUnit' },
-  { id: 'glimmer_cape', name: 'Glimmer Cape', kind: 'Shop', text: 'An allied hero is untargetable by enemies this round.', target: 'allyHero' },
-  { id: 'phase_boots', name: 'Phase Boots', kind: 'Shop', text: 'An allied hero gains Haste this round.', target: 'allyHero' },
-  { id: 'daedalus', name: 'Daedalus', kind: 'Shop', text: 'An allied hero gains +1 attack damage and Pierce this round.', target: 'allyHero' },
+  { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane', cost: 1, copies: 6 },
+  { id: 'ward', name: 'Ward', kind: 'Shop', text: 'Enemy heroes that enter this lane are face-up at the next Reveal.', target: 'lane', cost: 1, copies: 3 },
+  { id: 'smoke', name: 'Smoke', kind: 'Shop', text: 'Allied heroes placed in this lane stay hidden at the next Reveal.', target: 'lane', cost: 1, copies: 3 },
+  { id: 'dust', name: 'Dust', kind: 'Shop', text: 'Mute every enemy hero in the lane.', target: 'lane', cost: 1, copies: 3 },
+  { id: 'salve', name: 'Healing Salve', kind: 'Shop', text: 'Heal an allied hero.', target: 'allyWoundedHero', cost: 1, copies: 4 },
+  { id: 'clarity', name: 'Clarity', kind: 'Shop', text: 'Gain +1 XP.', target: 'none', cost: 1, copies: 3 },
+  { id: 'gloves', name: 'Gloves of Haste', kind: 'Shop', text: 'An allied hero gains Haste.', target: 'allyHero', cost: 1, copies: 3 },
+  { id: 'vanguard', name: 'Vanguard', kind: 'Shop', text: 'Gain 1 Shield.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'blade_mail', name: 'Blade Mail', kind: 'Shop', text: 'Reflect 1 physical damage back to the attacker.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'ghost', name: 'Ghost Scepter', kind: 'Shop', text: 'An allied hero becomes Ethereal.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'force_staff', name: 'Force Staff', kind: 'Shop', text: 'Reposition an enemy hero to the back of their line.', target: 'enemyHero', cost: 2, copies: 2 },
+  { id: 'shadow_blade', name: 'Shadow Blade', kind: 'Shop', text: 'An allied hero becomes Invisible.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'blink', name: 'Blink Dagger', kind: 'Shop', text: 'An allied hero gains Haste and moves to Position 1.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'euls', name: "Eul's Scepter", kind: 'Shop', text: 'Banish an enemy hero.', target: 'enemyHero', cost: 2, copies: 2 },
+  { id: 'halberd', name: "Heaven's Halberd", kind: 'Shop', text: 'Disarm an enemy hero.', target: 'enemyHero', cost: 2, copies: 2 },
+  { id: 'orchid', name: 'Orchid Malevolence', kind: 'Shop', text: 'Silence an enemy hero.', target: 'enemyHero', cost: 2, copies: 2 },
+  { id: 'desolator', name: 'Desolator', kind: 'Shop', text: 'An allied hero is Amplified.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'bkb', name: 'Black King Bar', kind: 'Shop', text: 'An allied hero becomes Immune.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'greaves', name: 'Guardian Greaves', kind: 'Shop', text: 'Heal all allied heroes in lanes.', target: 'none', cost: 3, copies: 1 },
+  { id: 'assault', name: 'Assault Cuirass', kind: 'Shop', text: 'Haste all allied heroes in lanes.', target: 'none', cost: 3, copies: 1 },
+  { id: 'shivas', name: "Shiva's Guard", kind: 'Shop', text: 'Slow all enemy heroes in a lane.', target: 'lane', cost: 3, copies: 1 },
+  { id: 'refresher', name: 'Refresher Orb', kind: 'Shop', text: 'That hero\'s Ultimate is cast twice. Both casts use the chosen target.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'satanic', name: 'Satanic', kind: 'Shop', text: 'An allied hero cannot die, and their basic attacks heal them.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'bloodthorn', name: 'Bloodthorn', kind: 'Shop', text: 'Silence an enemy hero. They take +1 physical damage from attacks.', target: 'enemyHero', cost: 3, copies: 1 },
+  { id: 'sheepstick', name: 'Scythe of Vyse', kind: 'Shop', text: 'Hex an enemy hero into a 1 HP decoy.', target: 'enemyHero', cost: 3, copies: 1 },
+  { id: 'abyssal', name: 'Abyssal Blade', kind: 'Shop', text: 'Stun an enemy hero.', target: 'enemyHero', cost: 3, copies: 1 },
+  { id: 'butterfly', name: 'Butterfly', kind: 'Shop', text: 'An allied hero Evades the next attack.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'heart', name: 'Heart of Tarrasque', kind: 'Shop', text: 'An allied hero heals at the end of the turn.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'skadi', name: 'Eye of Skadi', kind: 'Shop', text: 'An allied hero\'s basic attacks apply Slow and Curse.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'rapier', name: 'Divine Rapier', kind: 'Shop', text: 'An allied hero\'s basic attacks instantly kill enemy heroes.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'dagon', name: 'Dagon', kind: 'Shop', text: 'Deal 2 magical damage to an enemy hero.', target: 'enemyHero', cost: 3, copies: 1 },
+  { id: 'mkb', name: 'Monkey King Bar', kind: 'Shop', text: 'Accuracy, and basic attacks deal +1 magical damage.', target: 'allyHero', cost: 3, copies: 1 },
   { id: 'rune_gold', name: 'Bounty Rune', kind: 'Rune', text: 'Gain 1 Gold.', target: 'none' },
   { id: 'rune_regen', name: 'Regeneration Rune', kind: 'Rune', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
   { id: 'rune_dd', name: 'Double Damage Rune', kind: 'Rune', text: '+1 basic attack damage this round.', target: 'allyHero' },
@@ -210,8 +56,8 @@ export const ITEMS: ItemCard[] = [
   { id: 'gate', name: 'Twin Gate', kind: 'Tower', text: 'Teleport all your heroes on the board (except Rooted ones) to a lane of your choice.', target: 'lane' },
 ]
 
-/** Copies per card in the item deck (Shop) and the rune deck (Rune). */
-export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 2, Rune: 2, Tower: 0, Special: 0 }
+/** Fallback copies. Shop cards carry their own `copies`. Runes default to 2. */
+export const ITEM_DECK_COPIES: Record<ItemCard['kind'], number> = { Shop: 1, Rune: 2, Tower: 0, Special: 0 }
 /** Dual cards: the boss card flips into its reward when slain, and flips back once the reward is used. */
 export const BOSS_REWARD = { roshan: 'aegis', tormentor: 'refresher_shard' } as const
 /** Each side hides one of each under its three T1 towers, and again under its three T2 towers. */
@@ -221,10 +67,10 @@ export const REGULAR_CREEPS = 25
 export const SIEGE_CREEPS = 8
 
 export const NEUTRALS: NeutralCard[] = [
-  { id: 'golem', name: 'Golem', attribute: 'STR', hp: 2, text: 'Hits Position 1 of each side for 1.' },
-  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hits Position 1 of each side for 1.' },
-  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Hits Position 1 of each side for 1 and Slows them.' },
-  { id: 'dragon', name: 'Dragon', attribute: 'UNI', hp: 2, text: 'Hits Position 1 of each side for 1 and Blinds them.' },
+  { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Each hit is capped at 1 damage. Immune to Ultimate damage. Attacks Position 1.' },
+  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Haste. Thunder Clap: 1 damage to every contesting enemy hero, and they act last.' },
+  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Curses units in this jungle. Freezing Blast: 1 damage and Silence to each Position 1.' },
+  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Accuracy. Fire Pit: 1 damage to every contesting unit.' },
 ]
 export const NEUTRAL_COPIES = 3
 export const TORMENTOR_COPIES = 2
@@ -232,13 +78,13 @@ export const TORMENTOR_COPIES = 2
 export const ROSHAN = {
   name: 'Roshan',
   attribute: 'UNI' as const,
-  text: 'Takes 3 damage to defeat. Hits every enemy in his camp for 1. Roar: while at full health he disarms everyone in the camp during Phase 1. Bounty: 3 XP and the Aegis. Never appears before round 4.',
+  text: 'Ignores the first damage each turn. Hits every enemy in his camp for 1. Roar: Disarm and 1 damage to each contesting unit. Bounty: 3 XP and the Aegis. Never appears before round 4.',
 }
 
 export const TORMENTOR = {
   name: 'Tormentor',
   attribute: 'UNI' as const,
-  text: 'Never attacks. 2 HP plus a 1-damage Shield that regenerates every round. Reflection (passive): all damage dealt to it is returned to the attacker, and the same amount to the front of the other side in the camp. Bounty: a Refresher Shard.',
+  text: 'Never attacks. Gains 1 Shield each turn. Reflection returns the damage to every attacker and the same amount to the other side\'s Position 1. Bounty: a Refresher Shard.',
 }
 
 const ICON_SLUG: Record<string, string> = {
@@ -261,7 +107,7 @@ export function getNeutral(id: string): NeutralCard {
   return n
 }
 
-const heroById = new Map(HEROES.map((h) => [h.id, h]))
+const heroById = new Map(ROSTER.map((h) => [h.id, h]))
 const itemById = new Map(ITEMS.map((i) => [i.id, i]))
 
 export function getHero(id: string): HeroCard {

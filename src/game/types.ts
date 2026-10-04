@@ -12,6 +12,22 @@ export type UltTarget =
   | 'enemyUnitInLane'
   | 'enemyHeroAdjacentLane'
   | 'enemyUnitAnyLane'
+  | 'enemyHeroAny'
+  | 'allyHero'
+  | 'allyHeroAny'
+  | 'heroInLane'
+  | 'enemyCreep'
+  | 'lane'
+  | 'zone'
+  | 'adjacentZone'
+
+/** Data-driven kit. Tags are passive hooks. `ult` lines run when the Ultimate resolves. */
+export interface HeroScript {
+  tags: string[]
+  ult: string[]
+  /** Tinker: the XP cost stays 1. */
+  fixedCost?: boolean
+}
 
 /** Shared passive rules. The starter heroes use bespoke ids; the rest of the roster picks one of these. */
 export type PassiveKind =
@@ -70,6 +86,10 @@ export interface HeroCard {
   /** When set, this hero uses a shared passive rule in addition to its name. */
   passiveKind?: PassiveKind
   maxHp?: number
+  /** Present on every hero in the current roster. Legacy id-switches are skipped when this is set. */
+  script?: HeroScript
+  /** Summoned Spirit Bear is not part of the 127-card hero deck. */
+  summon?: boolean
 }
 
 /** `lane` picks a lane only; `allyHeroToLane` picks an allied hero, then a lane. */
@@ -82,6 +102,10 @@ export interface ItemCard {
   kind: 'Shop' | 'Rune' | 'Tower' | 'Special'
   text: string
   target: ItemTarget
+  /** Gold spent when the card is played. Runes and tower cards stay free. */
+  cost?: number
+  /** How many copies go into the shared item deck. */
+  copies?: number
 }
 
 export interface NeutralCard {
@@ -133,6 +157,42 @@ export interface RoundStatus {
   invisible: boolean
   /** Attacks before everyone else in Phase 2; overrides Slow */
   haste: boolean
+  /** Blocks attack damage and takes +1 magical damage */
+  ethereal: boolean
+  /** Cannot cast, attack, or move. Passives still run. */
+  feared: boolean
+  /** Turned into a 1 HP decoy with no attack */
+  hexed: boolean
+  /** Attack damage −1 */
+  enfeeble: boolean
+  /** Invisible and Banished no longer hide this unit */
+  revealed: boolean
+  /** Cannot be slain this round */
+  cannotDie: boolean
+  /** Incoming damage is halved, minimum 1 when any gets through */
+  halfDamage: boolean
+  /** Healing restores twice */
+  doubleHeal: boolean
+  /** Heal 1 at the end of the round */
+  healEnd: boolean
+  /** Basic attacks apply Slow and Curse */
+  skadi: boolean
+  /** Basic attacks instantly kill enemy heroes */
+  rapier: boolean
+  /** Takes +1 physical damage from attacks */
+  bloodthorn: boolean
+  /** Extra magical damage dealt on a basic attack */
+  magicOnHit: number
+  /** Refresher: the Ultimate resolves a second time */
+  echoUlt: boolean
+  /** Bloodseeker: moving deals 2 magical damage to this unit */
+  rupture: boolean
+  /** Attacks as Ranged for the rest of the round */
+  rangedAttack: boolean
+  /** Basic attacks heal the attacker */
+  lifesteal: boolean
+  /** Allied heroes in this zone heal when they basic attack */
+  lifestealAura: boolean
   bladeMail: boolean
   aegis: boolean
   taunt?: string
@@ -162,6 +222,18 @@ export interface Unit {
   ultUsed: boolean
   /** Successful Ultimate casts during this deployment. The next one costs this many XP, plus one. */
   ultCasts: number
+  /** Legion Commander duel wins. Added to attack damage for the rest of the game. */
+  permanentAtk: number
+  /** A single-use passive has already fired this deployment. */
+  passiveSpent?: boolean
+  /** Necrophos: this hero cannot be bought back. */
+  buybackBlocked?: boolean
+  /** Morphling's chosen attribute. */
+  morph?: 'STR' | 'AGI'
+  /** Arc Warden's copy is not a deck hero and does not go to the grave. */
+  copy?: boolean
+  /** Techies: the allied hero this mine is watching. */
+  link?: string
   placedRound: number
   fierySoul: boolean
   /** Set once this hero has been bought back. A later death returns the card to the shared deck. */
@@ -195,6 +267,10 @@ export interface PlayerState {
   arcane: boolean
   /** Has used (or passed) this round's rotation */
   rotated: boolean
+  /** Ward: enemy heroes here are revealed at the next Reveal. */
+  ward: LaneId[]
+  /** Smoke: allied heroes placed here stay hidden at the next Reveal. */
+  smoke: LaneId[]
 }
 
 export type TowerTier = 't1' | 't2'
@@ -266,6 +342,12 @@ export interface GameState {
   seed: number
   winner?: PlayerId
   settings: Settings
+  /** Dawnbreaker / Night Stalker / Luna can force the clock for this round. */
+  cycle?: 'day' | 'night'
+  /** Zones where an Ultimate has already resolved this round. */
+  resolvedUlts: ZoneId[]
+  /** Jakiro: enemy towers in these lanes do not fire. `${defender}:${lane}` */
+  silencedTowers: string[]
 }
 
 export const LANES: LaneId[] = ['top', 'mid', 'bot']

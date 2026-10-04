@@ -19,6 +19,29 @@ import {
   getNeutral,
 } from './cards'
 import {
+  attackExtra,
+  combatAuras,
+  endStep,
+  enemyEntered,
+  hasTag,
+  isZoneId,
+  lethalSave,
+  noteHeal,
+  onDamaged,
+  onDeath,
+  onEnter,
+  onHit,
+  onItem,
+  opening,
+  passiveBlock,
+  preDamage,
+  runUlt,
+  scripted,
+  targetFilter,
+  towerBonus,
+  type KitApi,
+} from './kit'
+import {
   ANCIENT_HP,
   BOARD_LIMIT,
   BUYBACK_COST,
@@ -100,12 +123,14 @@ export function other(p: PlayerId): PlayerId {
   return p === 'radiant' ? 'dire' : 'radiant'
 }
 
-export function isDay(round: number) {
+export function isDay(round: number, cycle?: 'day' | 'night') {
+  if (cycle === 'day') return true
+  if (cycle === 'night') return false
   return round % 2 === 1
 }
 
-export function favoredPlayer(round: number): PlayerId {
-  return isDay(round) ? 'radiant' : 'dire'
+export function favoredPlayer(round: number, cycle?: 'day' | 'night'): PlayerId {
+  return isDay(round, cycle) ? 'radiant' : 'dire'
 }
 
 function rand(s: GameState): number {
@@ -158,6 +183,24 @@ function freshStatus(): RoundStatus {
     bonusDamage: 0,
     invisible: false,
     haste: false,
+    ethereal: false,
+    feared: false,
+    hexed: false,
+    enfeeble: false,
+    revealed: false,
+    cannotDie: false,
+    halfDamage: false,
+    doubleHeal: false,
+    healEnd: false,
+    skadi: false,
+    rapier: false,
+    bloodthorn: false,
+    magicOnHit: 0,
+    echoUlt: false,
+    rupture: false,
+    rangedAttack: false,
+    lifesteal: false,
+    lifestealAura: false,
     bladeMail: false,
     aegis: false,
     borrowedTime: false,
@@ -197,12 +240,13 @@ function tone(o: Owner): LogTone {
 }
 
 export function isMelee(u: Unit): boolean {
+  if (u.status?.rangedAttack) return false
   if (u.kind === 'hero') return getHero(u.cardId!).range === 'Melee'
   return u.kind !== 'siege'
 }
 
 export function attributeOf(u: Unit): Attribute | undefined {
-  if (u.kind === 'hero') return getHero(u.cardId!).attribute
+  if (u.kind === 'hero') return u.morph ?? getHero(u.cardId!).attribute
   if (u.kind === 'neutral') return getNeutral(u.cardId!).attribute
   if (u.kind === 'roshan') return ROSHAN.attribute
   if (u.kind === 'tormentor') return TORMENTOR.attribute
@@ -216,10 +260,12 @@ function canAttack(u: Unit) {
 
 /** A passive works only while the hero is alive and not Broken. */
 export function hasPassive(u: Unit | undefined, heroId: string): boolean {
+  if (scripted(u)) return false
   return !!u && !u.dead && u.cardId === heroId && u.kind === 'hero' && !u.status.broken
 }
 
 function hasKind(u: Unit | undefined, kind: HeroCard['passiveKind']): boolean {
+  if (scripted(u)) return false
   return !!u && !u.dead && u.kind === 'hero' && !u.status.broken && !!u.cardId && getHero(u.cardId).passiveKind === kind
 }
 
@@ -233,6 +279,7 @@ function targetableLineup(s: GameState, player: PlayerId, zone: ZoneId): string[
 }
 
 function hiddenFromEnemies(u: Unit) {
+  if (u.status.revealed) return false
   return u.status.banished || u.status.invisible
 }
 
@@ -331,6 +378,8 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     glyph: false,
     arcane: false,
     rotated: false,
+    ward: [],
+    smoke: [],
   })
 
   const zones = Object.fromEntries(ZONES.map((z) => [z, { radiant: [], dire: [] }])) as unknown as GameState['zones']
@@ -357,10 +406,12 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     nextId: 1,
     seed: seed | 0,
     settings,
+    resolvedUlts: [],
+    silencedTowers: [],
   }
 
   const copies = (kind: 'Shop' | 'Rune') =>
-    ITEMS.filter((i) => i.kind === kind).flatMap((i) => Array.from({ length: ITEM_DECK_COPIES[kind] }, () => i.id))
+    ITEMS.filter((i) => i.kind === kind).flatMap((i) => Array.from({ length: i.copies ?? ITEM_DECK_COPIES[kind] }, () => i.id))
   s.itemDeck = shuffle(s, copies('Shop'))
   s.runeDeck = shuffle(s, copies('Rune'))
   s.unitDeck = shuffle(s, [
@@ -403,6 +454,7 @@ function makeUnit(s: GameState, partial: Pick<Unit, 'kind' | 'owner' | 'zone' | 
     dead: false,
     ultUsed: partial.kind !== 'hero',
     ultCasts: 0,
+    permanentAtk: 0,
     placedRound: s.round,
     fierySoul: false,
     status: freshStatus(),
@@ -410,6 +462,88 @@ function makeUnit(s: GameState, partial: Pick<Unit, 'kind' | 'owner' | 'zone' | 
   }
   s.units[uid] = u
   return u
+}
+
+function kitApi(s: GameState): KitApi {
+  return {
+    s,
+    depth: { n: 0 },
+    log: (text, owner) => log(s, text, owner && owner !== 'neutral' ? owner : 'info'),
+    name: (u) => fullName(u),
+    magic: (src, tid, n, label) => dealDamage(s, src, tid, n, 'ult', { label: src ? `${unitName(src)}'s ${label}` : label }),
+    physical: (src, tid, n, label) => dealDamage(s, src, tid, n, 'ult', { label: src ? `${unitName(src)}'s ${label}` : label, physical: true }),
+    strike: (src, tid, n, label) => dealDamage(s, src, tid, n, 'attack', { label: src ? `${unitName(src)}'s ${label}` : label }),
+    mark: (from, t, key, label) => applyStatus(s, from, t, key as BoolStatus, label, from !== t.owner),
+    heal: (u, label) => heal(s, u, label),
+    move: (u, zone, front, cause) => relocate(s, u, zone, !!front, cause),
+    transfer: (u, owner, zone) => {
+      removeFromBoard(s, u)
+      u.owner = owner
+      u.zone = zone
+      s.zones[zone][owner].push(u.uid)
+    },
+    fresh: freshStatus,
+    make: (partial) => makeUnit(s, partial),
+    hitTower: (src, lane, n) => {
+      if (src.owner === 'neutral') return
+      const enemy = other(src.owner)
+      const tw = s.players[enemy].structures.towers[lane]
+      const dmg = n
+      if (tw.t1 <= 0 && tw.t2 <= 0) return
+      const key = towerKey(enemy, lane, tw.t1 > 0 ? 't1' : 't2')
+      if (!s.towersHit.includes(key)) s.towersHit.push(key)
+      if (tw.t1 > 0) tw.t1 = Math.max(0, tw.t1 - dmg)
+      else tw.t2 = Math.max(0, tw.t2 - dmg)
+      log(s, `${fullName(src)} blasts the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower for ${dmg}.`, 'structure')
+    },
+    xp: (p, n) => {
+      s.players[p].xp = Math.max(0, s.players[p].xp + n)
+    },
+    gold: (p, n) => {
+      s.players[p].gold += n
+    },
+    daytime: () => isDay(s.round, s.cycle),
+    setCycle: (c) => {
+      s.cycle = c
+    },
+    attackPower: (u) => attackDamage(s, u),
+    shuffleDeck: () => {
+      s.unitDeck = shuffle(s, s.unitDeck)
+    },
+    returnToHand: (u) => {
+      if (u.owner === 'neutral') return
+      const owner = u.owner
+      removeFromBoard(s, u)
+      s.players[owner].hand.push({
+        iid: u.handIid ?? newId(s, 'c'),
+        type: u.kind === 'hero' ? 'hero' : 'creep',
+        cardId: u.kind === 'hero' ? u.cardId! : u.kind,
+        buybackUsed: u.buybackUsed,
+      })
+      delete s.units[u.uid]
+    },
+    silenceTower: (defender, lane) => {
+      const key = `${defender}:${lane}`
+      if (!s.silencedTowers.includes(key)) s.silencedTowers.push(key)
+    },
+  }
+}
+
+function relocate(s: GameState, u: Unit, zone: ZoneId, front: boolean, cause?: 'tp' | 'move') {
+  const from = u.zone
+  if (u.owner === 'neutral') return
+  removeFromBoard(s, u)
+  u.zone = zone
+  const arr = s.zones[zone][u.owner]
+  if (front) arr.unshift(u.uid)
+  else arr.push(u.uid)
+  if (from !== zone) {
+    const api = kitApi(s)
+    onEnter(api, u)
+    enemyEntered(api, u)
+    if (cause === 'tp' && hasTag(u, 'onTp:heal')) heal(s, u, 'Tether')
+    if (cause === 'tp' && hasTag(u, 'tpShield')) u.status.shield += 1
+  }
 }
 
 function drawNeutral(s: GameState): string | undefined {
@@ -457,6 +591,7 @@ function startRound(s: GameState) {
   s.phase = 'draw'
   s.ultDeclarations = []
   s.bossKills = []
+  s.cycle = undefined
   log(s, `Round ${s.round} — ${isDay(s.round) ? 'Day (Radiant has priority)' : 'Night (Dire has priority)'}`, 'phase')
   spawnCamps(s)
   for (const p of PLAYERS) {
@@ -473,14 +608,14 @@ function startRound(s: GameState) {
         }
       }
     }
-    const cmBonus = heroesOnBoard(s, p).filter((u) => hasPassive(u, 'crystal_maiden') || hasKind(u, 'gold')).length
-    const gold = 1 + pl.bonusIncomeLanes.length + cmBonus
+    const xpAura = heroesOnBoard(s, p).filter((u) => hasTag(u, 'xpAura')).length
+    const gold = 1 + pl.bonusIncomeLanes.length
     pl.gold += gold
-    pl.xp += 1
+    pl.xp += 1 + xpAura
     pl.placedThisRound = 0
     pl.killsThisRound = 0
     pl.rotated = false
-    log(s, `Upkeep: ${PLAYER_LABEL[p]} gains ${gold} Gold and 1 XP${cmBonus ? ' (Arcane Aura)' : ''}.`, tone(p))
+    log(s, `Upkeep: ${PLAYER_LABEL[p]} gains ${gold} Gold and ${1 + xpAura} XP${xpAura ? ' (Arcane Aura)' : ''}.`, tone(p))
   }
 }
 
@@ -651,6 +786,9 @@ export function placeHero(state: GameState, p: PlayerId, handIid: string, zone: 
   const hp = getHero(card.cardId).maxHp ?? 2
   const u = makeUnit(s, { kind: 'hero', cardId: card.cardId, handIid, owner: p, zone, hp, buybackUsed: card.buybackUsed })
   s.zones[zone][p].push(u.uid)
+  const api = kitApi(s)
+  onEnter(api, u)
+  enemyEntered(api, u)
   return s
 }
 
@@ -710,6 +848,24 @@ export function reveal(state: GameState): GameState {
     } else {
       log(s, `Reveal: ${PLAYER_LABEL[p]} assigns nothing new.`, tone(p))
     }
+    const pl = s.players[p]
+    for (const lane of pl.smoke) {
+      for (const uid of lineup(s, p, lane)) {
+        const u = s.units[uid]
+        if (u.kind === 'hero' && u.placedRound === s.round) u.status.invisible = true
+      }
+    }
+    for (const lane of pl.ward) {
+      for (const uid of lineup(s, other(p), lane)) {
+        const u = s.units[uid]
+        if (u.kind === 'hero') {
+          u.status.revealed = true
+          u.status.invisible = false
+        }
+      }
+    }
+    pl.smoke = []
+    pl.ward = []
   }
   s.phase = 'items'
   return s
@@ -749,11 +905,22 @@ function applyStatus(s: GameState, from: Owner, t: Unit, key: BoolStatus, label:
     log(s, `${fullName(t)} is Immune to ${label}.`, 'info')
     return
   }
+  if (from !== t.owner && spell && hasTag(t, 'block:spell') && !t.status.blurUsed) {
+    t.status.blurUsed = true
+    log(s, `${fullName(t)} shrugs off ${label} (${getHero(t.cardId!).passive.name}).`, 'info')
+    return
+  }
+  if (key === 'slowed' && t.owner !== 'neutral' && lineup(s, t.owner, t.zone).some((id) => hasTag(s.units[id], 'aura:noSlow'))) {
+    log(s, `${fullName(t)} cannot be Slowed.`, 'info')
+    return
+  }
   t.status[key] = true
   if (key === 'banished') t.status.invulnerable = true
+  if (spell && from !== t.owner && hasTag(t, 'onDebuff:shield')) t.status.shield += 1
   log(s, `${fullName(t)} is ${STATUS_VERB[key]} by ${label}.`, tone(from))
 }
 
+let healing = false
 function heal(s: GameState, u: Unit, label: string) {
   if (u.dead || u.hp >= u.maxHp) return
   if (u.status.cursed) {
@@ -762,6 +929,11 @@ function heal(s: GameState, u: Unit, label: string) {
   }
   u.hp = u.maxHp
   log(s, `${fullName(u)} heals to Healthy (${label}).`, tone(u.owner))
+  if (!healing) {
+    healing = true
+    noteHeal(kitApi(s), u)
+    healing = false
+  }
 }
 
 // ---------- items ----------
@@ -781,7 +953,7 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
     case 'allyWoundedHero':
       return allies.filter((u) => u.hp < u.maxHp).map((u) => u.uid)
     case 'allyHero':
-      if (itemId === 'refresher' || itemId === 'refresher_shard') return allies.filter((u) => u.ultCasts > 0).map((u) => u.uid)
+      if (itemId === 'refresher_shard') return allies.filter((u) => u.ultCasts > 0).map((u) => u.uid)
       if (itemId === 'rune_water') return allies.filter((u) => DEBUFFS.some((d) => u.status[d]) || u.status.poisonedBy).map((u) => u.uid)
       return allies.map((u) => u.uid)
     case 'allyHeroToLane':
@@ -796,7 +968,10 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
 /** Lanes a lane-targeted card can send heroes to. TP needs the hero first. */
 export function itemLanes(s: GameState, p: PlayerId, itemId: string, heroUid?: string): LaneId[] {
   const item = getItem(itemId)
-  if (item.target === 'lane') return heroesOnBoard(s, p).some((u) => !u.status.rooted) ? [...LANES] : []
+  if (item.target === 'lane') {
+    if (item.id === 'gate') return heroesOnBoard(s, p).some((u) => !u.status.rooted) ? [...LANES] : []
+    return [...LANES]
+  }
   if (item.target === 'allyHeroToLane' && heroUid) return LANES.filter((l) => s.units[heroUid]?.zone !== l)
   return []
 }
@@ -804,16 +979,16 @@ export function itemLanes(s: GameState, p: PlayerId, itemId: string, heroUid?: s
 export function itemBlockReason(s: GameState, p: PlayerId, card: HandCard): string | null {
   if (s.phase !== 'items') return 'Items are played during the Item step'
   const item = getItem(card.cardId)
+  const cost = item.cost ?? 0
+  if (cost > 0 && s.players[p].gold < cost) return `Needs ${cost} Gold`
   if (item.target === 'lane') return itemLanes(s, p, card.cardId).length ? null : 'No hero can move'
   if (item.target !== 'none' && itemTargets(s, p, card.cardId).length === 0) return 'No valid targets'
   return null
 }
 
 function teleport(s: GameState, u: Unit, lane: LaneId) {
-  removeFromBoard(s, u)
-  u.zone = lane
+  relocate(s, u, lane, false, 'tp')
   u.placedRound = s.round
-  s.zones[lane][u.owner as PlayerId].push(u.uid)
 }
 
 export function playItem(state: GameState, p: PlayerId, handIid: string, targetUid?: string, lane?: LaneId): GameState {
@@ -826,6 +1001,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
   if (needsLane && (!lane || !itemLanes(state, p, card.cardId, targetUid).includes(lane))) return state
   const s = clone(state)
   const pl = s.players[p]
+  pl.gold -= item.cost ?? 0
   pl.hand = pl.hand.filter((c) => c.iid !== handIid)
   const t = targetUid ? s.units[targetUid] : undefined
   log(s, `${PLAYER_LABEL[p]} plays ${item.name}${t ? ` on ${fullName(t)}` : ''}${lane ? ` to ${ZONE_LABEL[lane]}` : ''}.`, tone(p))
@@ -846,14 +1022,34 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     pl.xp += 1
   } else if (item.id === 'rune_arcane') {
     pl.arcane = true
+  } else if (item.id === 'clarity') {
+    pl.xp += 1
+  } else if (item.id === 'greaves') {
+    for (const u of heroesOnBoard(s, p)) if (isLane(u.zone)) heal(s, u, item.name)
+  } else if (item.id === 'assault') {
+    for (const u of heroesOnBoard(s, p)) if (isLane(u.zone)) u.status.haste = true
+  } else if (item.id === 'ward' && lane) {
+    pl.ward.push(lane)
+  } else if (item.id === 'smoke' && lane) {
+    pl.smoke.push(lane)
+  } else if (item.id === 'dust' && lane) {
+    for (const uid of targetableLineup(s, other(p), lane)) {
+      const e = s.units[uid]
+      if (e.kind === 'hero') applyStatus(s, p, e, 'muted', item.name, true)
+    }
+  } else if (item.id === 'shivas' && lane) {
+    for (const uid of targetableLineup(s, other(p), lane)) {
+      const e = s.units[uid]
+      if (e.kind === 'hero') applyStatus(s, p, e, 'slowed', item.name, true)
+    }
   } else if (t) {
     const st = t.status
     switch (item.id) {
-      case 'tango':
-        heal(s, t, 'Tango')
+      case 'salve':
+        heal(s, t, 'Healing Salve')
         break
       case 'dagon':
-        dealDamage(s, null, t.uid, 1, 'item', { label: 'Dagon', sourceOwner: p })
+        dealDamage(s, null, t.uid, 2, 'item', { label: 'Dagon', sourceOwner: p })
         break
       case 'blade_mail':
         st.bladeMail = true
@@ -869,21 +1065,14 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.bonusDamage += 1
         break
       case 'refresher':
-        t.ultCasts = 0
-        t.ultUsed = false
+        st.echoUlt = true
         break
       case 'mkb':
         st.accuracy = true
+        st.magicOnHit += 1
         break
       case 'orchid':
         applyStatus(s, p, t, 'silenced', 'Orchid Malevolence', true)
-        applyStatus(s, p, t, 'muted', 'Orchid Malevolence', true)
-        break
-      case 'silver_edge':
-        applyStatus(s, p, t, 'broken', 'Silver Edge', true)
-        break
-      case 'atos':
-        applyStatus(s, p, t, 'rooted', 'Rod of Atos', true)
         break
       case 'euls':
         applyStatus(s, p, t, 'banished', "Eul's Scepter", true)
@@ -892,28 +1081,59 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         if (lane) teleport(s, t, lane)
         break
       case 'ghost':
-        st.evade += 1
+        st.ethereal = true
         break
       case 'heart':
-        heal(s, t, 'Heart of Tarrasque')
+        st.healEnd = true
         break
       case 'sheepstick':
-        applyStatus(s, p, t, 'silenced', 'Scythe of Vyse', true)
-        applyStatus(s, p, t, 'disarmed', 'Scythe of Vyse', true)
+        st.hexed = true
+        if (t.hp > 1) t.hp = 1
+        log(s, `${fullName(t)} is Hexed.`, tone(p))
         break
       case 'skadi':
-        applyStatus(s, p, t, 'slowed', 'Eye of Skadi', true)
+        st.skadi = true
         break
-      case 'glimmer_cape':
+      case 'force_staff': {
+        const arr = s.zones[t.zone][t.owner as PlayerId]
+        const i = arr.indexOf(t.uid)
+        if (i >= 0) {
+          arr.splice(i, 1)
+          arr.push(t.uid)
+        }
+        break
+      }
+      case 'shadow_blade':
         st.invisible = true
         break
-      case 'phase_boots':
+      case 'blink':
+        st.haste = true
+        st.slowed = false
+        relocate(s, t, t.zone, true, 'move')
+        break
+      case 'halberd':
+        applyStatus(s, p, t, 'disarmed', "Heaven's Halberd", true)
+        break
+      case 'gloves':
         st.haste = true
         st.slowed = false
         break
-      case 'daedalus':
-        st.bonusDamage += 1
-        st.pierce = true
+      case 'satanic':
+        st.cannotDie = true
+        st.lifesteal = true
+        break
+      case 'bloodthorn':
+        applyStatus(s, p, t, 'silenced', 'Bloodthorn', true)
+        st.bloodthorn = true
+        break
+      case 'abyssal':
+        applyStatus(s, p, t, 'stunned', 'Abyssal Blade', true)
+        break
+      case 'butterfly':
+        st.evade += 1
+        break
+      case 'rapier':
+        st.rapier = true
         break
       case 'aegis':
         st.aegis = true
@@ -951,6 +1171,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         log(s, `${fullName(t)} is cleansed of all debuffs.`, tone(p))
         break
     }
+    if (t.owner === p) onItem(kitApi(s), t)
     if (hasPassive(t, 'zeus') && t.owner === p) {
       const front = targetableLineup(s, other(p), t.zone)[0]
       if (front) dealDamage(s, t, front, 1, 'passive', { label: 'Static Field' })
@@ -980,17 +1201,50 @@ export function ultTargets(s: GameState, uid: string): string[] {
   if (!u?.cardId || u.owner === 'neutral') return []
   const enemies = Object.values(s.units).filter((x) => x.owner !== u.owner && !x.dead && !hiddenFromEnemies(x))
   const enemyHeroes = enemies.filter((x) => x.kind === 'hero')
+  const allies = Object.values(s.units).filter((x) => x.owner === u.owner && x.kind === 'hero' && !x.dead)
   switch (getHero(u.cardId).ult.target) {
     case 'none':
+    case 'lane':
+    case 'zone':
+    case 'adjacentZone':
       return []
     case 'enemyHeroInLane':
-      return enemyHeroes.filter((x) => x.zone === u.zone).map((x) => x.uid)
+      return enemyHeroes
+        .filter((x) => x.zone === u.zone && (u.cardId === 'necrophos' || u.cardId === 'razor' ? x.hp < x.maxHp : true))
+        .map((x) => x.uid)
     case 'enemyUnitInLane':
       return enemies.filter((x) => x.zone === u.zone).map((x) => x.uid)
     case 'enemyHeroAdjacentLane':
       return enemyHeroes.filter((x) => ADJACENT[u.zone].includes(x.zone)).map((x) => x.uid)
     case 'enemyUnitAnyLane':
-      return enemies.map((x) => x.uid)
+    case 'enemyHeroAny':
+      return (getHero(u.cardId).ult.target === 'enemyHeroAny' ? enemyHeroes : enemies)
+        .filter((x) => (u.cardId === 'spectre' || u.cardId === 'necrophos' ? x.hp < x.maxHp : true))
+        .map((x) => x.uid)
+    case 'allyHero':
+      return allies.filter((x) => x.zone === u.zone).map((x) => x.uid)
+    case 'allyHeroAny':
+      return allies.map((x) => x.uid)
+    case 'heroInLane':
+      return [...allies, ...enemyHeroes].filter((x) => x.zone === u.zone).map((x) => x.uid)
+    case 'enemyCreep':
+      return enemies.filter((x) => x.zone === u.zone && (x.kind === 'creep' || x.kind === 'siege')).map((x) => x.uid)
+  }
+}
+
+/** Lane and zone ultimates are aimed at the map, not a unit. */
+export function ultZones(s: GameState, uid: string): ZoneId[] {
+  const u = s.units[uid]
+  if (!u?.cardId || u.owner === 'neutral') return []
+  switch (getHero(u.cardId).ult.target) {
+    case 'lane':
+      return [...LANES]
+    case 'zone':
+      return [...ZONES]
+    case 'adjacentZone':
+      return [...ADJACENT[u.zone]]
+    default:
+      return []
   }
 }
 
@@ -998,15 +1252,21 @@ export function ultNeedsTarget(u: Unit) {
   return u.kind === 'hero' && getHero(u.cardId!).ult.target !== 'none'
 }
 
-/** XP the next Ultimate costs. The first cast of a deployment is 1, then 2, then 3, and so on. */
-export function ultCost(u: Unit): number {
-  return u.ultCasts + 1
+/** XP the next Ultimate costs. The first cast of a deployment is 1, then 2, then 3. Tinker stays at 1. */
+export function ultCost(u: Unit, s?: GameState): number {
+  const script = u.cardId && u.kind === 'hero' ? getHero(u.cardId).script : undefined
+  let cost = script?.fixedCost ? 1 : u.ultCasts + 1
+  if (s && u.owner !== 'neutral' && isPos1(s, u)) {
+    const kotl = lineup(s, u.owner, u.zone).some((id) => hasTag(s.units[id], 'kotl'))
+    if (kotl) cost = Math.max(1, cost - 1)
+  }
+  return cost
 }
 
 function castPreventedReason(s: GameState, u: Unit): string | null {
   if (u.dead) return 'Slain'
   if (u.status.banished) return 'Banished'
-  if (u.status.stunned) return 'Stunned'
+  if (u.status.stunned || u.status.feared) return u.status.feared ? 'Feared' : 'Stunned'
   if (u.status.silenced) return 'Silenced'
   if (u.owner !== 'neutral' && isPos1(s, u) && passiveInZone(s, other(u.owner), u.zone, 'lion')) return 'Mana Drained by Lion'
   return null
@@ -1019,20 +1279,23 @@ export function ultBlockReason(s: GameState, uid: string): string | null {
   if (s.ultDeclarations.some((d) => d.uid === uid)) return 'Already declared'
   const r = castPreventedReason(s, u)
   if (r) return r
-  const cost = ultCost(u)
+  const cost = ultCost(u, s)
   if (s.players[u.owner].xp < cost && !s.players[u.owner].arcane) return `Needs ${cost} XP`
-  if (ultNeedsTarget(u) && ultTargets(s, uid).length === 0) return 'No valid targets'
+  if (ultNeedsTarget(u) && ultTargets(s, uid).length === 0 && ultZones(s, uid).length === 0) return 'No valid targets'
   return null
 }
 
 export function declareUlt(state: GameState, uid: string, target?: string): GameState {
   if (ultBlockReason(state, uid)) return state
   const u = state.units[uid]
-  if (ultNeedsTarget(u) && (!target || !ultTargets(state, uid).includes(target))) return state
+  const zones = ultZones(state, uid)
+  if (zones.length) {
+    if (!target || !zones.includes(target as ZoneId)) return state
+  } else if (ultNeedsTarget(u) && (!target || !ultTargets(state, uid).includes(target))) return state
   const owner = u.owner as PlayerId
   const s = clone(state)
   const pl = s.players[owner]
-  const cost = ultCost(u)
+  const cost = ultCost(u, state)
   const free = pl.arcane
   if (free) pl.arcane = false
   else pl.xp -= cost
@@ -1043,6 +1306,16 @@ export function declareUlt(state: GameState, uid: string, target?: string): Game
 function refundUlt(s: GameState, d: { owner: PlayerId; free?: boolean; cost: number }) {
   if (d.free) s.players[d.owner].arcane = true
   else s.players[d.owner].xp += d.cost
+}
+
+export function toggleMorph(state: GameState, uid: string): GameState {
+  const u = state.units[uid]
+  if (!u || u.cardId !== 'morphling' || state.phase !== 'assign' || u.owner === 'neutral') return state
+  const s = clone(state)
+  const m = s.units[uid]
+  m.morph = (m.morph ?? 'AGI') === 'AGI' ? 'STR' : 'AGI'
+  log(s, `${fullName(m)} morphs into ${m.morph}.`, m.owner)
+  return s
 }
 
 export function cancelUlt(state: GameState, uid: string): GameState {
@@ -1062,6 +1335,8 @@ type DamageKind = 'ult' | 'attack' | 'tower' | 'item' | 'passive' | 'reflect' | 
 interface DamageOpts {
   label?: string
   sourceOwner?: PlayerId
+  /** Physical damage that is not a basic attack (no attribute counter). */
+  physical?: boolean
 }
 
 function counters(a: Unit, b: Unit) {
@@ -1119,13 +1394,31 @@ function applyDamage(
   const srcOwner: Owner | undefined = src?.owner ?? opts.sourceOwner
   const fromEnemy = kind === 'tower' || (srcOwner !== undefined && srcOwner !== t.owner)
   const accuracy = !!src?.status.accuracy
-  const pierce = !!src?.status.pierce
+  const pierce = !!src?.status.pierce || (!!src && hasTag(src, 'atk:pierce'))
+
+  const magicAttack = kind === 'attack' && !!src && hasTag(src, 'atk:magic')
+  const basic = kind === 'attack' && !opts.physical && !magicAttack
+  const physicalHit = !magicAttack && (opts.physical || kind === 'attack' || kind === 'tower' || kind === 'reflect')
+  const magic = magicAttack || (!opts.physical && kind !== 'self' && (kind === 'ult' || kind === 'item' || kind === 'passive'))
 
   if (kind !== 'self' && (st.banished || st.invulnerable)) {
     log(s, `${fullName(t)} is ${st.banished ? 'Banished' : 'Invulnerable'} — ${label} has no effect.`, 'info')
     return 0
   }
-  if (fromEnemy && (kind === 'ult' || kind === 'item')) {
+  if (t.kind === 'roshan' && !st.blurUsed && kind !== 'self') {
+    st.blurUsed = true
+    log(s, `Roshan ignores the first damage from ${label}.`, 'info')
+    return 0
+  }
+  if (t.cardId === 'golem' && magic) {
+    log(s, `Stone Golem is immune to ${label}.`, 'info')
+    return 0
+  }
+  if (fromEnemy && preDamage(t)) {
+    log(s, `${label} feeds ${fullName(t)}'s Borrowed Time.`, 'info')
+    return 0
+  }
+  if (fromEnemy && magic) {
     if (st.immune) {
       log(s, `${fullName(t)} is Immune to ${label}.`, 'info')
       return 0
@@ -1135,10 +1428,15 @@ function applyDamage(
       return 0
     }
   }
-  if (kind === 'attack' && !accuracy) {
+  if (st.ethereal && physicalHit) {
+    log(s, `${fullName(t)} is Ethereal and takes no physical damage from ${label}.`, 'info')
+    return 0
+  }
+  if (basic && !accuracy) {
     if (st.evade > 0) {
       st.evade--
       log(s, `${fullName(t)} Evades ${label}'s attack.`, 'info')
+      if (src && hasTag(t, 'block:evadeReflect')) dealDamage(s, t, src.uid, 1, 'ult', { label: getHero(t.cardId!).passive.name })
       return 0
     }
     if ((hasPassive(t, 'phantom_assassin') || hasKind(t, 'evade')) && !st.blurUsed) {
@@ -1147,18 +1445,18 @@ function applyDamage(
       return 0
     }
   }
-  if (kind === 'attack' && !pierce) {
-    if ((hasPassive(t, 'windranger') || hasKind(t, 'meleeImmune')) && src && isMelee(src)) {
-      log(s, `${fullName(t)} takes no damage from ${label}'s melee attack (${getHero(t.cardId!).passive.name}).`, 'info')
-      return 0
-    }
-    if (t.owner !== 'neutral' && !st.frostShieldUsed && isPos1(s, t) && passiveInZone(s, t.owner, t.zone, 'lich')) {
-      st.frostShieldUsed = true
-      log(s, `${fullName(t)} negates ${label}'s attack (Frost Shield).`, 'info')
-      return 0
-    }
+  const blocked = passiveBlock(s, t, src, magic ? 'ult' : kind, magic)
+  if (blocked) {
+    log(s, `${fullName(t)} stops ${label} (${blocked}).`, 'info')
+    if (src && hasTag(t, 'block:evadeReflect')) dealDamage(s, t, src.uid, 1, 'ult', { label: blocked })
+    return 0
   }
-  if ((kind === 'attack' || kind === 'tower' || kind === 'reflect') && !pierce && st.shield > 0) {
+  if (basic && !pierce && (hasPassive(t, 'windranger') || hasKind(t, 'meleeImmune')) && src && isMelee(src)) {
+    log(s, `${fullName(t)} takes no damage from ${label}'s melee attack (${getHero(t.cardId!).passive.name}).`, 'info')
+    return 0
+  }
+  const rapier = basic && !!src?.status.rapier && t.kind === 'hero'
+  if (physicalHit && !pierce && !rapier && st.shield > 0) {
     st.shield--
     log(s, `${fullName(t)}'s Shield blocks ${label}.`, 'info')
     return 0
@@ -1179,21 +1477,34 @@ function applyDamage(
   }
 
   let dmg = amount
-  if (kind === 'attack' && src && counters(src, t)) {
+  if (basic && src && counters(src, t)) {
     dmg = t.hp
     log(s, `${attributeOf(src)} counters ${attributeOf(t)}: ${label}'s strike is lethal!`, 'kill')
   }
+  if (magic && st.ethereal) dmg += 1
+  if (basic && st.bloodthorn) dmg += 1
+  if (basic && src && src.owner !== t.owner && src.kind === 'hero' && hasTag(t, 'atk:less')) dmg = Math.max(0, dmg - 1)
+  if (st.halfDamage && dmg > 0) dmg = Math.max(1, Math.ceil(dmg / 2))
+  if (t.cardId === 'golem') dmg = Math.min(dmg, 1)
+  if (rapier) dmg = Math.max(dmg, t.hp)
   if (dmg <= 0) {
     log(s, `${label} deals no damage to ${fullName(t)}.`, 'info')
     return 0
+  }
+  if (st.cannotDie && t.hp - dmg <= 0) {
+    t.hp = 1
+    log(s, `${fullName(t)} cannot die — ${label} leaves them standing.`, 'info')
+    return dmg
   }
 
   t.hp -= dmg
   if (t.hp > 0) {
     log(s, `${label} deals ${dmg} to ${fullName(t)} (${t.hp}/${t.maxHp} left).`, 'damage')
+    onDamaged(kitApi(s), t, src, dmg)
   } else {
     handleLethal(s, t, src, label, srcOwner)
   }
+  if (basic && src) onHit(kitApi(s), src, t, dmg)
   return dmg
 }
 
@@ -1208,6 +1519,14 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
     t.status.reincarnation = false
     t.hp = 1
     log(s, `${fullName(t)} is slain by ${label} — and rises again, Wounded (Reincarnation)!`, 'kill')
+    return
+  }
+  const save = lethalSave(t)
+  if (save) {
+    t.passiveSpent = true
+    t.hp = save === 'full' ? t.maxHp : 1
+    if (hasTag(t, 'save:amp')) t.status.bonusDamage += 1
+    log(s, `${fullName(t)} is slain by ${label} — and rises again${save === 'full' ? ' at full health' : ', wounded'}.`, 'kill')
     return
   }
   t.hp = 0
@@ -1236,6 +1555,7 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
   if (src && src.owner !== 'neutral' && !src.dead && isMelee(src) && passiveInZone(s, src.owner, src.zone, 'wraith_king')) {
     heal(s, src, 'Vampiric Aura')
   }
+  onDeath(kitApi(s), t, src)
 }
 
 // ---------- combat ----------
@@ -1243,7 +1563,7 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
 function priorityKey(s: GameState, u: Unit): number[] {
   if (u.owner === 'neutral') return [99, 2, 0]
   const zoneRank = ZONE_PRIORITY[u.owner].indexOf(u.zone)
-  const fav = u.owner === favoredPlayer(s.round) ? 0 : 1
+  const fav = u.owner === favoredPlayer(s.round, s.cycle) ? 0 : 1
   const pos = s.zones[u.zone][u.owner].indexOf(u.uid)
   return [zoneRank, fav, pos]
 }
@@ -1369,6 +1689,10 @@ function resolveUltEffect(s: GameState, u: Unit, effect: UltEffect, target?: Uni
 
 function castUlt(s: GameState, u: Unit, targetUid?: string) {
   const hero = getHero(u.cardId!)
+  if (hero.script) {
+    runUlt(kitApi(s), u, targetUid)
+    return
+  }
   const ult = hero.ult.name
   const owner = u.owner as PlayerId
   const enemies = () => enemyLine(s, u)
@@ -1474,7 +1798,23 @@ function castUlt(s: GameState, u: Unit, targetUid?: string) {
 function roshanRoar(s: GameState, rosh: Unit) {
   const victims = PLAYERS.flatMap((p) => targetableLineup(s, p, rosh.zone)).map((x) => s.units[x])
   log(s, 'Roshan Roars!', 'neutral')
-  for (const v of victims) applyStatus(s, 'neutral', v, 'disarmed', 'Roar', true)
+  for (const v of victims) {
+    applyStatus(s, 'neutral', v, 'disarmed', 'Roar', true)
+    dealDamage(s, rosh, v.uid, 1, 'ult', { label: 'Roar' })
+  }
+}
+
+function refreshNeutralAuras(s: GameState) {
+  for (const camp of CAMPS) {
+    const u = campNeutral(s, camp)
+    if (!u) continue
+    if (u.cardId === 'thunderhide') u.status.haste = true
+    if (u.cardId === 'dragon') u.status.accuracy = true
+    if (u.kind === 'tormentor') u.status.shield = Math.max(u.status.shield, 1)
+    if (u.cardId === 'ice_shaman') {
+      for (const p of PLAYERS) for (const id of lineup(s, p, camp)) applyStatus(s, 'neutral', s.units[id], 'cursed', 'Ice Shaman', true)
+    }
+  }
 }
 
 /**
@@ -1518,6 +1858,8 @@ function attackTargets(s: GameState, u: Unit): string[] {
     }
   }
   if (pool.length === 0) return []
+  const scriptedTargets = targetFilter(u, pool, s)
+  if (scriptedTargets) return scriptedTargets
   if (hasPassive(u, 'sniper') || hasKind(u, 'snipe')) {
     const units = pool.map((x) => s.units[x])
     const pick =
@@ -1531,9 +1873,12 @@ function attackTargets(s: GameState, u: Unit): string[] {
   return [pool[0]]
 }
 
-function attackDamage(s: GameState, u: Unit): number {
+function attackDamage(s: GameState, u: Unit, target?: Unit): number {
+  if (u.status.hexed) return 0
   if (u.owner !== 'neutral' && isPos1(s, u) && passiveInZone(s, other(u.owner), u.zone, 'bane')) return 0
-  return 1 + u.status.bonusDamage
+  let dmg = 1 + u.status.bonusDamage + (u.permanentAtk || 0) + attackExtra(s, u, target, isDay(s.round, s.cycle))
+  if (u.status.enfeeble) dmg -= 1
+  return Math.max(0, dmg)
 }
 
 function towerKey(defender: PlayerId, lane: LaneId, tier: 't1' | 't2') {
@@ -1545,7 +1890,7 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
   const enemy = other(owner)
   const st = s.players[enemy].structures
   const tw = st.towers[lane]
-  const dmg = u.kind === 'siege' ? 2 : 1 + u.status.bonusDamage
+  const dmg = (u.kind === 'siege' ? 2 : 1 + u.status.bonusDamage + (u.permanentAtk || 0)) + towerBonus(u)
   const who = fullName(u)
   if ((tw.t1 > 0 || tw.t2 > 0) && s.players[enemy].glyph) {
     log(s, `${who}'s attack bounces off the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower (Glyph).`, 'info')
@@ -1582,10 +1927,16 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
 }
 
 function neutralAttack(s: GameState, u: Unit) {
+  const all = PLAYERS.flatMap((p) => targetableLineup(s, p, u.zone))
+  const fronts = PLAYERS.map((p) => targetableLineup(s, p, u.zone)[0]).filter(Boolean)
   const targets =
-    u.kind === 'roshan'
-      ? PLAYERS.flatMap((p) => targetableLineup(s, p, u.zone))
-      : PLAYERS.map((p) => targetableLineup(s, p, u.zone)[0]).filter(Boolean)
+    u.kind === 'roshan' || u.cardId === 'dragon'
+      ? all
+      : u.cardId === 'thunderhide'
+        ? all.filter((id) => s.units[id].kind === 'hero')
+        : u.cardId === 'ice_shaman'
+          ? fronts.filter((id) => s.units[id].kind === 'hero')
+          : fronts
   if (u.status.blinded && !u.status.accuracy) {
     if (targets.length) log(s, `${fullName(u)} is Blinded and misses.`, 'info')
     return
@@ -1593,10 +1944,10 @@ function neutralAttack(s: GameState, u: Unit) {
   for (const tid of targets) {
     if (u.dead) break
     const t = s.units[tid]
-    const dealt = dealDamage(s, u, tid, attackDamage(s, u), 'attack')
+    const dealt = dealDamage(s, u, tid, attackDamage(s, u, t), 'attack')
     if (dealt > 0 && !t.dead) {
-      if (u.cardId === 'ice_shaman') applyStatus(s, 'neutral', t, 'slowed', 'Ice Shaman', false)
-      if (u.cardId === 'dragon') applyStatus(s, 'neutral', t, 'blinded', 'Dragon smoke', false)
+      if (u.cardId === 'ice_shaman') applyStatus(s, 'neutral', t, 'silenced', 'Freezing Blast', true)
+      if (u.cardId === 'thunderhide') applyStatus(s, 'neutral', t, 'slowed', 'Thunder Clap', true)
     }
     reflect(s, u, t, dealt)
   }
@@ -1606,7 +1957,7 @@ function reflect(s: GameState, attacker: Unit, t: Unit, dealt: number) {
   if (attacker.dead) return
   if (!t.dead && (hasPassive(t, 'axe') || hasPassive(t, 'viper') || hasKind(t, 'thorns')))
     dealDamage(s, t, attacker.uid, 1, 'passive', { label: getHero(t.cardId!).passive.name })
-  if (t.status.bladeMail && dealt > 0) dealDamage(s, t, attacker.uid, dealt, 'passive', { label: 'Blade Mail' })
+  if (t.status.bladeMail && dealt > 0) dealDamage(s, t, attacker.uid, 1, 'ult', { label: 'Blade Mail', physical: true })
 }
 
 function singleAttack(s: GameState, u: Unit) {
@@ -1624,15 +1975,19 @@ function singleAttack(s: GameState, u: Unit) {
     log(s, `${fullName(u)} is Blinded and misses.`, 'info')
     return
   }
-  const dmg = attackDamage(s, u)
-  if (dmg === 0) {
-    log(s, `${fullName(u)} is Enfeebled by Bane and deals no damage.`, 'info')
+  if (u.status.hexed) {
+    log(s, `${fullName(u)} is Hexed and cannot attack.`, 'info')
     return
   }
   for (const tid of targets) {
     if (u.dead) break
     const t = s.units[tid]
     if (!t || t.dead) continue
+    const dmg = attackDamage(s, u, t)
+    if (dmg === 0) {
+      log(s, `${fullName(u)} deals no damage.`, 'info')
+      continue
+    }
     const dealt = dealDamage(s, u, tid, dmg, 'attack')
     if (dealt > 0 && !u.status.broken) {
       if (u.cardId === 'lina') u.fierySoul = true
@@ -1646,8 +2001,8 @@ function singleAttack(s: GameState, u: Unit) {
 
 function basicAttack(s: GameState, u: Unit) {
   if (u.dead || s.winner || u.status.banished) return
-  if (u.status.stunned) {
-    log(s, `${fullName(u)} is Stunned and cannot attack.`, 'info')
+  if (u.status.stunned || u.status.feared) {
+    log(s, `${fullName(u)} is ${u.status.feared ? 'Feared' : 'Stunned'} and cannot attack.`, 'info')
     return
   }
   if (u.status.disarmed) {
@@ -1688,9 +2043,20 @@ export function resolveRound(state: GameState): GameState {
   const s = clone(state)
   s.towersHit = []
 
+  s.resolvedUlts = []
+  opening(kitApi(s))
+  refreshNeutralAuras(s)
   log(s, 'Phase 1 — Ultimates (STR → INT → UNI → AGI)', 'phase')
   type Cast = { kind: 'hero'; u: Unit; target?: string; free?: boolean; cost: number } | { kind: 'roar'; u: Unit }
-  const casts: Cast[] = s.ultDeclarations.map((d) => ({ kind: 'hero', u: s.units[d.uid], target: d.target, free: d.free, cost: d.cost }))
+  const casts: Cast[] = []
+  for (const d of s.ultDeclarations) {
+    const u = s.units[d.uid]
+    if (!u || u.dead) {
+      refundUlt(s, d)
+      continue
+    }
+    casts.push({ kind: 'hero', u, target: d.target, free: d.free, cost: d.cost })
+  }
   for (const camp of CAMPS) {
     const rosh = campNeutral(s, camp)
     if (rosh?.kind === 'roshan' && rosh.hp === rosh.maxHp && PLAYERS.some((p) => lineup(s, p, camp).length > 0)) {
@@ -1712,8 +2078,11 @@ export function resolveRound(state: GameState): GameState {
     const u = c.u
     const owner = u.owner as PlayerId
     const reason = castPreventedReason(s, u)
-    const target = c.target ? s.units[c.target] : undefined
-    const targetGone = c.target && (!target || target.dead || hiddenFromEnemies(target))
+    const zoneCast = isZoneId(c.target)
+    const target = !zoneCast && c.target ? s.units[c.target] : undefined
+    const targetGone =
+      !!c.target &&
+      (zoneCast ? !ZONES.includes(c.target as ZoneId) : !target || target.dead || (target.owner !== u.owner && hiddenFromEnemies(target)))
     if (reason || targetGone) {
       refundUlt(s, { owner, free: c.free, cost: c.cost })
       log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.free ? 'Arcane rune' : `${c.cost} XP`} refunded.`, 'info')
@@ -1722,10 +2091,18 @@ export function resolveRound(state: GameState): GameState {
     log(s, `${fullName(u)} casts ${getHero(u.cardId!).ult.name}${target ? ` on ${fullName(target)}` : ''}.`, tone(owner))
     u.ultCasts += 1
     u.ultUsed = true
+    s.resolvedUlts.push(u.zone)
     castUlt(s, u, c.target)
+    if (u.status.echoUlt && !u.dead) {
+      u.status.echoUlt = false
+      log(s, `${fullName(u)}'s Ultimate echoes.`, tone(owner))
+      s.resolvedUlts.push(u.zone)
+      castUlt(s, u, c.target)
+    }
   }
 
   if (!s.winner) {
+    combatAuras(kitApi(s))
     log(s, 'Phase 2 — Basic attacks (Haste, then AGI → UNI → INT → STR → Creeps, Slowed last)', 'phase')
     const isSlowed = (u: Unit) => u.status.slowed && !u.status.haste
     const alive = Object.values(s.units).filter((u) => !u.dead)
@@ -1748,8 +2125,11 @@ export function resolveRound(state: GameState): GameState {
         for (const tier of ['t1', 't2'] as const) {
           // Only a tower that took damage this round and is still standing fires back.
           if (!s.towersHit.includes(towerKey(defender, lane, tier)) || tw[tier] <= 0) continue
+          if (s.silencedTowers.includes(`${defender}:${lane}`)) continue
           const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
-          const front = targetableLineup(s, other(defender), lane)[0]
+          const ids = targetableLineup(s, other(defender), lane)
+          const creep = ids.find((id) => s.units[id].kind === 'creep' || s.units[id].kind === 'siege')
+          const front = creep ?? ids[0]
           fired = true
           if (!front) {
             log(s, `${label} has no attacker left to fire at.`, 'info')
@@ -1767,7 +2147,7 @@ export function resolveRound(state: GameState): GameState {
     s.phase = 'gameover'
     return s
   }
-  log(s, `Rotation — each side may move one hero (${PLAYER_LABEL[favoredPlayer(s.round)]} first)`, 'phase')
+  log(s, `Rotation — each side may move one hero (${PLAYER_LABEL[favoredPlayer(s.round, s.cycle)]} first)`, 'phase')
   for (const p of PLAYERS) s.players[p].rotated = false
   s.phase = 'rotate'
   return s
@@ -1779,7 +2159,8 @@ export function resolveRound(state: GameState): GameState {
 export function rotationTargets(s: GameState, uid: string): ZoneId[] {
   const u = s.units[uid]
   if (!u || u.dead || u.kind !== 'hero' || u.owner === 'neutral' || s.phase !== 'rotate') return []
-  if (s.players[u.owner].rotated || u.status.rooted || u.status.stunned || u.status.banished) return []
+  if (s.players[u.owner].rotated || u.status.rooted || u.status.stunned || u.status.feared || u.status.banished) return []
+  if (hasTag(u, 'tpRotate')) return ZONES.filter((z) => z !== u.zone)
   const zones = [...ADJACENT[u.zone]]
   if (isLane(u.zone)) {
     const tw = s.players[u.owner].structures.towers[u.zone]
@@ -1799,10 +2180,8 @@ export function rotateHero(state: GameState, p: PlayerId, uid: string, zone: Zon
   const s = clone(state)
   const u = s.units[uid]
   const from = u.zone
-  removeFromBoard(s, u)
-  u.zone = zone
+  relocate(s, u, zone, false, 'move')
   u.placedRound = s.round
-  s.zones[zone][p].push(u.uid)
   s.players[p].rotated = true
   log(s, `${fullName(u)} rotates from ${ZONE_LABEL[from]} to ${ZONE_LABEL[zone]}.`, tone(p))
   return s
@@ -1822,6 +2201,7 @@ export function endRotation(state: GameState): GameState {
 
   if (!s.winner) {
     log(s, 'Cleanup', 'phase')
+    endStep(kitApi(s))
     for (const u of Object.values(s.units)) {
       if (!u.dead && u.status.poisonedBy) {
         dealDamage(s, null, u.uid, 1, 'passive', { label: 'Poison Sting', sourceOwner: u.status.poisonedBy })
@@ -1831,9 +2211,9 @@ export function endRotation(state: GameState): GameState {
 
   for (const u of Object.values(s.units)) {
     if (u.dead) {
-      if (u.kind === 'hero') {
-        if (rules(s).buyback && u.owner !== 'neutral' && !u.buybackUsed) s.players[u.owner].grave.push(u.cardId!)
-        else s.unitDiscard.push(unitCard(u.cardId!, !!u.buybackUsed))
+      if (u.kind === 'hero' && !u.copy) {
+        if (rules(s).buyback && u.owner !== 'neutral' && !u.buybackUsed && !u.buybackBlocked) s.players[u.owner].grave.push(u.cardId!)
+        else if (u.cardId) s.unitDiscard.push(unitCard(u.cardId, !!u.buybackUsed))
       }
       if (u.kind === 'creep' || u.kind === 'siege') s.unitDiscard.push(unitCard(u.kind))
       removeFromBoard(s, u)
@@ -1846,6 +2226,8 @@ export function endRotation(state: GameState): GameState {
     }
   }
   for (const p of PLAYERS) s.players[p].glyph = false
+  s.silencedTowers = []
+  s.resolvedUlts = []
 
   if (!s.winner) {
     log(s, 'Income', 'phase')

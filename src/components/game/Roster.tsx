@@ -13,6 +13,7 @@ export interface RosterActions {
   onMove: (uid: string, dir: -1 | 1) => void
   onReturn: (uid: string) => void
   onUlt: (u: Unit) => void
+  onMorph: (uid: string) => void
   onFocus: (camp: CampId, focus: 'neutral' | 'enemy') => void
 }
 
@@ -76,7 +77,8 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
   const declared = !!declaration
   const reason = u.kind === 'hero' ? ultBlockReason(s, u.uid) : null
   const picking = actions.ultCaster === u.uid
-  const nextCost = u.kind === 'hero' && u.owner !== 'neutral' && s.players[u.owner].arcane ? 0 : ultCost(u)
+  const nextCost = u.kind === 'hero' && u.owner !== 'neutral' && s.players[u.owner].arcane ? 0 : ultCost(u, s)
+  const morph = u.cardId === 'morphling' ? (u.morph ?? 'AGI') : undefined
   return (
     <li
       className={cn(
@@ -104,11 +106,22 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
           <span className="block truncate text-xs text-zinc-200">{unitName(u)}</span>
           <span className="block text-[10px] text-zinc-500">
             {u.hp}/{u.maxHp} hp{u.hp < u.maxHp && u.kind === 'hero' ? ' · Wounded' : ''}
-            {u.kind === 'hero' ? ` · ULT ${ultCost(u)} XP` : ''}
+            {u.kind === 'hero' ? ` · ULT ${nextCost} XP` : ''}
+            {morph ? ` · ${morph}` : ''}
             {u.kind === 'illusion' ? ' · decoy' : ''}
           </span>
         </span>
       </button>
+      {s.phase === 'assign' && morph && (
+        <button
+          type="button"
+          onClick={() => actions.onMorph(u.uid)}
+          title="Swap between Agility and Strength during Assign"
+          className="shrink-0 rounded-md bg-violet-500/20 px-2 py-1 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/30"
+        >
+          Morph
+        </button>
+      )}
       {s.phase === 'assign' && (
         <span className="flex items-center">
           <IconBtn title="Move toward Position 1" disabled={index === 0} onClick={() => actions.onMove(u.uid, -1)}>

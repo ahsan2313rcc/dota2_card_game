@@ -1,0 +1,290 @@
+# Dota: The Ancient's Duel
+
+Rules of the current prototype. Card text on a hero, item, rune, or neutral is the specific effect. This document is the shared rulebook those cards sit on.
+
+You play Radiant. Dire is played by the opponent. Both sides take each step of the round.
+
+## Goal
+
+Destroy the enemy Ancient. The Ancient has 10 health and deals no damage.
+
+Each lane has two towers in front of that Ancient:
+
+| Structure | Health | Damage when it fires |
+| --- | --- | --- |
+| Tier 1 tower | 3 | 1 |
+| Tier 2 tower | 5 | 2 |
+| Ancient | 10 | none |
+
+Units only strike the Ancient through a lane whose Tier 1 and Tier 2 are both down. They hit Tier 1 first, then Tier 2, then the Ancient.
+
+## The board
+
+Three lanes and two jungles, in one chain:
+
+**Top — Dire Jungle — Mid — Radiant Jungle — Bot**
+
+Radiant's safe lane is Bot, then Mid, then Top. Dire's safe lane is Top, then Mid, then Bot. A lineup's front unit is Position 1.
+
+## Decks and opening
+
+One shared unit deck of 160 cards, shuffled: all 127 heroes, 25 lane creeps, and 8 siege creeps. Both players draw from it. Each side is dealt 5 cards. Spirit Bear is a summon, not a deck card.
+
+One shared item deck of 60 shop cards. One shared rune deck of 20 cards: ten runes, two copies each.
+
+The jungle deck has 15 cards: Stone Golem, Thunderhide, Ice Shaman, and Black Dragon, three each, plus one Roshan and two Tormentors.
+
+Each side hides one Glyph, one Lotus Pool, and one Twin Gate under its Tier 1 towers, and the same three cards under its Tier 2 towers. During round 1, in Draw or Assign, a player may swap two hidden cards of the same tier.
+
+Before the first decision, round 1 upkeep has already happened, so each side starts that decision with 1 Gold and 1 XP, and both camps have spawned.
+
+## Hand, board, and placement
+
+The hand limit is 7. Runes and tower cards do not use a slot. Shop cards, heroes, creeps, the Aegis, and the Refresher Shard do. A rune or tower card is still received when the hand is full. Any other card is lost.
+
+You may place up to 3 heroes per round, and have up to 5 heroes on the board. Creeps do not count toward either limit. During Assign you may return a unit you placed this round to your hand, and you may reorder a lineup. Rooted units cannot be reordered.
+
+Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lanes only. The enemy jungle is entered by rotation, not by playing a card into it.
+
+## The round
+
+1. **Upkeep.** Fountain, then income, then empty camps refill.
+2. **Draw.** Spend Gold to draw, and buy heroes back from the grave.
+3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
+4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
+5. **Items.** Play shop cards, runes, tower cards, and boss rewards. They resolve immediately.
+6. **Ultimates.** Declare casts. They resolve in the next step.
+7. **Resolution.** Ultimates, then basic attacks, then towers.
+8. **Rotation.** Each side may move up to 2 heroes.
+9. **Cleanup.** End-of-round effects, poison, deaths, and status reset.
+10. **Income.** Kill Gold and lane XP.
+11. **Report.** Then the next round begins at Upkeep.
+
+Odd rounds are Day and Radiant has priority. Even rounds are Night and Dire has priority. Dawnbreaker's ultimate forces Day for the rest of that round. Night Stalker's and Luna's ultimates force Night. The forced clock ends at the next Upkeep. Priority breaks ties: safe lane, then mid, then off lane, then own jungle, then enemy jungle, then the favored side, then the unit closer to Position 1.
+
+## Economy
+
+Gold and XP are not reset between rounds. Whatever you do not spend is still there next round.
+
+### Gold in
+
+| Source | Amount | When |
+| --- | --- | --- |
+| Upkeep | 1 | Start of every round |
+| Opened lane | +1 per lane where you destroyed both enemy towers | Every later upkeep. Permanent. |
+| Enemy hero killed by your unit | 1 per hero | Income, after Cleanup. Creeps do not pay this. Tower kills do not pay this. |
+| Neutral camp cleared | 1, plus a rune | Immediately |
+| Your tower falls | 1, plus that tower's hidden card | Immediately |
+| Bounty Rune | 1 | When played |
+| Bounty Hunter's attacks, Alchemist's creep deaths, and similar card text | as printed | When the card says |
+
+### Gold out
+
+| Sink | Cost |
+| --- | --- |
+| Draw the top card of the unit deck, or draw a shop card | 1 each. Repeat until you stop, run out of Gold, fill the hand, or empty that deck. |
+| Play a shop card | 1, 2, or 3, printed on the card. Single use. |
+| Buyback | 2, or 3 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero must fit in your hand. |
+
+Runes, tower cards, the Aegis, and the Refresher Shard cost no Gold.
+
+There is no Gold cap. Once the hand is full, drawing stops, and Gold from upkeep, opened lanes, and kills has nowhere to go except a shop card you already hold or a buyback.
+
+### XP in
+
+| Source | Amount | When |
+| --- | --- | --- |
+| Upkeep | 1 | Start of every round |
+| Crystal Maiden on your board | +1 more at upkeep for each one | Upkeep |
+| Lane held | 1 per lane that contains a living hero of yours | Income. Jungle heroes do not count. A lane with only creeps does not count. |
+| Neutral camp cleared | 1 | Immediately |
+| Roshan | 3 to the side that claims him | When the reward is paid |
+| Wisdom Rune, Clarity, and card text | as printed | When played or when the card says |
+
+Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
+
+### XP out
+
+The only spend is an ultimate.
+
+The first cast of a deployment costs 1 XP, the next 2, then 3, and so on. Dying and being played again starts that hero back at 1. Tinker's cost stays 1. If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune makes the next declared cast free, and the cost still climbs afterward. Refresher Shard sets that hero's cost back to 1. Refresher Orb casts the chosen ultimate a second time on the same target and does not raise the cost again.
+
+A cast that fizzles refunds its XP, or restores the Arcane Rune if that paid for it. A cast fizzles when the caster is stunned, silenced, feared, banished, or dead, or the target is gone.
+
+There is no XP cap. Lane XP keeps arriving even when every living hero has become too expensive to cast.
+
+## Buyback, towers, and the fountain
+
+A hero's first death puts the card in its owner's grave, unless a card says it cannot be bought back, in which case it goes to the shared discard. Buyback returns the most recent choice from the grave to hand and marks it. The next death of that hero puts the card back into the shared deck's discard, not the grave. Copies are removed and do not enter the grave.
+
+When your tower falls, you gain 1 Gold and that tower's face-down card. The card does not use a hand slot.
+
+At the start of the round, each of your heroes heals 1 if they are in a lane where you have no towers left. Heroes in the jungle do not get this heal. Other heals, such as a Salve or Lotus Pool, restore a hero to Healthy unless the hero is Cursed.
+
+## Combat
+
+A hero has 2 health: Healthy, then Wounded, then slain. Health persists from round to round. Lane creeps and siege creeps have 1 health. Creeps stay on the board until killed.
+
+A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card bonuses, minus Enfeeble, to a minimum of 0. It hits enemy Position 1. With no enemy left in the zone, a unit in a lane hits the next structure there. Siege creeps deal 2 to structures. Divine Rapier makes a hero's basic attacks kill enemy heroes.
+
+**Attribute counter.** Agility counters Strength, Strength counters Intelligence, Intelligence counters Agility. Universal is outside the loop. A basic attack against the countered attribute is lethal: it deals the target's current health. Neutrals have attributes and can be countered. The lethal hit is only a basic attack. Magical damage, tower damage, and physical damage from an ultimate do not counter. After the lethal amount is chosen, a Stone Golem still takes at most 1 from that hit.
+
+**Order.** Hastened units attack first. Then Agility, Universal, Intelligence, Strength, then units with no attribute (creeps). Slowed units attack after everyone else, in that same order, unless they also have Haste. Ultimates resolve earlier: Strength, Intelligence, Universal, Agility. Ties use the lane and day/night priority above.
+
+**Towers.** A tower fires only if it took damage this round and is still standing. Glyph prevents the damage, so a fortified tower does not fire. A firing tower prefers a lane creep or siege creep in the attacking lineup, otherwise Position 1. Tier 1 deals 1. Tier 2 deals 2.
+
+**Physical and magical.** Physical damage is basic attacks, towers, reflected damage, and ultimate or item damage printed as physical. Magical damage is ultimates, passives, and items that are not printed as physical. Immunity blocks magical damage and debuffs from enemies. Damage a card deals to itself still lands. Ethereal blocks physical damage and takes 1 extra magical damage. Invulnerable blocks all damage except self-damage. Banish is untargetable and invulnerable.
+
+**Stone Golem** is immune to magical ultimate damage, and every hit it does take is capped at 1. **Roshan** ignores the first damage each round.
+
+## Jungle
+
+Each jungle holds one camp. A camp stays until it is killed. An empty camp refills at the next Upkeep.
+
+The side that arrived first holds the camp. A tie goes to the owner of that jungle: Radiant Jungle to Radiant, Dire Jungle to Dire. The holder chooses, each round, whether its units attack the neutral or the enemy. A contesting unit must attack the holder.
+
+Clearing a normal neutral pays 1 XP, 1 Gold, and one rune card to the killer's side.
+
+**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. While he is at full health he Roars at the start of ultimate resolution: Disarm and 1 damage to each contesting unit. His bounty is 3 XP and the Aegis.
+
+**Tormentor** is Universal, 2 health, and never attacks. It gains 1 Shield at the start of resolution if it has none. Reflection returns the damage to the attacker and the same amount to the other side's Position 1 in that camp. A Shield blocks reflected damage. Break turns Reflection off. Its bounty is a Refresher Shard.
+
+A boss reward goes to the side that fought it, even if every one of its heroes died. If both sides were present, it goes to the only side that still has a living hero in the camp. If both do, or neither does, it goes to the owner of that jungle.
+
+## Rotation
+
+After combat, each side may move up to 2 heroes, one step each. A hero moves at most once. The favored side takes both of its moves first. Skipping spends whatever moves are left.
+
+The step follows the chain Top — Dire Jungle — Mid — Radiant Jungle — Bot. From a lane where you have no towers left, a hero may also step along the base: Top — Mid — Bot.
+
+Rooted, stunned, feared, and banished heroes cannot move. Tinker and Nature's Prophet may teleport to any zone. Nature's Prophet gains 1 Shield when that teleport happens. A Town Portal Scroll, played in the Item step, moves one allied hero who is not Rooted to any lane.
+
+## Statuses
+
+Round statuses end at Cleanup. Health, permanent attack bonuses, and the ultimate-cost counter remain. Illusions vanish. Poison deals 1 damage at Cleanup before bodies are removed.
+
+| Status | Effect |
+| --- | --- |
+| Stun | Skips the ultimate and the basic attack. |
+| Silence | Skips the ultimate. |
+| Break | The passive is off. |
+| Disarm | Skips the basic attack. |
+| Slow | The basic attack waits until every unslowed unit has attacked. |
+| Haste | Attacks before everyone else. |
+| Evade | Dodges the next incoming basic attack. |
+| Blind | Basic attacks miss, including a swing at a tower. |
+| Accuracy | Attacks cannot be evaded and ignore Blind. |
+| Pierce | The attack ignores Shield and damage negation. |
+| Amplify | Basic attack damage +1. |
+| Enfeeble | Basic attack damage −1. |
+| Root | Cannot change zone or position. |
+| Banish | Untargetable and invulnerable. |
+| Invisible | Untargetable. The unit can still attack. |
+| Reveal | The unit can be targeted again. A Banished unit can still be invulnerable. |
+| Immunity | Blocks magical damage and debuffs from enemies. Self-damage still lands. |
+| Ethereal | Blocks physical damage. Magical damage against it is increased by 1. |
+| Shield | Blocks one instance of physical damage. Pierce and Divine Rapier ignore it. |
+| Invulnerable | Blocks all damage except self-damage. |
+| Mute | This side cannot play an item on that hero. |
+| Curse | Cannot heal. |
+| Taunt | Must attack the taunting unit. |
+| Fear | Cannot cast, attack, or move. The passive still runs. |
+| Hex | Set to 1 health. Attacks deal no damage. |
+| Divine Rapier | Basic attacks kill enemy heroes. |
+| Bloodthorn | Takes +1 physical damage from basic attacks, and the item also Silences. |
+
+## Shop, runes, and tower cards
+
+Shop cards cost Gold and are single use. Runes drop from normal neutral kills only. Boss cards flip into their reward and flip back into the jungle deck once the reward is used.
+
+### Shop
+
+| Card | Cost | Copies | Effect |
+| --- | --- | --- | --- |
+| Town Portal Scroll | 1 | 6 | Teleport an allied hero who is not Rooted to any lane. |
+| Ward | 1 | 3 | Enemy heroes who enter this lane are face-up at the next Reveal. |
+| Smoke | 1 | 3 | Allied heroes placed in this lane stay hidden at the next Reveal. |
+| Dust | 1 | 3 | Mute every enemy hero in the lane. |
+| Healing Salve | 1 | 4 | Heal an allied hero to Healthy. |
+| Clarity | 1 | 3 | Gain 1 XP. |
+| Gloves of Haste | 1 | 3 | An allied hero gains Haste. |
+| Vanguard | 2 | 2 | Gain 1 Shield. |
+| Blade Mail | 2 | 2 | Reflect 1 physical damage back to the attacker. |
+| Ghost Scepter | 2 | 2 | An allied hero becomes Ethereal. |
+| Force Staff | 2 | 2 | Move an enemy hero to the back of their line. |
+| Shadow Blade | 2 | 2 | An allied hero becomes Invisible. |
+| Blink Dagger | 2 | 2 | An allied hero gains Haste and moves to Position 1. |
+| Eul's Scepter | 2 | 2 | Banish an enemy hero. |
+| Heaven's Halberd | 2 | 2 | Disarm an enemy hero. |
+| Orchid Malevolence | 2 | 2 | Silence an enemy hero. |
+| Desolator | 2 | 2 | An allied hero is Amplified. |
+| Black King Bar | 3 | 1 | An allied hero becomes Immune, and current disable effects on them end. |
+| Guardian Greaves | 3 | 1 | Heal all allied heroes in lanes. |
+| Assault Cuirass | 3 | 1 | Haste all allied heroes in lanes. |
+| Shiva's Guard | 3 | 1 | Slow all enemy heroes in a lane. |
+| Refresher Orb | 3 | 1 | That hero's ultimate is cast twice, both times on the chosen target. |
+| Satanic | 3 | 1 | An allied hero cannot die, and their basic attacks heal them. |
+| Bloodthorn | 3 | 1 | Silence an enemy hero. They take +1 physical damage from attacks. |
+| Scythe of Vyse | 3 | 1 | Hex an enemy hero. |
+| Abyssal Blade | 3 | 1 | Stun an enemy hero. |
+| Butterfly | 3 | 1 | An allied hero Evades the next attack. |
+| Heart of Tarrasque | 3 | 1 | An allied hero heals at the end of the turn. |
+| Eye of Skadi | 3 | 1 | An allied hero's basic attacks apply Slow and Curse. |
+| Divine Rapier | 3 | 1 | An allied hero's basic attacks kill enemy heroes. |
+| Dagon | 3 | 1 | Deal 2 magical damage to an enemy hero. |
+| Monkey King Bar | 3 | 1 | Accuracy, and basic attacks deal +1 magical damage. |
+
+### Runes
+
+Two copies each. They cost nothing and do not use a hand slot.
+
+| Rune | Effect |
+| --- | --- |
+| Bounty | Gain 1 Gold. |
+| Regeneration | Heal an allied hero to Healthy. |
+| Double Damage | +1 basic attack damage this round. |
+| Shield | Block the next instance of attack damage this round. |
+| Arcane | Your next ultimate costs 0 XP. The following cast still costs more. |
+| Illusion | A 1 health decoy with no attack steps in front of an allied hero. It vanishes at Cleanup. |
+| Invisibility | An allied hero is untargetable by enemies this round. It can still attack. |
+| Haste | An allied hero attacks first. |
+| Wisdom | Gain 1 XP. |
+| Water | Remove disables and poison from an allied hero. |
+
+### Tower cards
+
+Free, and they do not use a hand slot. You get one when that tower falls.
+
+| Card | Effect |
+| --- | --- |
+| Glyph of Fortification | Your towers take no damage this round, so they do not fire. |
+| Lotus Pool | Heal all your heroes to Healthy. |
+| Twin Gate | Teleport all your heroes who are not Rooted to one lane. |
+
+### Boss rewards
+
+| Reward | Effect |
+| --- | --- |
+| Aegis of the Immortal | If that hero is slain this round, it revives Healthy. Then Roshan returns to the jungle deck. |
+| Refresher Shard | That hero's next ultimate costs 1 XP again. Then the Tormentor returns to the jungle deck. |
+
+## Heroes
+
+Every deck hero has an attribute, a melee or ranged attack, a passive, and an ultimate. The words on the card are the effect. Passives do not work while the hero is Broken or dead.
+
+An ultimate is aimed at the caster's own lane or zone unless the card names another lane, any zone, an adjacent zone, or the whole board. A hero can cast every round while it is in play. The XP cost climbs with each successful cast of that deployment, as described under Economy.
+
+## Neutrals
+
+| Camp | Attribute | Health | Attack |
+| --- | --- | --- | --- |
+| Stone Golem | Strength | 2 | Position 1. Hits against it are capped at 1. Immune to magical ultimate damage. |
+| Thunderhide | Agility | 2 | Haste. Hits every contesting enemy hero and applies Slow. |
+| Ice Shaman | Intelligence | 2 | Curses units in the camp. Hits each Position 1 for 1 and Silences them. |
+| Black Dragon | Universal | 2 | Accuracy. Hits every contesting unit. |
+| Roshan | Universal | 3 | Ignores the first damage each round. Hits every enemy. Roars while at full health. |
+| Tormentor | Universal | 2 | Does not attack. Shield and Reflection, as above. |
+
+## What this prototype does not include
+
+Map cards, hot-seat play, and online multiplayer.

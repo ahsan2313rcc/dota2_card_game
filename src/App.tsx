@@ -395,7 +395,7 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold to draw the top card of the shared deck (both sides use it), or an item. Buyback is ${buybackCost(s, HUMAN)} Gold, once per hero, and only from the last ${BUYBACK_WINDOW} heroes in the shared discard.`
+      hint = `Spend 1 Gold to draw the top card of the shared deck (both sides use it), or an item. Buyback is ${buybackCost(s, HUMAN)} Gold, once per hero, for any of the last ${BUYBACK_WINDOW} heroes in the shared discard.`
       cta = 'Done drawing'
       break
     case 'assign':
@@ -478,17 +478,16 @@ function ActionBar({
             <Skull className="size-3.5" /> Last {Math.min(BUYBACK_WINDOW, s.heroDiscard.length)} discarded · buyback {buybackCost(s, HUMAN)} Gold
           </span>
           {[...buybackWindow(s)].reverse().map((h, i) => {
-            const mine = h.owner === HUMAN
-            const reason = mine ? buybackBlockReason(s, HUMAN, h.cardId) : `${PLAYER_LABEL[h.owner]}'s hero`
-            if (!mine) {
-              return (
-                <span key={`${h.cardId}-${i}`} className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-500" title={reason ?? undefined}>
-                  {getHero(h.cardId).name}
-                </span>
-              )
-            }
+            const reason = buybackBlockReason(s, HUMAN, h.cardId)
             return (
-              <Button key={`${h.cardId}-${i}`} variant="outline" size="xs" disabled={!!reason} title={reason ?? undefined} onClick={() => onBuyback(h.cardId)}>
+              <Button
+                key={`${h.cardId}-${i}`}
+                variant="outline"
+                size="xs"
+                disabled={!!reason}
+                title={reason ?? `${PLAYER_LABEL[h.owner]}'s hero`}
+                onClick={() => onBuyback(h.cardId)}
+              >
                 {getHero(h.cardId).name}
               </Button>
             )

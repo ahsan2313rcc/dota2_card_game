@@ -158,7 +158,7 @@ function goldToHold(s: GameState, p: PlayerId): number {
     const affordable = costs.filter((c) => c <= pl.gold)
     itemHold = affordable.length ? Math.max(...affordable) : Math.min(...costs)
   }
-  const buybackHold = buybackChoices(s, p).length > 0 && heroesOnBoard(s, p).length < 2 ? buybackCost(s, p) : 0
+  const buybackHold = buybackChoices(s).length > 0 && heroesOnBoard(s, p).length < 2 ? buybackCost(s, p) : 0
   return Math.max(itemHold, buybackHold)
 }
 
@@ -167,7 +167,7 @@ export function aiDraw(state: GameState, p: PlayerId): GameState {
   for (let guard = 0; guard < 2; guard++) {
     const pl = s.players[p]
     const heroesHeld = pl.hand.filter((c) => c.type === 'hero').length
-    const choice = buybackChoices(s, p).at(-1)
+    const choice = buybackChoices(s).at(-1)
     const id = choice?.cardId
     if (!id || heroesHeld >= 2 || heroesOnBoard(s, p).length + heroesHeld >= BOARD_LIMIT) break
     if (buybackBlockReason(s, p, id)) break

@@ -58,9 +58,9 @@ export function RulesDialog() {
                 creeps and 8 siege creeps. You start with 5 cards from that deck. The item deck is 60 shop cards. Playing
                 one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two copies). Runes are free and do not
                 count toward the hand limit.
-                Dead heroes from both sides go into one shared discard. Buyback returns one of your heroes from the last 10
-                in that pile for 4 Gold, or 5 if you have more towers standing than the enemy. Each hero can be bought back
-                only once.
+                Dead heroes from both sides go into one shared discard. Buyback returns any hero from the last 10 in that
+                pile, whoever it belonged to, for 4 Gold, or 5 if you have more towers standing than the enemy. Each hero
+                can be bought back only once.
               </li>
               <li>
                 Assign: place up to 3 heroes (board limit 5) into lanes or your own jungle, and creep cards into lanes. The enemy jungle is not an assign target. Position 1

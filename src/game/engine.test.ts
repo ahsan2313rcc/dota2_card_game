@@ -437,7 +437,7 @@ describe('comeback rules and rotation', () => {
     expect(after.players.radiant.hand.some((c) => c.cardId === 'axe' && c.buybackUsed)).toBe(true)
   })
 
-  it('buyback only offers your heroes among the last 10 in the shared discard', () => {
+  it('buyback can take any of the last 10 heroes, from either side', () => {
     const s = newGame(undefined, 69)
     const ids = HEROES.slice(0, 11).map((h) => h.id)
     s.heroDiscard = ids.map((cardId, i) => ({
@@ -445,15 +445,14 @@ describe('comeback rules and rotation', () => {
       owner: i === 0 || i === ids.length - 1 ? 'radiant' : 'dire',
       buybackUsed: false,
     }))
-    s.players.radiant.gold = 4
-    s.players.dire.gold = 4
+    s.players.radiant.gold = 8
     expect(buybackBlockReason(s, 'radiant', ids[0])).toMatch(/last 10/)
-    expect(buybackBlockReason(s, 'radiant', ids[1])).toMatch(/other side/)
-    expect(buybackBlockReason(s, 'dire', ids[1])).toBeNull()
-    const bought = buyback(s, 'radiant', ids[10])
-    expect(bought.heroDiscard.some((h) => h.cardId === ids[10])).toBe(false)
-    expect(bought.players.radiant.hand.some((c) => c.cardId === ids[10] && c.buybackUsed)).toBe(true)
-    expect(buyback(s, 'radiant', ids[1])).toBe(s)
+    expect(buybackBlockReason(s, 'radiant', ids[1])).toBeNull()
+    const stolen = buyback(s, 'radiant', ids[1])
+    expect(stolen.heroDiscard.some((h) => h.cardId === ids[1])).toBe(false)
+    expect(stolen.players.radiant.hand.some((c) => c.cardId === ids[1] && c.buybackUsed)).toBe(true)
+    expect(stolen.players.radiant.gold).toBe(4)
+    expect(stolen.log.some((l) => l.text.includes("Dire's") && l.text.includes('buys back'))).toBe(true)
   })
 
   it('a hero can be bought back only once, then stays in the shared discard', () => {

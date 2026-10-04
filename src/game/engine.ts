@@ -738,16 +738,16 @@ export function buybackWindow(s: GameState) {
   return s.heroDiscard.slice(-BUYBACK_WINDOW)
 }
 
-/** This side's heroes inside the window that have not already been bought back. */
-export function buybackChoices(s: GameState, p: PlayerId) {
-  return buybackWindow(s).filter((h) => h.owner === p && !h.buybackUsed && !h.buybackBlocked)
+/** Heroes inside the window that either side may still buy. */
+export function buybackChoices(s: GameState) {
+  return buybackWindow(s).filter((h) => !h.buybackUsed && !h.buybackBlocked)
 }
 
-function buybackIndex(s: GameState, p: PlayerId, heroId: string): number {
+function buybackIndex(s: GameState, heroId: string): number {
   const start = Math.max(0, s.heroDiscard.length - BUYBACK_WINDOW)
   for (let i = s.heroDiscard.length - 1; i >= start; i--) {
     const h = s.heroDiscard[i]
-    if (h.cardId === heroId && h.owner === p && !h.buybackUsed && !h.buybackBlocked) return i
+    if (h.cardId === heroId && !h.buybackUsed && !h.buybackBlocked) return i
   }
   return -1
 }
@@ -756,15 +756,9 @@ export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string): s
   if (!rules(s).buyback) return 'Buyback is off'
   if (s.phase !== 'draw') return 'Buyback happens during the Draw step'
   const pl = s.players[p]
-  const mine = s.heroDiscard.filter((h) => h.cardId === heroId && h.owner === p)
-  if (buybackIndex(s, p, heroId) < 0) {
-    if (mine.length === 0) {
-      return s.heroDiscard.some((h) => h.cardId === heroId) ? 'That hero belongs to the other side' : 'Not in the shared discard'
-    }
-    const recent = buybackWindow(s).some((h) => h.cardId === heroId && h.owner === p && !h.buybackUsed && !h.buybackBlocked)
-    if (!recent && !buybackWindow(s).some((h) => h.cardId === heroId && h.owner === p)) {
-      return `Only the last ${BUYBACK_WINDOW} discarded heroes can be bought back`
-    }
+  if (buybackIndex(s, heroId) < 0) {
+    if (!s.heroDiscard.some((h) => h.cardId === heroId)) return 'Not in the shared discard'
+    if (!buybackWindow(s).some((h) => h.cardId === heroId)) return `Only the last ${BUYBACK_WINDOW} discarded heroes can be bought back`
     return 'This hero cannot be bought back'
   }
   if (handCount(pl) >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
@@ -777,11 +771,13 @@ export function buyback(state: GameState, p: PlayerId, heroId: string): GameStat
   const s = clone(state)
   const pl = s.players[p]
   const cost = buybackCost(s, p)
-  const index = buybackIndex(s, p, heroId)
+  const index = buybackIndex(s, heroId)
+  const fallen = s.heroDiscard[index]
   pl.gold -= cost
   s.heroDiscard.splice(index, 1)
   pl.hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: heroId, buybackUsed: true })
-  log(s, `${PLAYER_LABEL[p]} buys back ${getHero(heroId).name} for ${cost} Gold. It cannot be bought back again.`, tone(p))
+  const whose = fallen.owner === p ? '' : `${PLAYER_LABEL[fallen.owner]}'s `
+  log(s, `${PLAYER_LABEL[p]} buys back ${whose}${getHero(heroId).name} for ${cost} Gold. It cannot be bought back again.`, tone(p))
   return s
 }
 

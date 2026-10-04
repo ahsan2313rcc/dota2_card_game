@@ -336,7 +336,7 @@ export interface GameState {
   /** One hero-and-creep deck for both players. `'creep'` and `'siege'` card ids are creeps. */
   unitDeck: UnitDeckCard[]
   unitDiscard: UnitDeckCard[]
-  /** Slain heroes from both sides, oldest first. Buyback may take one of your heroes from the last 10. */
+  /** Slain heroes from both sides, oldest first. Buyback may take any of the last 10. */
   heroDiscard: HeroDiscard[]
   itemDeck: string[]
   itemDiscard: string[]

@@ -49,7 +49,7 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 ## The round
 
 1. **Upkeep.** Fountain, then income, then empty camps refill.
-2. **Draw.** Spend Gold to draw, and buy one of your heroes back from the last 10 in the shared discard.
+2. **Draw.** Spend Gold to draw, and buy any of the last 10 heroes back from the shared discard.
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
 4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
 5. **Items.** Play shop cards, runes, tower cards, and boss rewards. They resolve immediately.
@@ -84,7 +84,7 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 | --- | --- |
 | Draw the top card of the unit deck, or draw a shop card | 1 each. Repeat until you stop, run out of Gold, fill the hand, or empty that deck. |
 | Play a shop card | 1, 2, or 3, printed on the card. Single use. |
-| Buyback | 4, or 5 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero must be one of yours among the last 10 in the shared discard, and it must fit in your hand. |
+| Buyback | 4, or 5 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero can belong to either side, as long as it is among the last 10 in the shared discard and it fits in your hand. |
 
 Runes, tower cards, the Aegis, and the Refresher Shard cost no Gold.
 
@@ -115,7 +115,7 @@ There is no XP cap. Lane XP keeps arriving even when every living hero has becom
 
 ## Buyback, towers, and the fountain
 
-Every slain hero, from either side, goes into one shared discard. The most recent death is at the top. Buyback, during the Draw step, can take one of your heroes from the last 10 in that pile. It costs 4 Gold, or 5 if you have more towers standing than the enemy. A hero can be bought back only once. A card that says it cannot be bought back stays in the pile and cannot be chosen. Older than the last 10, it waits there until the unit deck runs out and the pile is shuffled back in. Copies are removed and do not enter the discard. Creeps go to their own discard, not this pile.
+Every slain hero, from either side, goes into one shared discard. The most recent death is at the top. Buyback, during the Draw step, can take any hero from the last 10 in that pile, whether it was yours or the enemy's. It costs 4 Gold, or 5 if you have more towers standing than the enemy. The card comes to your hand. A hero can be bought back only once. A card that says it cannot be bought back stays in the pile and cannot be chosen. Older than the last 10, it waits there until the unit deck runs out and the pile is shuffled back in. Copies are removed and do not enter the discard. Creeps go to their own discard, not this pile.
 
 When your tower falls, you gain 1 Gold and that tower's face-down card. The card does not use a hand slot.
 

@@ -63,7 +63,7 @@ export function RulesDialog() {
                 shared deck.
               </li>
               <li>
-                Assign: place up to 3 heroes (board limit 5) into lanes or jungles, and creep cards into lanes. Position 1
+                Assign: place up to 3 heroes (board limit 5) into lanes or your own jungle, and creep cards into lanes. The enemy jungle is not an assign target. Position 1
                 defends first.
               </li>
               <li>Reveal: both sides flip.</li>
@@ -76,7 +76,7 @@ export function RulesDialog() {
               </li>
               <li>Resolution: Ultimates (STR → INT → UNI → AGI), basic attacks (AGI → UNI → INT → STR → creeps, Slowed last), then tower aggro.</li>
               <li>
-                Rotation: each side may move one hero to an adjacent zone along Top · Dire Jungle · Mid · Radiant Jungle ·
+                Rotation: each side may move up to 2 heroes, one step each, along Top · Dire Jungle · Mid · Radiant Jungle ·
                 Bot (Day: Radiant first, Night: Dire first). Rooted or stunned heroes stay. From a lane with no allied towers
                 a hero may walk lane to lane (Top · Mid · Bot).
               </li>

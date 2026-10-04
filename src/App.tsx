@@ -27,6 +27,7 @@ import {
   itemLanes,
   itemTargets,
   rotationTargets,
+  assignableZones,
   placeBlockReason,
   ultBlockReason,
   ultNeedsTarget,
@@ -35,7 +36,7 @@ import {
   type DrawType,
 } from '@/game/engine'
 import { HUMAN, useGame } from '@/game/useGame'
-import { HAND_LIMIT, LANES, PLACE_PER_ROUND, ZONES, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
+import { HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
 
 export default function App() {
   const [s, dispatch] = useGame()
@@ -127,7 +128,7 @@ export default function App() {
   let dropLabel = 'Place in'
   if (s.phase === 'assign' && selectedCard) {
     if (selectedCard.type === 'creep') dropZones = LANES
-    else if (selectedCard.type === 'hero' && !placeBlockReason(s, HUMAN)) dropZones = ZONES
+    else if (selectedCard.type === 'hero' && !placeBlockReason(s, HUMAN)) dropZones = assignableZones(HUMAN)
   } else if (s.phase === 'items' && selectedCard && selectedItem) {
     if (selectedItem.target === 'lane') dropZones = itemLanes(s, HUMAN, selectedCard.cardId)
     else if (selectedItem.target === 'allyHeroToLane' && tpHero) dropZones = itemLanes(s, HUMAN, selectedCard.cardId, tpHero)
@@ -398,8 +399,8 @@ function ActionBar({
     case 'assign':
       title = 'Assign'
       hint = selectedCard
-        ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes or jungles)'}.`
-        : `Select a hero or creep card, then a green + on the map. Reorder in "Your board". Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round.`
+        ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes or your own jungle)'}.`
+        : `Select a hero or creep card, then a green + on the map. Heroes go to a lane or your jungle. Creeps go to lanes. Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round.`
       cta = 'Lock in & reveal'
       break
     case 'items':
@@ -429,8 +430,8 @@ function ActionBar({
       const first = favoredPlayer(s.round, s.cycle) === HUMAN
       hint = rotator
         ? `Click a green + to move ${getHero(s.units[rotator].cardId!).name} from ${ZONE_LABEL[s.units[rotator].zone]}.`
-        : `Move one hero to an adjacent zone (Top · Dire Jungle · Mid · Radiant Jungle · Bot). ${first ? 'Day: you move first.' : 'Night: Dire moved first.'} Heroes in a lane with no allied towers can walk lane to lane.`
-      cta = 'Skip rotation'
+        : `Move up to ${ROTATIONS_PER_ROUND} heroes (${ROTATIONS_PER_ROUND - me.rotationsUsed} left) along Top · Dire Jungle · Mid · Radiant Jungle · Bot. ${first ? 'Day: you move first.' : 'Night: Dire moved first.'} Each hero moves once. Heroes in a lane with no allied towers can walk lane to lane.`
+      cta = me.rotationsUsed > 0 ? 'Done rotating' : 'Skip rotation'
       break
     }
     case 'report':

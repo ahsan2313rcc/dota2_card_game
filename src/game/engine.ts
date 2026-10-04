@@ -49,6 +49,7 @@ import {
   HAND_LIMIT,
   LANES,
   PLACE_PER_ROUND,
+  ROTATIONS_PER_ROUND,
   PLAYERS,
   ROSHAN_EARLIEST_ROUND,
   ROSHAN_HP,
@@ -111,6 +112,20 @@ const BASE_ADJACENT: Record<LaneId, LaneId[]> = { top: ['mid'], mid: ['top', 'bo
 
 export function jungleOwner(camp: CampId): PlayerId {
   return camp === 'radiantJungle' ? 'radiant' : 'dire'
+}
+
+export function homeJungle(p: PlayerId): CampId {
+  return p === 'radiant' ? 'radiantJungle' : 'direJungle'
+}
+
+export function enemyJungle(p: PlayerId): CampId {
+  return p === 'radiant' ? 'direJungle' : 'radiantJungle'
+}
+
+/** Lanes and your own jungle. The enemy jungle is entered by rotation, not by assigning from hand. */
+export function assignableZones(p: PlayerId): ZoneId[] {
+  const blocked = enemyJungle(p)
+  return ZONES.filter((z) => z !== blocked)
 }
 
 export function laneRole(player: PlayerId, zone: ZoneId): string {
@@ -383,7 +398,8 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     },
     glyph: false,
     arcane: false,
-    rotated: false,
+    rotationsUsed: 0,
+    rotatedUids: [],
     ward: [],
     smoke: [],
   })
@@ -620,7 +636,8 @@ function startRound(s: GameState) {
     pl.xp += 1 + xpAura
     pl.placedThisRound = 0
     pl.killsThisRound = 0
-    pl.rotated = false
+    pl.rotationsUsed = 0
+    pl.rotatedUids = []
     log(s, `Upkeep: ${PLAYER_LABEL[p]} gains ${gold} Gold and ${1 + xpAura} XP${xpAura ? ' (Arcane Aura)' : ''}.`, tone(p))
   }
 }
@@ -783,6 +800,7 @@ export function placeBlockReason(s: GameState, p: PlayerId): string | null {
 
 export function placeHero(state: GameState, p: PlayerId, handIid: string, zone: ZoneId): GameState {
   if (placeBlockReason(state, p)) return state
+  if (zone === enemyJungle(p)) return state
   const card = state.players[p].hand.find((c) => c.iid === handIid && c.type === 'hero')
   if (!card) return state
   const s = clone(state)
@@ -2153,8 +2171,11 @@ export function resolveRound(state: GameState): GameState {
     s.phase = 'gameover'
     return s
   }
-  log(s, `Rotation — each side may move one hero (${PLAYER_LABEL[favoredPlayer(s.round, s.cycle)]} first)`, 'phase')
-  for (const p of PLAYERS) s.players[p].rotated = false
+  log(s, `Rotation — each side may move ${ROTATIONS_PER_ROUND} heroes (${PLAYER_LABEL[favoredPlayer(s.round, s.cycle)]} first)`, 'phase')
+  for (const p of PLAYERS) {
+    s.players[p].rotationsUsed = 0
+    s.players[p].rotatedUids = []
+  }
   s.phase = 'rotate'
   return s
 }
@@ -2165,7 +2186,9 @@ export function resolveRound(state: GameState): GameState {
 export function rotationTargets(s: GameState, uid: string): ZoneId[] {
   const u = s.units[uid]
   if (!u || u.dead || u.kind !== 'hero' || u.owner === 'neutral' || s.phase !== 'rotate') return []
-  if (s.players[u.owner].rotated || u.status.rooted || u.status.stunned || u.status.feared || u.status.banished) return []
+  const pl = s.players[u.owner]
+  if (pl.rotationsUsed >= ROTATIONS_PER_ROUND || pl.rotatedUids.includes(u.uid)) return []
+  if (u.status.rooted || u.status.stunned || u.status.feared || u.status.banished) return []
   if (hasTag(u, 'tpRotate')) return ZONES.filter((z) => z !== u.zone)
   const zones = [...ADJACENT[u.zone]]
   if (isLane(u.zone)) {
@@ -2177,7 +2200,7 @@ export function rotationTargets(s: GameState, uid: string): ZoneId[] {
 
 export function rotationBlockReason(s: GameState, p: PlayerId): string | null {
   if (s.phase !== 'rotate') return 'Not the Rotation step'
-  if (s.players[p].rotated) return 'Already rotated this round'
+  if (s.players[p].rotationsUsed >= ROTATIONS_PER_ROUND) return 'Already rotated this round'
   return null
 }
 
@@ -2188,7 +2211,8 @@ export function rotateHero(state: GameState, p: PlayerId, uid: string, zone: Zon
   const from = u.zone
   relocate(s, u, zone, false, 'move')
   u.placedRound = s.round
-  s.players[p].rotated = true
+  s.players[p].rotationsUsed++
+  s.players[p].rotatedUids.push(uid)
   log(s, `${fullName(u)} rotates from ${ZONE_LABEL[from]} to ${ZONE_LABEL[zone]}.`, tone(p))
   return s
 }
@@ -2196,7 +2220,7 @@ export function rotateHero(state: GameState, p: PlayerId, uid: string, zone: Zon
 export function passRotation(state: GameState, p: PlayerId): GameState {
   if (rotationBlockReason(state, p)) return state
   const s = clone(state)
-  s.players[p].rotated = true
+  s.players[p].rotationsUsed = ROTATIONS_PER_ROUND
   return s
 }
 

@@ -50,6 +50,14 @@ const fight = (s: GameState) => resolveRound(endItems(reveal(s)))
 const finish = (s: GameState) => endRotation(fight(s))
 
 const hero = (iid: string, cardId: string): HandCard => ({ iid, type: 'hero', cardId })
+
+/** Move a unit that was assigned legally. Combat tests still need a hero in the enemy jungle. */
+function station(s: GameState, p: 'radiant' | 'dire', uid: string, zone: GameState['units'][string]['zone']) {
+  const u = s.units[uid]
+  s.zones[u.zone][p] = s.zones[u.zone][p].filter((id) => id !== uid)
+  u.zone = zone
+  s.zones[zone][p].push(uid)
+}
 const item = (iid: string, cardId: string): HandCard => ({ iid, type: 'item', cardId })
 const logHas = (s: GameState, text: string) => s.log.some((l) => l.text.includes(text))
 
@@ -335,7 +343,8 @@ describe('jungle, Roshan and Tormentor', () => {
   it('Roshan Roars from a jungle camp while he is at full health', () => {
     let s = setup(23, [hero('a', 'sven')])
     forceCamp(s, 'direJungle', 'roshan')
-    s = placeHero(s, 'radiant', 'a', 'direJungle')
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    station(s, 'radiant', heroesOnBoard(s, 'radiant')[0].uid, 'direJungle')
     s = fight(s)
     expect(logHas(s, 'Radiant Sven is Disarmed by Roar')).toBe(true)
     expect(campNeutral(s, 'direJungle')?.hp).toBe(3)
@@ -380,7 +389,8 @@ describe('jungle, Roshan and Tormentor', () => {
   it('Tormentor: when contested, the other side’s front takes the same reflected damage', () => {
     let s = setup(53, [hero('a', 'tidehunter')], [hero('b', 'abaddon')])
     forceCamp(s, 'direJungle', 'tormentor').status.shield = 0
-    s = placeHero(s, 'radiant', 'a', 'direJungle')
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    station(s, 'radiant', heroesOnBoard(s, 'radiant')[0].uid, 'direJungle')
     s.players.radiant.campFocus.direJungle = 'neutral'
     s = placeHero(s, 'dire', 'b', 'direJungle')
     s = fight(s)
@@ -454,7 +464,24 @@ describe('comeback rules and rotation', () => {
     expect(rotationTargets(s, bot.uid).sort()).toEqual(['mid', 'radiantJungle'])
     s = rotateHero(s, 'radiant', bot.uid, 'mid')
     expect(s.units[bot.uid].zone).toBe('mid')
+    expect(rotationTargets(s, bot.uid)).toEqual([])
+    expect(rotationTargets(s, top.uid)).toEqual(['direJungle'])
+    s = rotateHero(s, 'radiant', top.uid, 'direJungle')
+    expect(s.units[top.uid].zone).toBe('direJungle')
+    expect(s.players.radiant.rotationsUsed).toBe(2)
     expect(rotationTargets(s, top.uid)).toEqual([])
+  })
+
+  it('a hero cannot be assigned straight into the enemy jungle', () => {
+    let s = setup(73, [hero('a', 'sven')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'direJungle')
+    s = placeHero(s, 'dire', 'b', 'radiantJungle')
+    expect(heroesOnBoard(s, 'radiant')).toHaveLength(0)
+    expect(heroesOnBoard(s, 'dire')).toHaveLength(0)
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'dire', 'b', 'direJungle')
+    expect(heroesOnBoard(s, 'radiant')[0].zone).toBe('radiantJungle')
+    expect(heroesOnBoard(s, 'dire')[0].zone).toBe('direJungle')
   })
 })
 

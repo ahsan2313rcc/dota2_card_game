@@ -62,7 +62,8 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 - **Roshan:** 3 HP, never before round 4 (reshuffled and redrawn). Hits every enemy in the camp and Roars while at full HP. Dual card: the killer's side gets +3 XP and Roshan flips into the Aegis; it returns to the jungle deck once used.
 - **Tormentor:** UNI, 2 HP, never attacks, Shield 1 that regenerates every round. Reflection (passive, Break stops it) returns damage to the attacker and the same amount to the other side's front line. Flips into a Refresher Shard.
 - **Boss rewards:** go to the killing side even if every attacker died. If contested, they go to the sole surviving side, otherwise to the jungle's owner.
-- **Rotation:** after combat, each side may move one hero to an adjacent zone (Top · Dire Jungle · Mid · Radiant Jungle · Bot). Day: Radiant moves first; Night: Dire first. Dawnbreaker, Night Stalker and Luna can force the clock for that round. Rooted, stunned, feared or banished heroes can't move. A hero in a lane with no allied towers may walk lane to lane. Tinker and Nature's Prophet may teleport to any zone.
+- **Assign:** heroes go to a lane or your own jungle. Creeps go to lanes. The enemy jungle is reached by rotation, not by playing a card straight into it.
+- **Rotation:** after combat, each side may move up to 2 heroes, one step each, along Top · Dire Jungle · Mid · Radiant Jungle · Bot. Day: Radiant moves first; Night: Dire first. Dawnbreaker, Night Stalker and Luna can force the clock for that round. Rooted, stunned, feared or banished heroes can't move. A hero in a lane with no allied towers may walk lane to lane. Tinker and Nature's Prophet may teleport to any zone.
 
 ### Status effects
 

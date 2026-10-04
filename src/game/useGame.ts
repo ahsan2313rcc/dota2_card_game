@@ -1,5 +1,5 @@
 import { useReducer } from 'react'
-import { aiAssign, aiDraw, aiItems, aiRotate, aiUlts, playAiRound } from './ai'
+import { aiAssign, aiDraw, aiItems, aiUlts, playAiRound, takeRotations } from './ai'
 import {
   buyback,
   cancelUlt,
@@ -26,7 +26,7 @@ import {
   unplace,
   type DrawType,
 } from './engine'
-import { isLane, type CampId, type GameState, type LaneId, type Settings, type TowerTier, type ZoneId } from './types'
+import { ROTATIONS_PER_ROUND, isLane, type CampId, type GameState, type LaneId, type Settings, type TowerTier, type ZoneId } from './types'
 
 export const HUMAN = 'radiant' as const
 export const AI = 'dire' as const
@@ -53,8 +53,10 @@ export type Action =
   | { type: 'settings'; settings: Partial<Settings> }
   | { type: 'morph'; uid: string }
 
+/** After Radiant is finished, Dire spends whatever rotations it has left. */
 function finishRotation(s: GameState): GameState {
-  return endRotation(s.players[AI].rotated ? s : aiRotate(s, AI))
+  if (s.players[HUMAN].rotationsUsed < ROTATIONS_PER_ROUND) return s
+  return endRotation(takeRotations(s, AI))
 }
 
 function reducer(s: GameState, a: Action): GameState {
@@ -93,7 +95,7 @@ function reducer(s: GameState, a: Action): GameState {
     case 'resolve': {
       // When the AI has priority it rotates first, so the human sees its move before answering.
       const r = resolveRound(aiUlts(s, AI))
-      return r.phase === 'rotate' && favoredPlayer(r.round, r.cycle) === AI ? aiRotate(r, AI) : r
+      return r.phase === 'rotate' && favoredPlayer(r.round, r.cycle) === AI ? takeRotations(r, AI) : r
     }
     case 'rotate': {
       const r = rotateHero(s, HUMAN, a.uid, a.zone)

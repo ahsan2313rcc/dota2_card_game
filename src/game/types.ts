@@ -265,8 +265,10 @@ export interface PlayerState {
   glyph: boolean
   /** Arcane rune: the next Ultimate declared costs 0 XP */
   arcane: boolean
-  /** Has used (or passed) this round's rotation */
-  rotated: boolean
+  /** How many heroes this side has rotated this round. Passing spends the rest. */
+  rotationsUsed: number
+  /** Heroes that already rotated this round. Each hero moves at most once. */
+  rotatedUids: string[]
   /** Ward: enemy heroes here are revealed at the next Reveal. */
   ward: LaneId[]
   /** Smoke: allied heroes placed here stay hidden at the next Reveal. */
@@ -358,6 +360,8 @@ export const PLAYERS: PlayerId[] = ['radiant', 'dire']
 export const HAND_LIMIT = 7
 export const BOARD_LIMIT = 5
 export const PLACE_PER_ROUND = 3
+/** Heroes each side may move during Rotation. */
+export const ROTATIONS_PER_ROUND = 2
 export const STARTING_HEROES = 5
 
 export const TOWER_HP = { t1: 3, t2: 5 } as const

@@ -32,7 +32,7 @@ import {
   ultTargets,
   ultZones,
 } from './engine'
-import { BOARD_LIMIT, CAMPS, LANES, PLAYERS, type CampId, type GameState, type LaneId, type PlayerId, type Unit, type ZoneId } from './types'
+import { BOARD_LIMIT, CAMPS, LANES, PLAYERS, ROTATIONS_PER_ROUND, type CampId, type GameState, type LaneId, type PlayerId, type Unit, type ZoneId } from './types'
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
@@ -65,18 +65,14 @@ function enemyHeroesIn(s: GameState, p: PlayerId, zone: ZoneId) {
   return lineup(s, other(p), zone).filter((uid) => s.units[uid].kind === 'hero').length
 }
 
-/** Farm the home jungle once the lanes are covered; take on bosses only with a wide board. */
+/** Farm the home jungle once the lanes are covered. The enemy jungle is not an assign target. */
 function aiPickZone(s: GameState, p: PlayerId): ZoneId {
   const onBoard = heroesOnBoard(s, p).length
   const home: CampId = p === 'radiant' ? 'radiantJungle' : 'direJungle'
-  for (const camp of [home, other(p) === 'radiant' ? 'radiantJungle' : 'direJungle'] as CampId[]) {
-    const n = campNeutral(s, camp)
-    const mine = lineup(s, p, camp).length
-    if (!n) continue
-    if (n.kind === 'neutral' && camp === home && onBoard >= 3 && mine === 0) return camp
-    if (n.kind === 'roshan' && onBoard >= 4 && mine < 2) return camp
-    if (n.kind === 'tormentor' && onBoard >= 4 && mine < 3) return camp
-  }
+  const n = campNeutral(s, home)
+  const mine = lineup(s, p, home).length
+  if (n && mine === 0 && onBoard >= 3 && n.kind === 'neutral') return home
+  if (n && onBoard >= 4 && ((n.kind === 'roshan' && mine < 2) || (n.kind === 'tormentor' && mine < 3))) return home
   const counts = LANES.map((l) => ({ lane: l, n: lineup(s, p, l).length, pri: ZONE_PRIORITY[p].indexOf(l) }))
   counts.sort((a, b) => a.n - b.n || a.pri - b.pri)
   return counts[0].lane
@@ -188,8 +184,18 @@ export function playAiRound(state: GameState): GameState {
   s = resolveRound(s)
   if (s.phase !== 'rotate') return s
   const first = favoredPlayer(s.round, s.cycle)
-  for (const p of [first, other(first)]) s = aiRotate(s, p)
+  for (const p of [first, other(first)]) s = takeRotations(s, p)
   return endRotation(s)
+}
+
+/** Use up to two rotations, then stop. A pass spends whatever is left. */
+export function takeRotations(s: GameState, p: PlayerId): GameState {
+  while (s.phase === 'rotate' && s.players[p].rotationsUsed < ROTATIONS_PER_ROUND) {
+    const before = s.players[p].rotationsUsed
+    s = aiRotate(s, p)
+    if (s.players[p].rotationsUsed === before) break
+  }
+  return s
 }
 
 /** Rotate one idle hero toward the zone where it is needed most. */

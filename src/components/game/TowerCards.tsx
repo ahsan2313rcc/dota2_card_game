@@ -64,7 +64,7 @@ export function TowerCards({ s, onSwap }: { s: GameState; onSwap: (tier: TowerTi
             <ArrowLeftRight className="size-3" /> Click two cards in the same tier to swap them (round 1 only).
           </>
         ) : (
-          'When a tower falls you gain 1 Gold and its card, outside the hand limit.'
+          'When a tower falls you gain its card, outside the hand limit.'
         )}
       </p>
     </div>

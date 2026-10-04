@@ -74,7 +74,7 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 | Opened lane | +1 per lane where you destroyed both enemy towers | Every later upkeep. Permanent. |
 | Enemy hero killed by your unit | 1 per hero | Income, after Cleanup. Creeps do not pay this. Tower kills do not pay this. |
 | Neutral camp cleared | 1, plus a rune | Immediately |
-| Your tower falls | 1, plus that tower's hidden card | Immediately |
+| Your tower falls | that tower's hidden card, and no Gold | Immediately |
 | Bounty Rune | 1 | When played |
 | Bounty Hunter's attacks, Alchemist's creep deaths, and similar card text | as printed | When the card says |
 
@@ -119,7 +119,7 @@ There is no XP cap. A Shield bought with XP, and lane XP, are where a banked poo
 
 Every slain hero, from either side, goes into one shared discard. The most recent death is at the top. Buyback, during the Draw step, can take any hero from the last 10 in that pile, whether it was yours or the enemy's. It costs 4 Gold, or 5 if you have more towers standing than the enemy. The card comes to your hand. A hero can be bought back only once. A card that says it cannot be bought back stays in the pile and cannot be chosen. Older than the last 10, it waits there until the unit deck runs out and the pile is shuffled back in. Copies are removed and do not enter the discard. Creeps go to their own discard, not this pile.
 
-When your tower falls, you gain 1 Gold and that tower's face-down card. The card does not use a hand slot.
+When your tower falls, you gain that tower's face-down card and no Gold. The card does not use a hand slot.
 
 At the start of the round, each of your heroes heals 1 if they are in a lane where you have no towers left. Heroes in the jungle do not get this heal. Other heals, such as a Salve or Lotus Pool, restore a hero to Healthy unless the hero is Cursed.
 

@@ -115,7 +115,7 @@ export function RulesDialog() {
             does not count toward the hand limit, so a full hand still keeps it. Under each side's T1 and T2 towers lie
             Glyph (your towers take no damage this round), Lotus (heal all your heroes) and Twin Gate (teleport all your
             heroes to one lane), shuffled; you may swap them within a tier in round 1. When a tower falls its owner gains
-            1 Gold and that card, which also does not count toward the hand limit.
+            that card, which does not count toward the hand limit. The fall pays no Gold.
           </Section>
           <Section title="Status effects">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">

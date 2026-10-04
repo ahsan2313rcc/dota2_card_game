@@ -404,7 +404,7 @@ describe('jungle, Roshan and Tormentor', () => {
 })
 
 describe('comeback rules and rotation', () => {
-  it('losing a tower gives +1 Gold and its hidden card, which ignores the hand limit', () => {
+  it('losing a tower gives its hidden card and no Gold', () => {
     let s = setup(59, [hero('a', 'sven')])
     s.players.dire.structures.towers.top.t1 = 1
     s.players.dire.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve'))
@@ -413,9 +413,30 @@ describe('comeback rules and rotation', () => {
     s = placeHero(s, 'radiant', 'a', 'top')
     s = fight(s)
     expect(s.players.dire.structures.towers.top.t1).toBe(0)
-    expect(s.players.dire.gold).toBe(gold + 1)
+    expect(s.players.dire.gold).toBe(gold)
     expect(s.players.dire.hand.some((c) => c.cardId === hidden)).toBe(true)
     expect(handCount(s.players.dire)).toBe(HAND_LIMIT)
+    expect(logHas(s, '+1 Gold and the tower')).toBe(false)
+  })
+
+  it('Ancient Apparition, Dark Seer, and Crystal Maiden ultimates deal magical damage', () => {
+    const slainBy = (cardId: string, aim: 'lane' | 'unit' | 'none') => {
+      let s = setup(73, [hero('a', cardId)], [hero('b', 'sven')])
+      s = placeHero(s, 'radiant', 'a', 'mid')
+      s = placeHero(s, 'dire', 'b', 'mid')
+      s = endItems(reveal(s))
+      const foe = heroesOnBoard(s, 'dire')[0]
+      foe.status.ethereal = true
+      s.players.radiant.xp = 1
+      const target = aim === 'lane' ? 'mid' : aim === 'unit' ? foe.uid : undefined
+      s = declareUlt(s, heroesOnBoard(s, 'radiant')[0].uid, target)
+      s = resolveRound(s)
+      return heroesOnBoard(s, 'dire')
+    }
+    // Ethereal blocks physical damage and adds 1 to magical damage, so a 2-health hero dies only to MDMG.
+    expect(slainBy('ancient_apparition', 'lane')).toHaveLength(0)
+    expect(slainBy('dark_seer', 'none')).toHaveLength(0)
+    expect(slainBy('crystal_maiden', 'unit')).toHaveLength(0)
   })
 
   it('Glyph: towers take no damage and do not fire', () => {

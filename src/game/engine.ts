@@ -804,9 +804,8 @@ function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: Tower
   if (!rules(s).towerCards) return
   const pl = s.players[defender]
   const cardId = pl.towerCards[lane][tier]
-  pl.gold += 1
   pl.hand.push({ iid: newId(s, 'c'), type: 'item', cardId })
-  log(s, `${PLAYER_LABEL[defender]} rallies: +1 Gold and the tower's hidden card, ${getItem(cardId).name}.`, tone(defender))
+  log(s, `${PLAYER_LABEL[defender]} takes the tower's hidden card, ${getItem(cardId).name}.`, tone(defender))
 }
 
 function giveCard(s: GameState, p: PlayerId, card: Omit<HandCard, 'iid'>, label: string) {

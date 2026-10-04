@@ -1,6 +1,6 @@
 import { Castle, Coins, Layers, Skull, Sparkles, Users } from 'lucide-react'
 import { LANE_LABEL, PLAYER_LABEL, handCount, heroesOnBoard } from '@/game/engine'
-import { ANCIENT_HP, BOARD_LIMIT, type GameState, type PlayerId } from '@/game/types'
+import { ANCIENT_HP, BOARD_LIMIT, HAND_LIMIT, type GameState, type PlayerId } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { CardBack } from './HandCard'
 import { SIDE_STYLE } from './styles'
@@ -22,7 +22,11 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
         label="Board"
         value={`${heroesOnBoard(s, player).length}/${BOARD_LIMIT}`}
       />
-      <Stat icon={<Layers className="size-4 text-zinc-300" />} label="Hand" value={handCount(pl)} />
+      <Stat
+        icon={<Layers className="size-4 text-zinc-300" />}
+        label="Hand"
+        value={<span className={handCount(pl) > HAND_LIMIT ? 'text-amber-300' : undefined}>{handCount(pl)}/{HAND_LIMIT}</span>}
+      />
       <Stat icon={<Skull className="size-4 text-zinc-400" />} label="Discard" value={s.heroDiscard.filter((h) => h.owner === player).length} />
       {player === 'dire' && <CardBack count={pl.hand.length} />}
       <div className="flex min-w-40 flex-1 items-center gap-2">

@@ -48,6 +48,7 @@ import {
   BUYBACK_WINDOW,
   CAMPS,
   HAND_LIMIT,
+  SHIELD_XP_COST,
   LANES,
   PLACE_PER_ROUND,
   ROTATIONS_PER_ROUND,
@@ -361,9 +362,19 @@ function outsideHandLimit(c: { type: string; cardId: string }) {
   return kind === 'Rune' || kind === 'Tower'
 }
 
+/** Heroes, creeps, shop cards, and boss rewards count. Runes and tower cards do not. */
+export function countsTowardHand(c: { type: string; cardId: string }) {
+  return !outsideHandLimit(c)
+}
+
 /** Cards that count toward the hand limit. Runes and tower cards are exempt. */
 export function handCount(pl: PlayerState): number {
-  return pl.hand.filter((c) => !outsideHandLimit(c)).length
+  return pl.hand.filter((c) => countsTowardHand(c)).length
+}
+
+/** How many counting cards must be pitched before the next round. */
+export function excessHand(pl: PlayerState): number {
+  return Math.max(0, handCount(pl) - HAND_LIMIT)
 }
 
 export function standingTowers(s: GameState, p: PlayerId): number {
@@ -545,6 +556,7 @@ function kitApi(s: GameState): KitApi {
       })
       delete s.units[u.uid]
     },
+    shield: (u, persist) => giveShield(s, u, persist),
     silenceTower: (defender, lane) => {
       const key = `${defender}:${lane}`
       if (!s.silencedTowers.includes(key)) s.silencedTowers.push(key)
@@ -565,7 +577,7 @@ function relocate(s: GameState, u: Unit, zone: ZoneId, front: boolean, cause?: '
     onEnter(api, u)
     enemyEntered(api, u)
     if (cause === 'tp' && hasTag(u, 'onTp:heal')) heal(s, u, 'Tether')
-    if (cause === 'tp' && hasTag(u, 'tpShield')) u.status.shield += 1
+    if (cause === 'tp' && hasTag(u, 'tpShield')) giveShield(s, u, false)
   }
 }
 
@@ -664,7 +676,6 @@ export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): stri
   if (s.phase !== 'draw') return 'Not the draw step'
   const pl = s.players[p]
   if (pl.gold < 1) return 'Need 1 Gold'
-  if (handCount(pl) >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
   if (deckSize(s, type) === 0) return 'Deck is empty'
   return null
 }
@@ -761,7 +772,6 @@ export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string): s
     if (!buybackWindow(s).some((h) => h.cardId === heroId)) return `Only the last ${BUYBACK_WINDOW} discarded heroes can be bought back`
     return 'This hero cannot be bought back'
   }
-  if (handCount(pl) >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
   if (pl.gold < buybackCost(s, p)) return `Need ${buybackCost(s, p)} Gold`
   return null
 }
@@ -800,13 +810,60 @@ function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: Tower
 }
 
 function giveCard(s: GameState, p: PlayerId, card: Omit<HandCard, 'iid'>, label: string) {
-  if (!outsideHandLimit(card) && handCount(s.players[p]) >= HAND_LIMIT) {
-    log(s, `${PLAYER_LABEL[p]}'s hand is full — ${label} is lost.`, 'info')
-    if (card.type === 'item') discardItem(s, card.cardId)
-    return
-  }
   s.players[p].hand.push({ ...card, iid: newId(s, 'c') })
   log(s, `${PLAYER_LABEL[p]} receives ${label}.`, tone(p))
+}
+
+function cardLabel(card: HandCard): string {
+  if (card.type === 'hero') return getHero(card.cardId).name
+  if (card.type === 'creep') return card.cardId === 'siege' ? 'a Siege Creep' : 'a Lane Creep'
+  return getItem(card.cardId).name
+}
+
+/** Pitch order for the AI: creeps, then cheap shop cards, then boss rewards, then heroes. */
+function discardRank(card: HandCard): number {
+  if (card.type === 'creep') return 0
+  if (card.type === 'item') {
+    const item = getItem(card.cardId)
+    return item.kind === 'Shop' ? 10 + (item.cost ?? 1) : 40
+  }
+  return 100
+}
+
+export function discardBlockReason(s: GameState, p: PlayerId, handIid: string): string | null {
+  if (s.phase !== 'report' && s.phase !== 'gameover') return 'Discard at the end of the turn'
+  const card = s.players[p].hand.find((c) => c.iid === handIid)
+  if (!card) return 'Not in hand'
+  if (!countsTowardHand(card)) return 'Runes and tower cards do not count toward the hand'
+  if (handCount(s.players[p]) <= HAND_LIMIT) return 'Hand is already at 7'
+  return null
+}
+
+/** A pitched hero or creep goes to the unit discard. It is not a death, so it cannot be bought back. */
+export function discardFromHand(state: GameState, p: PlayerId, handIid: string): GameState {
+  if (discardBlockReason(state, p, handIid)) return state
+  const s = clone(state)
+  const pl = s.players[p]
+  const card = pl.hand.find((c) => c.iid === handIid)!
+  pl.hand = pl.hand.filter((c) => c.iid !== handIid)
+  if (card.type === 'item') discardItem(s, card.cardId)
+  else s.unitDiscard.push(unitCard(card.cardId, !!card.buybackUsed))
+  log(s, `${PLAYER_LABEL[p]} discards ${cardLabel(card)}.`, tone(p))
+  return s
+}
+
+/** Drop counting cards until the hand is back to 7. */
+export function discardToHandLimit(state: GameState, p: PlayerId): GameState {
+  let s = state
+  for (let guard = 0; handCount(s.players[p]) > HAND_LIMIT && guard < 40; guard++) {
+    const counting = s.players[p].hand.filter((c) => countsTowardHand(c))
+    if (counting.length === 0) break
+    counting.sort((a, b) => discardRank(a) - discardRank(b))
+    const next = discardFromHand(s, p, counting[0].iid)
+    if (next === s) break
+    s = next
+  }
+  return s
 }
 
 export function endDraw(state: GameState): GameState {
@@ -949,6 +1006,21 @@ const STATUS_VERB: Record<BoolStatus, string> = {
   cursed: 'Cursed',
 }
 
+/** Shields do not stack. `persist` marks a Shield that survives Cleanup until it blocks a hit. */
+function grantShield(u: Unit, persist: boolean): boolean {
+  if (u.status.shield >= 1) {
+    if (persist) u.persistentShield = true
+    return false
+  }
+  u.status.shield = 1
+  u.persistentShield = persist || undefined
+  return true
+}
+
+function giveShield(s: GameState, u: Unit, persist: boolean) {
+  if (grantShield(u, persist)) log(s, `${fullName(u)} gains a Shield.`, tone(u.owner))
+}
+
 /** `spell` marks debuffs from Ultimates and items — Immunity blocks those. */
 function applyStatus(s: GameState, from: Owner, t: Unit, key: BoolStatus, label: string, spell: boolean) {
   if (t.dead) return
@@ -967,7 +1039,7 @@ function applyStatus(s: GameState, from: Owner, t: Unit, key: BoolStatus, label:
   }
   t.status[key] = true
   if (key === 'banished') t.status.invulnerable = true
-  if (spell && from !== t.owner && hasTag(t, 'onDebuff:shield')) t.status.shield += 1
+  if (spell && from !== t.owner && hasTag(t, 'onDebuff:shield')) giveShield(s, t, false)
   log(s, `${fullName(t)} is ${STATUS_VERB[key]} by ${label}.`, tone(from))
 }
 
@@ -1106,7 +1178,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.bladeMail = true
         break
       case 'vanguard':
-        st.shield += 1
+        giveShield(s, t, true)
         break
       case 'bkb':
         st.immune = true
@@ -1200,7 +1272,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.bonusDamage += 1
         break
       case 'rune_shield':
-        st.shield += 1
+        giveShield(s, t, true)
         break
       case 'rune_illusion': {
         const decoy = makeUnit(s, { kind: 'illusion', cardId: t.cardId, owner: p, zone: t.zone, hp: 1 })
@@ -1334,6 +1406,26 @@ export function ultBlockReason(s: GameState, uid: string): string | null {
   if (s.players[u.owner].xp < cost && !s.players[u.owner].arcane) return `Needs ${cost} XP`
   if (ultNeedsTarget(u) && ultTargets(s, uid).length === 0 && ultZones(s, uid).length === 0) return 'No valid targets'
   return null
+}
+
+export function shieldBlockReason(s: GameState, p: PlayerId, uid: string): string | null {
+  if (s.phase !== 'ults') return 'A Shield is bought during the Ultimate step'
+  const u = s.units[uid]
+  if (!u || u.owner !== p || u.dead || u.kind !== 'hero') return 'Choose one of your heroes'
+  if (u.status.shield >= 1) return 'Shields do not stack'
+  if (s.players[p].xp < SHIELD_XP_COST) return `Need ${SHIELD_XP_COST} XP`
+  return null
+}
+
+/** Spend 3 XP for one Shield. It lasts until it blocks a hit. */
+export function buyShield(state: GameState, p: PlayerId, uid: string): GameState {
+  if (shieldBlockReason(state, p, uid)) return state
+  const s = clone(state)
+  const u = s.units[uid]
+  s.players[p].xp -= SHIELD_XP_COST
+  grantShield(u, true)
+  log(s, `${PLAYER_LABEL[p]} spends ${SHIELD_XP_COST} XP: ${fullName(u)} gains a Shield.`, tone(p))
+  return s
 }
 
 export function declareUlt(state: GameState, uid: string, target?: string): GameState {
@@ -1508,7 +1600,8 @@ function applyDamage(
   }
   const rapier = basic && !!src?.status.rapier && t.kind === 'hero'
   if (physicalHit && !pierce && !rapier && st.shield > 0) {
-    st.shield--
+    st.shield = 0
+    t.persistentShield = false
     log(s, `${fullName(t)}'s Shield blocks ${label}.`, 'info')
     return 0
   }
@@ -1660,7 +1753,7 @@ function resolveUltEffect(s: GameState, u: Unit, effect: UltEffect, target?: Uni
       break
     }
     case 'shield':
-      u.status.shield += 1
+      giveShield(s, u, true)
       break
     case 'evade':
       u.status.evade += 1
@@ -2285,7 +2378,10 @@ export function endRotation(state: GameState): GameState {
       removeFromBoard(s, u)
       delete s.units[u.uid]
     } else {
+      const lasting = !!u.persistentShield && u.status.shield > 0
       u.status = freshStatus()
+      if (lasting) u.status.shield = 1
+      else u.persistentShield = false
     }
   }
   for (const p of PLAYERS) s.players[p].glyph = false
@@ -2309,6 +2405,7 @@ export function endRotation(state: GameState): GameState {
 
 export function nextRound(state: GameState): GameState {
   if (state.phase !== 'report') return state
+  if (PLAYERS.some((p) => handCount(state.players[p]) > HAND_LIMIT)) return state
   const s = clone(state)
   startRound(s)
   return s

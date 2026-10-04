@@ -1,9 +1,12 @@
 import { useReducer } from 'react'
 import { aiAssign, aiDraw, aiItems, aiUlts, playAiRound, takeRotations } from './ai'
 import {
+  buyShield,
   buyback,
   cancelUlt,
   declareUlt,
+  discardFromHand,
+  discardToHandLimit,
   drawCard,
   endDraw,
   endItems,
@@ -35,6 +38,8 @@ export type Action =
   | { type: 'new'; settings?: Settings }
   | { type: 'draw'; card: DrawType }
   | { type: 'buyback'; heroId: string }
+  | { type: 'discard'; handIid: string }
+  | { type: 'buyShield'; uid: string }
   | { type: 'swapTowers'; tier: TowerTier; a: LaneId; b: LaneId }
   | { type: 'endDraw' }
   | { type: 'place'; handIid: string; zone: ZoneId }
@@ -56,7 +61,7 @@ export type Action =
 /** After Radiant is finished, Dire spends whatever rotations it has left. */
 function finishRotation(s: GameState): GameState {
   if (s.players[HUMAN].rotationsUsed < ROTATIONS_PER_ROUND) return s
-  return endRotation(takeRotations(s, AI))
+  return discardToHandLimit(endRotation(takeRotations(s, AI)), AI)
 }
 
 function reducer(s: GameState, a: Action): GameState {
@@ -67,6 +72,10 @@ function reducer(s: GameState, a: Action): GameState {
       return drawCard(s, HUMAN, a.card)
     case 'buyback':
       return buyback(s, HUMAN, a.heroId)
+    case 'discard':
+      return discardFromHand(s, HUMAN, a.handIid)
+    case 'buyShield':
+      return buyShield(s, HUMAN, a.uid)
     case 'swapTowers':
       return swapTowerCards(s, HUMAN, a.tier, a.a, a.b)
     case 'endDraw':
@@ -95,6 +104,7 @@ function reducer(s: GameState, a: Action): GameState {
     case 'resolve': {
       // When the AI has priority it rotates first, so the human sees its move before answering.
       const r = resolveRound(aiUlts(s, AI))
+      if (r.phase === 'gameover') return discardToHandLimit(r, AI)
       return r.phase === 'rotate' && favoredPlayer(r.round, r.cycle) === AI ? takeRotations(r, AI) : r
     }
     case 'rotate': {

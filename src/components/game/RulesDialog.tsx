@@ -16,7 +16,7 @@ const STATUSES: Array<[string, string]> = [
   ['Banish', 'Untargetable and invulnerable.'],
   ['Immunity', 'Blocks magical damage and debuffs. Self-damage still lands.'],
   ['Ethereal', 'Blocks physical attack and tower damage. Magical damage against it is increased by 1.'],
-  ['Shield', 'Blocks one instance of physical attack damage. Pierce ignores it.'],
+  ['Shield', 'Blocks one instance of physical damage, then breaks. Pierce ignores it. Only one Shield at a time. A Shield from an Ultimate, an item, a rune, or 3 XP lasts until it blocks a hit. A Shield from a passive ends at Cleanup.'],
   ['Invulnerable', 'Blocks all damage.'],
   ['Mute', 'Cannot use items.'],
   ['Curse', 'Cannot heal.'],
@@ -54,10 +54,11 @@ export function RulesDialog() {
               <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
               <li>
                 Draw: both sides spend 1 Gold to take the top card of the one shared deck, or 1 Gold for an item from the
-                shared item deck (hand limit 7). The hero deck is 160 cards shuffled together: all 127 heroes, 25 lane
-                creeps and 8 siege creeps. You start with 5 cards from that deck. The item deck is 60 shop cards. Playing
-                one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two copies). Runes are free and do not
-                count toward the hand limit.
+                shared item deck. You may draw past 7. At the end of the turn, discard counting cards until 7 remain.
+                Runes and tower cards do not count and are not discarded for this. The hero deck is 160 cards shuffled
+                together: all 127 heroes, 25 lane creeps and 8 siege creeps. You start with 5 cards from that deck. The
+                item deck is 60 shop cards. Playing one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two
+                copies). Runes are free and do not count toward the hand limit.
                 Dead heroes from both sides go into one shared discard. Buyback returns any hero from the last 10 in that
                 pile, whoever it belonged to, for 4 Gold, or 5 if you have more towers standing than the enemy. Each hero
                 can be bought back only once.
@@ -70,9 +71,10 @@ export function RulesDialog() {
               <li>Item: play items, runes and tower cards. Shop items cost their printed Gold and are single use. Runes and tower cards are free. All resolve immediately.</li>
               <li>
                 Ult: a hero can cast every round. The first cast of that deployment costs 1 XP, the next 2, then 3, and so
-                on. Dying and being played again starts the cost back at 1. Tinker stays at 1. Refresher Orb casts the
-                chosen Ultimate a second time on the same target. Refresher Shard resets the cost to 1. An Arcane rune
-                makes the next cast free, and the cost still climbs.
+                on. Dying and being played again starts the cost back at 1. Tinker stays at 1. During this step you may
+                also spend 3 XP to give one allied hero a Shield. Shields do not stack. Refresher Orb casts the chosen
+                Ultimate a second time on the same target. Refresher Shard resets the cost to 1. An Arcane rune makes the
+                next cast free, and the cost still climbs.
               </li>
               <li>Resolution: Ultimates (STR → INT → UNI → AGI), basic attacks (AGI → UNI → INT → STR → creeps, Slowed last), then tower aggro.</li>
               <li>
@@ -81,7 +83,9 @@ export function RulesDialog() {
                 a hero may walk lane to lane (Top · Mid · Bot).
               </li>
               <li>
-                Cleanup: wounds persist. A slain hero joins the shared discard. Illusions vanish and round effects end.
+                Cleanup: wounds persist. A slain hero joins the shared discard. Illusions vanish and round effects end. A
+                Shield stays if it came from an Ultimate, an item, a rune, or 3 XP, until it blocks a hit. A Shield from a
+                passive ends here.
               </li>
               <li>Income: +1 Gold per enemy hero killed, +1 XP per lane holding a living hero.</li>
             </ol>

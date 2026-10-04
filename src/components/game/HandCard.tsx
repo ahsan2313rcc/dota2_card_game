@@ -8,11 +8,12 @@ import { HeroPortrait } from './UnitToken'
 interface Props {
   card: HandCardT
   selected?: boolean
+  highlight?: boolean
   disabledReason?: string | null
   onClick?: () => void
 }
 
-export function HandCard({ card, selected, disabledReason, onClick }: Props) {
+export function HandCard({ card, selected, highlight, disabledReason, onClick }: Props) {
   return (
     <button
       type="button"
@@ -21,6 +22,7 @@ export function HandCard({ card, selected, disabledReason, onClick }: Props) {
       className={cn(
         'flex h-[212px] w-[152px] shrink-0 flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 text-left shadow-lg transition-all duration-150 outline-none',
         selected ? '-translate-y-2 ring-2 ring-sky-400' : 'hover:-translate-y-1 hover:border-zinc-500',
+        highlight && !selected && '-translate-y-1 ring-2 ring-amber-400',
         disabledReason && 'opacity-60',
       )}
     >

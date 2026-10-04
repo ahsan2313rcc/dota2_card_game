@@ -155,7 +155,7 @@ export interface RoundStatus {
   invulnerable: boolean
   muted: boolean
   cursed: boolean
-  /** Charges: each blocks one instance of attack damage */
+  /** 1 while a Shield is up. Shields do not stack. */
   shield: number
   /** Charges: each dodges one incoming basic attack */
   evade: number
@@ -247,6 +247,8 @@ export interface Unit {
   fierySoul: boolean
   /** Set once this hero has been bought back. A later death returns the card to the shared deck. */
   buybackUsed?: boolean
+  /** A Shield from an Ultimate, an item, a rune, or XP. A passive Shield leaves this unset and ends at Cleanup. */
+  persistentShield?: boolean
   status: RoundStatus
 }
 
@@ -366,7 +368,11 @@ export const CAMPS: CampId[] = ['radiantJungle', 'direJungle']
 export const ZONES: ZoneId[] = [...LANES, ...CAMPS]
 export const PLAYERS: PlayerId[] = ['radiant', 'dire']
 
+/** Counting cards must be back to this by the end of the turn. Runes and tower cards never count. */
 export const HAND_LIMIT = 7
+
+/** Spent during the Ultimate step to put one Shield on an allied hero. */
+export const SHIELD_XP_COST = 3
 export const BOARD_LIMIT = 5
 export const PLACE_PER_ROUND = 3
 /** Heroes each side may move during Rotation. */

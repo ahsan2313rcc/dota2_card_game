@@ -40,7 +40,7 @@ Before the first decision, round 1 upkeep has already happened, so each side sta
 
 ## Hand, board, and placement
 
-The hand limit is 7. Runes and tower cards do not use a slot. Shop cards, heroes, creeps, the Aegis, and the Refresher Shard do. A rune or tower card is still received when the hand is full. Any other card is lost.
+The hand limit is 7 counting cards. Runes and tower cards do not use a slot. Shop cards, heroes, creeps, the Aegis, and the Refresher Shard do. You may draw past 7. At the end of the turn, before the next round starts, discard counting cards until 7 remain. You choose which ones. Runes and tower cards are not discarded for this. A pitched hero or creep goes to the unit discard. It was not slain, so it cannot be bought back.
 
 You may place up to 3 heroes per round, and have up to 5 heroes on the board. Creeps do not count toward either limit. During Assign you may return a unit you placed this round to your hand, and you may reorder a lineup. Rooted units cannot be reordered.
 
@@ -56,7 +56,7 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 6. **Ultimates.** Declare casts. They resolve in the next step.
 7. **Resolution.** Ultimates, then basic attacks, then towers.
 8. **Rotation.** Each side may move up to 2 heroes.
-9. **Cleanup.** End-of-round effects, poison, deaths, and status reset.
+9. **Cleanup.** End-of-round effects, poison, deaths, and status reset. A Shield that did not come from a passive stays until it blocks a hit.
 10. **Income.** Kill Gold and lane XP.
 11. **Report.** Then the next round begins at Upkeep.
 
@@ -82,13 +82,13 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 
 | Sink | Cost |
 | --- | --- |
-| Draw the top card of the unit deck, or draw a shop card | 1 each. Repeat until you stop, run out of Gold, fill the hand, or empty that deck. |
+| Draw the top card of the unit deck, or draw a shop card | 1 each. Repeat until you stop, run out of Gold, or empty that deck. The hand may pass 7. Discard back to 7 at the end of the turn. |
 | Play a shop card | 1, 2, or 3, printed on the card. Single use. |
-| Buyback | 4, or 5 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero can belong to either side, as long as it is among the last 10 in the shared discard and it fits in your hand. |
+| Buyback | 4, or 5 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero can belong to either side, as long as it is among the last 10 in the shared discard. |
 
 Runes, tower cards, the Aegis, and the Refresher Shard cost no Gold.
 
-There is no Gold cap. Once the hand is full, drawing stops, and Gold from upkeep, opened lanes, and kills has nowhere to go except a shop card you already hold or a buyback.
+There is no Gold cap. Drawing past 7 is where extra Gold goes. At the report, discard down to 7 counting cards.
 
 ### XP in
 
@@ -105,13 +105,15 @@ Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
 
 ### XP out
 
-The only spend is an ultimate.
+Ultimates, and a Shield.
+
+During the Ultimate step, spend 3 XP to give one allied hero a Shield. Shields do not stack. A second purchase on a hero who already has one does nothing.
 
 The first cast of a deployment costs 1 XP, the next 2, then 3, and so on. Dying and being played again starts that hero back at 1. Tinker's cost stays 1. If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune makes the next declared cast free, and the cost still climbs afterward. Refresher Shard sets that hero's cost back to 1. Refresher Orb casts the chosen ultimate a second time on the same target and does not raise the cost again.
 
 A cast that fizzles refunds its XP, or restores the Arcane Rune if that paid for it. A cast fizzles when the caster is stunned, silenced, feared, banished, or dead, or the target is gone.
 
-There is no XP cap. Lane XP keeps arriving even when every living hero has become too expensive to cast.
+There is no XP cap. A Shield bought with XP, and lane XP, are where a banked pool goes once ultimates have become expensive.
 
 ## Buyback, towers, and the fountain
 
@@ -157,11 +159,11 @@ After combat, each side may move up to 2 heroes, one step each. A hero moves at 
 
 The step follows the chain Top — Dire Jungle — Mid — Radiant Jungle — Bot. From a lane where you have no towers left, a hero may also step along the base: Top — Mid — Bot.
 
-Rooted, stunned, feared, and banished heroes cannot move. Tinker and Nature's Prophet may teleport to any zone. Nature's Prophet gains 1 Shield when that teleport happens. A Town Portal Scroll, played in the Item step, moves one allied hero who is not Rooted to any lane.
+Rooted, stunned, feared, and banished heroes cannot move. Tinker and Nature's Prophet may teleport to any zone. Nature's Prophet gains 1 Shield when that teleport happens. That Shield comes from a passive, so it ends at Cleanup. A Town Portal Scroll, played in the Item step, moves one allied hero who is not Rooted to any lane.
 
 ## Statuses
 
-Round statuses end at Cleanup. Health, permanent attack bonuses, and the ultimate-cost counter remain. Illusions vanish. Poison deals 1 damage at Cleanup before bodies are removed.
+Round statuses end at Cleanup. Health, permanent attack bonuses, the ultimate-cost counter, and a Shield that did not come from a passive remain. A passive Shield ends with the other statuses. Illusions vanish. Poison deals 1 damage at Cleanup before bodies are removed.
 
 | Status | Effect |
 | --- | --- |
@@ -183,7 +185,7 @@ Round statuses end at Cleanup. Health, permanent attack bonuses, and the ultimat
 | Reveal | The unit can be targeted again. A Banished unit can still be invulnerable. |
 | Immunity | Blocks magical damage and debuffs from enemies. Self-damage still lands. |
 | Ethereal | Blocks physical damage. Magical damage against it is increased by 1. |
-| Shield | Blocks one instance of physical damage. Pierce and Divine Rapier ignore it. |
+| Shield | Blocks one instance of physical damage, then breaks. Pierce and Divine Rapier ignore it. Only one at a time. An Ultimate, item, rune, or 3 XP Shield lasts until it blocks a hit. A passive Shield ends at Cleanup. |
 | Invulnerable | Blocks all damage except self-damage. |
 | Mute | This side cannot play an item on that hero. |
 | Curse | Cannot heal. |
@@ -208,7 +210,7 @@ Shop cards cost Gold and are single use. Runes drop from normal neutral kills on
 | Healing Salve | 1 | 4 | Heal an allied hero to Healthy. |
 | Clarity | 1 | 3 | Gain 1 XP. |
 | Gloves of Haste | 1 | 3 | An allied hero gains Haste. |
-| Vanguard | 2 | 2 | Gain 1 Shield. |
+| Vanguard | 2 | 2 | Gain 1 Shield. It lasts until it blocks a hit. |
 | Blade Mail | 2 | 2 | Reflect 1 physical damage back to the attacker. |
 | Ghost Scepter | 2 | 2 | An allied hero becomes Ethereal. |
 | Force Staff | 2 | 2 | Move an enemy hero to the back of their line. |
@@ -243,7 +245,7 @@ Two copies each. They cost nothing and do not use a hand slot.
 | Bounty | Gain 1 Gold. |
 | Regeneration | Heal an allied hero to Healthy. |
 | Double Damage | +1 basic attack damage this round. |
-| Shield | Block the next instance of attack damage this round. |
+| Shield | Gain 1 Shield. It lasts until it blocks a hit. |
 | Arcane | Your next ultimate costs 0 XP. The following cast still costs more. |
 | Illusion | A 1 health decoy with no attack steps in front of an allied hero. It vanishes at Cleanup. |
 | Invisibility | An allied hero is untargetable by enemies this round. It can still attack. |

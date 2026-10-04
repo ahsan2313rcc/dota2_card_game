@@ -14,14 +14,17 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Toaster } from '@/components/ui/sonner'
 import { getHero, getItem } from '@/game/cards'
-import { BUYBACK_WINDOW } from '@/game/types'
 import {
   PLAYER_LABEL,
   ZONE_LABEL,
   buybackBlockReason,
   buybackCost,
   buybackWindow,
+  countsTowardHand,
+  discardBlockReason,
   drawBlockReason,
+  excessHand,
+  shieldBlockReason,
   favoredPlayer,
   handCount,
   isDay,
@@ -38,7 +41,7 @@ import {
   type DrawType,
 } from '@/game/engine'
 import { HUMAN, useGame } from '@/game/useGame'
-import { HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
+import { BUYBACK_WINDOW, HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, SHIELD_XP_COST, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
 
 export default function App() {
   const [s, dispatch] = useGame()
@@ -56,7 +59,7 @@ export default function App() {
     setUltCaster(null)
     setTpHero(null)
     setRotator(null)
-    setReportOpen(s.phase === 'report' || s.phase === 'gameover')
+    setReportOpen((s.phase === 'report' && excessHand(s.players[HUMAN]) === 0) || s.phase === 'gameover')
   }
 
   const me = s.players[HUMAN]
@@ -75,6 +78,12 @@ export default function App() {
   const inspectedUnit = inspected ? s.units[inspected] : undefined
 
   function onHandClick(card: HandCardT) {
+    if (s.phase === 'report') {
+      const r = discardBlockReason(s, HUMAN, card.iid)
+      if (r) return toast.error(r)
+      dispatch({ type: 'discard', handIid: card.iid })
+      return
+    }
     if (selectedHand === card.iid) return setSelectedHand(null)
     if (s.phase === 'assign' && card.type === 'hero') {
       const r = placeBlockReason(s, HUMAN)
@@ -113,6 +122,12 @@ export default function App() {
     }
     if (rotator === uid) setRotator(null)
     setInspected(uid)
+  }
+
+  function onShield(u: Unit) {
+    const r = shieldBlockReason(s, HUMAN, u.uid)
+    if (r) return toast.error(r)
+    dispatch({ type: 'buyShield', uid: u.uid })
   }
 
   function onUlt(u: Unit) {
@@ -256,8 +271,9 @@ export default function App() {
           />
 
           <section>
-            <h2 className="mb-2 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
+            <h2 className={`mb-2 text-xs font-semibold tracking-wider uppercase ${excessHand(me) > 0 ? 'text-amber-300' : 'text-zinc-400'}`}>
               Your hand ({handCount(me)}/{HAND_LIMIT}
+              {excessHand(me) > 0 ? ` — discard ${excessHand(me)}` : ''}
               {me.hand.some((c) => c.type === 'item' && getItem(c.cardId).kind === 'Rune') ? ' + runes' : ''}
               {me.hand.some((c) => c.type === 'item' && getItem(c.cardId).kind === 'Tower') ? ' + tower cards' : ''})
             </h2>
@@ -272,12 +288,15 @@ export default function App() {
                     key={c.iid}
                     card={c}
                     selected={selectedHand === c.iid}
+                    highlight={s.phase === 'report' && excessHand(me) > 0 && countsTowardHand(c)}
                     disabledReason={
-                      s.phase === 'items' && c.type === 'item'
-                        ? itemBlockReason(s, HUMAN, c)
-                        : s.phase === 'assign' && c.type === 'hero'
-                          ? placeBlockReason(s, HUMAN)
-                          : null
+                      s.phase === 'report'
+                        ? discardBlockReason(s, HUMAN, c.iid)
+                        : s.phase === 'items' && c.type === 'item'
+                          ? itemBlockReason(s, HUMAN, c)
+                          : s.phase === 'assign' && c.type === 'hero'
+                            ? placeBlockReason(s, HUMAN)
+                            : null
                     }
                     onClick={() => onHandClick(c)}
                   />
@@ -299,6 +318,7 @@ export default function App() {
                   onMove: (uid, dir) => dispatch({ type: 'move', uid, dir }),
                   onReturn: (uid) => dispatch({ type: 'unplace', uid }),
                   onUlt,
+                  onShield,
                   onMorph: (uid) => dispatch({ type: 'morph', uid }),
                   onFocus: (camp, focus) => dispatch({ type: 'campFocus', camp, focus }),
                 }}
@@ -338,7 +358,9 @@ export default function App() {
             <DialogDescription>
               {s.winner
                 ? `${PLAYER_LABEL[s.winner]} wins in round ${s.round}.`
-                : 'Ultimates, basic attacks, tower aggro, rotation, cleanup and income — in order.'}
+                : excessHand(me) > 0
+                  ? `Discard ${excessHand(me)} card${excessHand(me) === 1 ? '' : 's'} from your hand before the next round. Close this report and click a card.`
+                  : 'Ultimates, basic attacks, tower aggro, rotation, cleanup and income — in order.'}
             </DialogDescription>
           </DialogHeader>
           <LogLines entries={resolutionEntries} />
@@ -349,7 +371,9 @@ export default function App() {
             {s.winner ? (
               <Button onClick={() => dispatch({ type: 'new' })}>Play again</Button>
             ) : (
-              <Button onClick={() => dispatch({ type: 'nextRound' })}>Start round {s.round + 1}</Button>
+              <Button disabled={excessHand(me) > 0} onClick={() => dispatch({ type: 'nextRound' })}>
+                {excessHand(me) > 0 ? `Discard ${excessHand(me)}` : `Start round ${s.round + 1}`}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>
@@ -395,7 +419,7 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold to draw the top card of the shared deck (both sides use it), or an item. Buyback is ${buybackCost(s, HUMAN)} Gold, once per hero, for any of the last ${BUYBACK_WINDOW} heroes in the shared discard.`
+      hint = `Spend 1 Gold to draw, as many times as you can pay. The hand may pass ${HAND_LIMIT}; discard back to ${HAND_LIMIT} at the end of the turn. Buyback is ${buybackCost(s, HUMAN)} Gold for any of the last ${BUYBACK_WINDOW} discarded heroes.`
       cta = 'Done drawing'
       break
     case 'assign':
@@ -424,7 +448,7 @@ function ActionBar({
         ? ultZones(s, ultCaster).length
           ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
           : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
-        : `Declare Ultimates in "Your board". The first cast of a hero's life costs 1 XP, then 2, then 3. Declared: ${s.ultDeclarations.length}. STR casts first, AGI last.`
+        : `Declare Ultimates in "Your board", or spend ${SHIELD_XP_COST} XP there for one Shield. Shields do not stack and last until they block a hit. Declared: ${s.ultDeclarations.length}.`
       cta = 'Resolve combat'
       break
     case 'rotate': {
@@ -436,11 +460,15 @@ function ActionBar({
       cta = me.rotationsUsed > 0 ? 'Done rotating' : 'Skip rotation'
       break
     }
-    case 'report':
-      title = 'Round complete'
-      hint = 'Review the battle log, then start the next round.'
-      cta = `Start round ${s.round + 1}`
+    case 'report': {
+      const excess = excessHand(me)
+      title = excess > 0 ? 'Discard down to 7' : 'Round complete'
+      hint = excess > 0
+        ? `Click ${excess} highlighted card${excess === 1 ? '' : 's'} in your hand. Runes and tower cards stay. Then start the next round.`
+        : 'Review the battle log, then start the next round.'
+      cta = excess > 0 ? `Discard ${excess}` : `Start round ${s.round + 1}`
       break
+    }
     case 'gameover':
       title = s.winner === HUMAN ? 'Victory' : 'Defeat'
       hint = 'The duel is over.'
@@ -467,7 +495,7 @@ function ActionBar({
             <ScrollText /> Round report
           </Button>
         )}
-        <Button size="sm" onClick={onAdvance} className="bg-amber-400 text-zinc-950 hover:bg-amber-300">
+        <Button size="sm" disabled={s.phase === 'report' && excessHand(me) > 0} onClick={onAdvance} className="bg-amber-400 text-zinc-950 hover:bg-amber-300">
           {s.phase === 'ults' ? <Swords /> : s.phase === 'items' ? <Sparkles /> : null}
           {cta}
         </Button>

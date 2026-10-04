@@ -25,6 +25,8 @@ export interface KitApi {
   move: (u: Unit, zone: ZoneId, front?: boolean, cause?: 'tp' | 'move') => void
   transfer: (u: Unit, owner: PlayerId, zone: ZoneId) => void
   fresh: () => Unit['status']
+  /** Put one Shield on a unit. Passive grants pass false and end at Cleanup. */
+  shield: (u: Unit, persist: boolean) => void
   make: (partial: Pick<Unit, 'kind' | 'owner' | 'zone' | 'hp'> & Partial<Unit>) => Unit
   hitTower: (src: Unit, lane: LaneId, n: number) => void
   xp: (p: PlayerId, n: number) => void
@@ -183,7 +185,7 @@ function debuffKeys() {
   return ['stunned', 'silenced', 'broken', 'disarmed', 'slowed', 'blinded', 'rooted', 'muted', 'cursed', 'feared', 'hexed', 'enfeeble'] as const
 }
 
-function applyVerb(api: KitApi, caster: Unit, t: Unit, verb: string, ult: string) {
+function applyVerb(api: KitApi, caster: Unit, t: Unit, verb: string, ult: string, persistShield = true) {
   const st = t.status
   const from = caster.owner
   const spell = from !== t.owner
@@ -201,8 +203,7 @@ function applyVerb(api: KitApi, caster: Unit, t: Unit, verb: string, ult: string
       api.log(`${api.name(t)} gains Haste.`, from)
       break
     case 'shield':
-      st.shield += 1
-      api.log(`${api.name(t)} gains a Shield.`, from)
+      api.shield(t, persistShield)
       break
     case 'stun':
       api.mark(from, t, 'stunned', ult)
@@ -717,7 +718,7 @@ export function opening(api: KitApi) {
     }
     if (hasTag(u, 'aura:shieldPos1')) {
       const front = friends(s, u, u.zone)[0]
-      if (front) applyVerb(api, u, front, 'shield', psv)
+      if (front) applyVerb(api, u, front, 'shield', psv, false)
     }
     if (hasTag(u, 'aura:ampPos1')) {
       const front = friends(s, u, u.zone)[0]
@@ -890,7 +891,7 @@ export function onDeath(api: KitApi, dead: Unit, src: Unit | null) {
       const enemyHero = dead.kind === 'hero' && dead.owner !== u.owner
       if (hasTag(u, 'death:gold') && creep) api.gold(u.owner as PlayerId, 1)
       if (hasTag(u, 'death:heal') && enemyHero) api.heal(u, psv)
-      if (hasTag(u, 'death:shield') && enemyHero) u.status.shield += 1
+      if (hasTag(u, 'death:shield') && enemyHero) api.shield(u, false)
       if (hasTag(u, 'death:amp') && enemyHero) u.status.bonusDamage += 1
       if (hasTag(u, 'death:xp') && dead.owner !== u.owner && u.owner !== 'neutral') api.xp(u.owner, 1)
       if (hasTag(u, 'death:decoy') && dead.kind === 'hero' && dead.owner === u.owner) {
@@ -972,13 +973,13 @@ export function onEnter(api: KitApi, u: Unit) {
   if (hasTag(u, 'onEnter:silence') && front) applyVerb(api, u, front, 'silence', psv)
   if (hasTag(u, 'onEnter:root') && front) applyVerb(api, u, front, 'root', psv)
   if (hasTag(u, 'onEnter:amp')) applyVerb(api, u, u, 'amplify', psv)
-  if (hasTag(u, 'onEnter:shield')) applyVerb(api, u, u, 'shield', psv)
+  if (hasTag(u, 'onEnter:shield')) applyVerb(api, u, u, 'shield', psv, false)
 }
 
 export function enemyEntered(api: KitApi, entrant: Unit) {
   if (entrant.kind !== 'hero' || entrant.owner === 'neutral') return
   for (const u of unitsIn(api.s, other(entrant.owner), entrant.zone)) {
-    if (hasTag(u, 'onEnter:enemyShield')) applyVerb(api, u, u, 'shield', getHero(u.cardId!).passive.name)
+    if (hasTag(u, 'onEnter:enemyShield')) applyVerb(api, u, u, 'shield', getHero(u.cardId!).passive.name, false)
   }
 }
 

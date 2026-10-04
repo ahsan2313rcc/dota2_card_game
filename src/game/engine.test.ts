@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { aiAssign, aiDraw, aiUlts, playAiRound } from './ai'
 import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
+  buyShield,
   buyback,
   buybackBlockReason,
   buybackCost,
+  discardFromHand,
+  discardToHandLimit,
+  drawBlockReason,
   campNeutral,
   cancelUlt,
   declareUlt,
@@ -541,6 +545,98 @@ describe('opponent decisions', () => {
     s.players.dire.xp = 5
     s = aiUlts(s, 'dire')
     expect(s.ultDeclarations.some((d) => s.units[d.uid]?.cardId === 'faceless_void')).toBe(true)
+  })
+})
+
+describe('gold and xp sinks', () => {
+  it('draws past 7, then the next round waits until the hand is discarded down', () => {
+    let s = newGame(undefined, 11)
+    s.players.radiant.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve'))
+    s.players.radiant.hand.push(item('rune', 'rune_gold'))
+    s.players.radiant.gold = 1
+    s.unitDeck.push({ cardId: 'axe', buybackUsed: false })
+    expect(handCount(s.players.radiant)).toBe(HAND_LIMIT)
+    expect(drawBlockReason(s, 'radiant', 'unit')).toBeNull()
+    s = drawCard(s, 'radiant', 'unit')
+    expect(handCount(s.players.radiant)).toBe(HAND_LIMIT + 1)
+    expect(s.players.radiant.hand.some((c) => c.cardId === 'rune_gold')).toBe(true)
+    s = finish(endDraw(s))
+    expect(s.phase).toBe('report')
+    const before = s.round
+    expect(nextRound(s)).toBe(s)
+    const axe = s.players.radiant.hand.find((c) => c.cardId === 'axe')!
+    s = discardFromHand(s, 'radiant', axe.iid)
+    expect(handCount(s.players.radiant)).toBe(HAND_LIMIT)
+    expect(s.unitDiscard).toContainEqual({ cardId: 'axe', buybackUsed: false })
+    expect(s.heroDiscard.some((h) => h.cardId === 'axe')).toBe(false)
+    expect(s.players.radiant.hand.some((c) => c.cardId === 'rune_gold')).toBe(true)
+    s = nextRound(s)
+    expect(s.round).toBe(before + 1)
+  })
+
+  it('the AI pitches creeps and cheap items before heroes', () => {
+    let s = finish(endDraw(newGame(undefined, 13)))
+    s.players.dire.hand = [
+      ...['axe', 'sven', 'pudge', 'tidehunter', 'wraith_king', 'juggernaut'].map((id, i) => hero(`h${i}`, id)),
+      item('cheap', 'salve'),
+      item('steep', 'rapier'),
+      { iid: 'creep', type: 'creep', cardId: 'creep' },
+      item('rune', 'rune_shield'),
+    ]
+    s = discardToHandLimit(s, 'dire')
+    expect(handCount(s.players.dire)).toBe(HAND_LIMIT)
+    expect(s.players.dire.hand.some((c) => c.iid === 'creep' || c.iid === 'cheap')).toBe(false)
+    expect(s.players.dire.hand.some((c) => c.iid === 'steep')).toBe(true)
+    expect(s.players.dire.hand.some((c) => c.cardId === 'rune_shield')).toBe(true)
+    expect(s.unitDiscard).toContainEqual({ cardId: 'creep', buybackUsed: false })
+  })
+
+  it('3 XP buys one Shield, it does not stack, and it survives Cleanup until it blocks a hit', () => {
+    let s = setup(17, [hero('a', 'sven')], [hero('b', 'sven')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = endItems(reveal(s))
+    const uid = heroesOnBoard(s, 'radiant')[0].uid
+    s.players.radiant.xp = 3
+    s = buyShield(s, 'radiant', uid)
+    expect(s.players.radiant.xp).toBe(0)
+    expect(s.units[uid].status.shield).toBe(1)
+    expect(s.units[uid].persistentShield).toBe(true)
+    s.players.radiant.xp = 3
+    const blocked = buyShield(s, 'radiant', uid)
+    expect(blocked).toBe(s)
+    expect(s.players.radiant.xp).toBe(3)
+    s = endRotation(resolveRound(s))
+    expect(s.units[uid].hp).toBe(2)
+    expect(s.units[uid].status.shield).toBe(0)
+    expect(s.units[uid].persistentShield).toBeFalsy()
+    expect(logHas(s, 'Shield blocks')).toBe(true)
+  })
+
+  it('a Shield that is not hit lasts through Cleanup, and a passive Shield does not', () => {
+    let s = setup(19, [hero('a', 'sven'), hero('l', 'lich')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'l', 'bot')
+    const camp = s.camps.radiantJungle
+    if (camp) {
+      delete s.units[camp]
+      s.camps.radiantJungle = null
+    }
+    s = endItems(reveal(s))
+    const sven = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')!
+    heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'lich')!.status.disarmed = true
+    s.players.radiant.xp = 3
+    s = buyShield(s, 'radiant', sven.uid)
+    s = resolveRound(s)
+    const mid = heroesOnBoard(s, 'radiant')
+    expect(mid.find((u) => u.cardId === 'lich')?.status.shield).toBe(1)
+    expect(mid.find((u) => u.cardId === 'lich')?.persistentShield).toBeFalsy()
+    s = endRotation(s)
+    const after = heroesOnBoard(s, 'radiant')
+    expect(after.find((u) => u.cardId === 'sven')?.status.shield).toBe(1)
+    expect(after.find((u) => u.cardId === 'sven')?.persistentShield).toBe(true)
+    expect(after.find((u) => u.cardId === 'lich')?.status.shield).toBe(0)
+    expect(after.find((u) => u.cardId === 'lich')?.persistentShield).toBeFalsy()
   })
 })
 

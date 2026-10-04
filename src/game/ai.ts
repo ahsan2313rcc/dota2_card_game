@@ -2,10 +2,12 @@ import { ATTRIBUTE_COUNTERS, getHero, getItem } from './cards'
 import {
   ZONE_PRIORITY,
   attributeOf,
+  buyShield,
   buyback,
   buybackBlockReason,
   buybackChoices,
   buybackCost,
+  discardToHandLimit,
   campNeutral,
   declareUlt,
   drawBlockReason,
@@ -32,6 +34,7 @@ import {
   rotateHero,
   rotationTargets,
   setCampFocus,
+  shieldBlockReason,
   ultBlockReason,
   ultCost,
   ultNeedsTarget,
@@ -44,6 +47,7 @@ import {
   LANES,
   PLAYERS,
   ROTATIONS_PER_ROUND,
+  SHIELD_XP_COST,
   TOWER_HP,
   isLane,
   type Attribute,
@@ -427,10 +431,13 @@ export function playAiRound(state: GameState): GameState {
   s = endItems(s)
   for (const p of PLAYERS) s = aiUlts(s, p)
   s = resolveRound(s)
-  if (s.phase !== 'rotate') return s
-  const first = favoredPlayer(s.round, s.cycle)
-  for (const p of [first, other(first)]) s = takeRotations(s, p)
-  return endRotation(s)
+  if (s.phase === 'rotate') {
+    const first = favoredPlayer(s.round, s.cycle)
+    for (const p of [first, other(first)]) s = takeRotations(s, p)
+    s = endRotation(s)
+  }
+  for (const p of PLAYERS) s = discardToHandLimit(s, p)
+  return s
 }
 
 /** Use up to two rotations, then stop. A pass spends whatever is left. */
@@ -606,5 +613,15 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
     const enemiesHere = enemyHeroes(s, p, u.zone).length + (campNeutral(s, u.zone) ? 1 : 0)
     if (shape.hitsEnemy && enemiesHere > 0) s = declareUlt(s, u.uid)
   }
-  return s
+  return buyAiShield(s, p)
+}
+
+/** One Shield, bought with whatever XP the ultimates left, on a hero who is about to be hit. */
+function buyAiShield(s: GameState, p: PlayerId): GameState {
+  if (s.players[p].xp < SHIELD_XP_COST) return s
+  const lanes = [...LANES].sort((a, b) => zoneUltScore(s, p, b) - zoneUltScore(s, p, a))
+  const candidates = lanes.flatMap((lane) => lineup(s, p, lane).map((id) => s.units[id]))
+  const hero = candidates.find((u) => u.kind === 'hero' && !u.dead && u.status.shield < 1 && (enemyHeroes(s, p, u.zone).length > 0 || (isLane(u.zone) && towerPressure(s.players[other(p)].structures.towers[u.zone].t1, s.players[other(p)].structures.towers[u.zone].t2) > 0)))
+  if (!hero || shieldBlockReason(s, p, hero.uid)) return s
+  return buyShield(s, p, hero.uid)
 }

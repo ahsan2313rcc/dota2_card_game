@@ -1,8 +1,8 @@
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { getHero } from '@/game/cards'
-import { ZONE_LABEL, campHolder, laneRole, lineup, ultBlockReason, ultCost, unitName } from '@/game/engine'
+import { ZONE_LABEL, campHolder, laneRole, lineup, shieldBlockReason, ultBlockReason, ultCost, unitName } from '@/game/engine'
 import { HUMAN } from '@/game/useGame'
-import { ZONES, isLane, type CampId, type GameState, type Unit } from '@/game/types'
+import { SHIELD_XP_COST, ZONES, isLane, type CampId, type GameState, type Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { HeroPortrait } from './UnitToken'
 
@@ -13,6 +13,7 @@ export interface RosterActions {
   onMove: (uid: string, dir: -1 | 1) => void
   onReturn: (uid: string) => void
   onUlt: (u: Unit) => void
+  onShield: (u: Unit) => void
   onMorph: (uid: string) => void
   onFocus: (camp: CampId, focus: 'neutral' | 'enemy') => void
 }
@@ -136,6 +137,20 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
             </IconBtn>
           )}
         </span>
+      )}
+      {s.phase === 'ults' && u.kind === 'hero' && (
+        <button
+          type="button"
+          disabled={!!shieldBlockReason(s, HUMAN, u.uid)}
+          onClick={() => actions.onShield(u)}
+          title={shieldBlockReason(s, HUMAN, u.uid) ?? 'Spend 3 XP. One Shield, and it lasts until it blocks a hit.'}
+          className={cn(
+            'shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold',
+            u.status.shield > 0 ? 'bg-cyan-500/20 text-cyan-200' : 'bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:bg-zinc-800 disabled:text-zinc-500',
+          )}
+        >
+          {u.status.shield > 0 ? 'Shielded' : `Shield · ${SHIELD_XP_COST} XP`}
+        </button>
       )}
       {s.phase === 'ults' && u.kind === 'hero' && (
         <button

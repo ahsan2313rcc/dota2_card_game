@@ -23,7 +23,7 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
         value={`${heroesOnBoard(s, player).length}/${BOARD_LIMIT}`}
       />
       <Stat icon={<Layers className="size-4 text-zinc-300" />} label="Hand" value={handCount(pl)} />
-      <Stat icon={<Skull className="size-4 text-zinc-400" />} label="Grave" value={pl.grave.length} />
+      <Stat icon={<Skull className="size-4 text-zinc-400" />} label="Discard" value={s.heroDiscard.filter((h) => h.owner === player).length} />
       {player === 'dire' && <CardBack count={pl.hand.length} />}
       <div className="flex min-w-40 flex-1 items-center gap-2">
         <Castle className="size-4 text-zinc-300" />

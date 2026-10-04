@@ -14,11 +14,13 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Toaster } from '@/components/ui/sonner'
 import { getHero, getItem } from '@/game/cards'
+import { BUYBACK_WINDOW } from '@/game/types'
 import {
   PLAYER_LABEL,
   ZONE_LABEL,
   buybackBlockReason,
   buybackCost,
+  buybackWindow,
   drawBlockReason,
   favoredPlayer,
   handCount,
@@ -393,7 +395,7 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold to draw the top card of the shared deck (both sides use it), or an item. Buyback is ${buybackCost(s, HUMAN)} Gold, once per hero.`
+      hint = `Spend 1 Gold to draw the top card of the shared deck (both sides use it), or an item. Buyback is ${buybackCost(s, HUMAN)} Gold, once per hero, and only from the last ${BUYBACK_WINDOW} heroes in the shared discard.`
       cta = 'Done drawing'
       break
     case 'assign':
@@ -470,16 +472,24 @@ function ActionBar({
           {cta}
         </Button>
       </div>
-      {s.phase === 'draw' && me.grave.length > 0 && (
+      {s.phase === 'draw' && s.heroDiscard.length > 0 && (
         <div className="flex basis-full flex-wrap items-center gap-2 border-t border-amber-500/10 pt-2 sm:order-last">
           <span className="flex items-center gap-1 text-xs text-zinc-400">
-            <Skull className="size-3.5" /> Buyback once · {buybackCost(s, HUMAN)} Gold
+            <Skull className="size-3.5" /> Last {Math.min(BUYBACK_WINDOW, s.heroDiscard.length)} discarded · buyback {buybackCost(s, HUMAN)} Gold
           </span>
-          {[...new Set(me.grave)].map((id) => {
-            const r = buybackBlockReason(s, HUMAN, id)
+          {[...buybackWindow(s)].reverse().map((h, i) => {
+            const mine = h.owner === HUMAN
+            const reason = mine ? buybackBlockReason(s, HUMAN, h.cardId) : `${PLAYER_LABEL[h.owner]}'s hero`
+            if (!mine) {
+              return (
+                <span key={`${h.cardId}-${i}`} className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-500" title={reason ?? undefined}>
+                  {getHero(h.cardId).name}
+                </span>
+              )
+            }
             return (
-              <Button key={id} variant="outline" size="xs" disabled={!!r} title={r ?? undefined} onClick={() => onBuyback(id)}>
-                {getHero(id).name}
+              <Button key={`${h.cardId}-${i}`} variant="outline" size="xs" disabled={!!reason} title={reason ?? undefined} onClick={() => onBuyback(h.cardId)}>
+                {getHero(h.cardId).name}
               </Button>
             )
           })}

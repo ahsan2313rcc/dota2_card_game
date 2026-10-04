@@ -45,6 +45,7 @@ import {
   ANCIENT_HP,
   BOARD_LIMIT,
   BUYBACK_COST,
+  BUYBACK_WINDOW,
   CAMPS,
   HAND_LIMIT,
   LANES,
@@ -390,7 +391,6 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     bonusIncomeLanes: [],
     killsThisRound: 0,
     campFocus: { radiantJungle: 'neutral', direJungle: 'neutral' },
-    grave: [],
     towerCards: {
       top: { t1: 'glyph', t2: 'glyph' },
       mid: { t1: 'lotus', t2: 'lotus' },
@@ -415,6 +415,7 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     camps: { radiantJungle: null, direJungle: null },
     unitDeck: [],
     unitDiscard: [],
+    heroDiscard: [],
     itemDeck: [],
     itemDiscard: [],
     runeDeck: [],
@@ -656,7 +657,7 @@ function unitCard(cardId: string, buybackUsed = false): UnitDeckCard {
 
 function deckSize(s: GameState, type: DrawType) {
   if (type === 'item') return s.itemDeck.length + s.itemDiscard.length
-  return s.unitDeck.length + s.unitDiscard.length + PLAYERS.reduce((n, p) => n + s.players[p].grave.length, 0)
+  return s.unitDeck.length + s.unitDiscard.length + s.heroDiscard.length
 }
 
 export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): string | null {
@@ -677,11 +678,11 @@ function takeFromDeck(s: GameState, type: DrawType): string | UnitDeckCard | und
     return s.itemDeck.pop()
   }
   if (s.unitDeck.length === 0) {
-    const graves = PLAYERS.flatMap((p) => s.players[p].grave.map((cardId) => unitCard(cardId)))
-    if (graves.length) log(s, 'The shared deck is empty: discards and both graves are shuffled back in.', 'info')
-    s.unitDeck = shuffle(s, [...s.unitDiscard, ...graves])
+    const fallen = s.heroDiscard.map((h) => unitCard(h.cardId, h.buybackUsed))
+    if (fallen.length || s.unitDiscard.length) log(s, 'The shared deck is empty: creeps and the hero discard are shuffled back in.', 'info')
+    s.unitDeck = shuffle(s, [...s.unitDiscard, ...fallen])
     s.unitDiscard = []
-    for (const p of PLAYERS) s.players[p].grave = []
+    s.heroDiscard = []
   }
   return s.unitDeck.pop()
 }
@@ -732,11 +733,40 @@ export function buybackCost(s: GameState, p: PlayerId): number {
   return BUYBACK_COST[diff > 0 ? 'ahead' : diff < 0 ? 'behind' : 'even']
 }
 
+/** The heroes buyback is allowed to see: the most recent arrivals in the shared discard. */
+export function buybackWindow(s: GameState) {
+  return s.heroDiscard.slice(-BUYBACK_WINDOW)
+}
+
+/** This side's heroes inside the window that have not already been bought back. */
+export function buybackChoices(s: GameState, p: PlayerId) {
+  return buybackWindow(s).filter((h) => h.owner === p && !h.buybackUsed && !h.buybackBlocked)
+}
+
+function buybackIndex(s: GameState, p: PlayerId, heroId: string): number {
+  const start = Math.max(0, s.heroDiscard.length - BUYBACK_WINDOW)
+  for (let i = s.heroDiscard.length - 1; i >= start; i--) {
+    const h = s.heroDiscard[i]
+    if (h.cardId === heroId && h.owner === p && !h.buybackUsed && !h.buybackBlocked) return i
+  }
+  return -1
+}
+
 export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string): string | null {
   if (!rules(s).buyback) return 'Buyback is off'
   if (s.phase !== 'draw') return 'Buyback happens during the Draw step'
   const pl = s.players[p]
-  if (!pl.grave.includes(heroId)) return 'Not in your grave'
+  const mine = s.heroDiscard.filter((h) => h.cardId === heroId && h.owner === p)
+  if (buybackIndex(s, p, heroId) < 0) {
+    if (mine.length === 0) {
+      return s.heroDiscard.some((h) => h.cardId === heroId) ? 'That hero belongs to the other side' : 'Not in the shared discard'
+    }
+    const recent = buybackWindow(s).some((h) => h.cardId === heroId && h.owner === p && !h.buybackUsed && !h.buybackBlocked)
+    if (!recent && !buybackWindow(s).some((h) => h.cardId === heroId && h.owner === p)) {
+      return `Only the last ${BUYBACK_WINDOW} discarded heroes can be bought back`
+    }
+    return 'This hero cannot be bought back'
+  }
   if (handCount(pl) >= HAND_LIMIT) return `Hand limit (${HAND_LIMIT})`
   if (pl.gold < buybackCost(s, p)) return `Need ${buybackCost(s, p)} Gold`
   return null
@@ -747,8 +777,9 @@ export function buyback(state: GameState, p: PlayerId, heroId: string): GameStat
   const s = clone(state)
   const pl = s.players[p]
   const cost = buybackCost(s, p)
+  const index = buybackIndex(s, p, heroId)
   pl.gold -= cost
-  pl.grave.splice(pl.grave.lastIndexOf(heroId), 1)
+  s.heroDiscard.splice(index, 1)
   pl.hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: heroId, buybackUsed: true })
   log(s, `${PLAYER_LABEL[p]} buys back ${getHero(heroId).name} for ${cost} Gold. It cannot be bought back again.`, tone(p))
   return s
@@ -2242,8 +2273,14 @@ export function endRotation(state: GameState): GameState {
   for (const u of Object.values(s.units)) {
     if (u.dead) {
       if (u.kind === 'hero' && !u.copy) {
-        if (rules(s).buyback && u.owner !== 'neutral' && !u.buybackUsed && !u.buybackBlocked) s.players[u.owner].grave.push(u.cardId!)
-        else if (u.cardId) s.unitDiscard.push(unitCard(u.cardId, !!u.buybackUsed))
+        if (u.owner !== 'neutral' && u.cardId) {
+          s.heroDiscard.push({
+            cardId: u.cardId,
+            owner: u.owner,
+            buybackUsed: !!u.buybackUsed,
+            buybackBlocked: !!u.buybackBlocked,
+          })
+        } else if (u.cardId) s.unitDiscard.push(unitCard(u.cardId, !!u.buybackUsed))
       }
       if (u.kind === 'creep' || u.kind === 'siege') s.unitDiscard.push(unitCard(u.kind))
       removeFromBoard(s, u)

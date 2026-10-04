@@ -3,6 +3,7 @@ import { aiAssign, aiDraw, aiUlts, playAiRound } from './ai'
 import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyback,
+  buybackBlockReason,
   buybackCost,
   campNeutral,
   cancelUlt,
@@ -133,12 +134,11 @@ describe('setup and core rules', () => {
     expect(before).toBeGreaterThan(0)
     s.unitDeck = []
     s.unitDiscard = [{ cardId: 'creep', buybackUsed: false }]
-    s.players.radiant.grave = ['sniper']
-    s.players.dire.grave = []
+    s.heroDiscard = [{ cardId: 'sniper', owner: 'radiant', buybackUsed: false }]
     s.players.radiant.gold = 1
     s = drawCard(s, 'radiant', 'unit')
     expect(['creep', 'sniper']).toContain(s.players.radiant.hand.at(-1)!.cardId)
-    expect(s.players.radiant.grave).toEqual([])
+    expect(s.heroDiscard).toEqual([])
     expect(s.unitDiscard).toEqual([])
   })
 
@@ -424,24 +424,43 @@ describe('comeback rules and rotation', () => {
     expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(2)
   })
 
-  it('buyback returns a slain hero from the grave to hand: 2 Gold, or 3 while ahead on towers', () => {
+  it('buyback costs 4 Gold, or 5 while ahead on towers, from the shared discard', () => {
     const s = newGame(undefined, 67)
-    s.players.radiant.grave = ['axe']
-    s.players.radiant.gold = 5
-    expect(buybackCost(s, 'radiant')).toBe(2)
+    s.heroDiscard = [{ cardId: 'axe', owner: 'radiant', buybackUsed: false }]
+    s.players.radiant.gold = 9
+    expect(buybackCost(s, 'radiant')).toBe(4)
     s.players.dire.structures.towers.mid.t1 = 0
-    expect(buybackCost(s, 'radiant')).toBe(3)
+    expect(buybackCost(s, 'radiant')).toBe(5)
     const after = buyback(s, 'radiant', 'axe')
-    expect(after.players.radiant.gold).toBe(2)
-    expect(after.players.radiant.grave).toHaveLength(0)
+    expect(after.players.radiant.gold).toBe(4)
+    expect(after.heroDiscard).toHaveLength(0)
     expect(after.players.radiant.hand.some((c) => c.cardId === 'axe' && c.buybackUsed)).toBe(true)
   })
 
-  it('a hero can be bought back only once, then returns to the shared deck', () => {
+  it('buyback only offers your heroes among the last 10 in the shared discard', () => {
+    const s = newGame(undefined, 69)
+    const ids = HEROES.slice(0, 11).map((h) => h.id)
+    s.heroDiscard = ids.map((cardId, i) => ({
+      cardId,
+      owner: i === 0 || i === ids.length - 1 ? 'radiant' : 'dire',
+      buybackUsed: false,
+    }))
+    s.players.radiant.gold = 4
+    s.players.dire.gold = 4
+    expect(buybackBlockReason(s, 'radiant', ids[0])).toMatch(/last 10/)
+    expect(buybackBlockReason(s, 'radiant', ids[1])).toMatch(/other side/)
+    expect(buybackBlockReason(s, 'dire', ids[1])).toBeNull()
+    const bought = buyback(s, 'radiant', ids[10])
+    expect(bought.heroDiscard.some((h) => h.cardId === ids[10])).toBe(false)
+    expect(bought.players.radiant.hand.some((c) => c.cardId === ids[10] && c.buybackUsed)).toBe(true)
+    expect(buyback(s, 'radiant', ids[1])).toBe(s)
+  })
+
+  it('a hero can be bought back only once, then stays in the shared discard', () => {
     let s = newGame(undefined, 68)
     s.players.radiant.hand = []
-    s.players.radiant.grave = ['axe']
-    s.players.radiant.gold = 5
+    s.heroDiscard = [{ cardId: 'axe', owner: 'radiant', buybackUsed: false }]
+    s.players.radiant.gold = 4
     s = buyback(s, 'radiant', 'axe')
     const card = s.players.radiant.hand.find((c) => c.cardId === 'axe')!
     s.phase = 'assign'
@@ -449,8 +468,10 @@ describe('comeback rules and rotation', () => {
     heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'axe')!.dead = true
     s.phase = 'rotate'
     s = endRotation(s)
-    expect(s.players.radiant.grave).not.toContain('axe')
-    expect(s.unitDiscard.some((c) => c.cardId === 'axe' && c.buybackUsed)).toBe(true)
+    expect(s.heroDiscard).toEqual([{ cardId: 'axe', owner: 'radiant', buybackUsed: true, buybackBlocked: false }])
+    expect(s.unitDiscard.some((c) => c.cardId === 'axe')).toBe(false)
+    s.phase = 'draw'
+    expect(buybackBlockReason(s, 'radiant', 'axe')).toMatch(/cannot be bought back/)
   })
 
   it('rotation follows the map chain, with a base shortcut from a lane that lost both towers', () => {

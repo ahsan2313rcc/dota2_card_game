@@ -132,6 +132,15 @@ export interface UnitDeckCard {
   buybackUsed: boolean
 }
 
+/** One shared pile for every slain hero. The most recent entry is last. Buyback reads the last 10. */
+export interface HeroDiscard {
+  cardId: string
+  owner: PlayerId
+  buybackUsed: boolean
+  /** Necrophos: this death cannot be bought back. The flag is dropped when the pile is shuffled into the deck. */
+  buybackBlocked?: boolean
+}
+
 /** Everything here lasts until Cleanup. */
 export interface RoundStatus {
   stunned: boolean
@@ -230,7 +239,7 @@ export interface Unit {
   buybackBlocked?: boolean
   /** Morphling's chosen attribute. */
   morph?: 'STR' | 'AGI'
-  /** Arc Warden's copy is not a deck hero and does not go to the grave. */
+  /** Arc Warden's copy is not a deck hero and does not go to the discard. */
   copy?: boolean
   /** Techies: the allied hero this mine is watching. */
   link?: string
@@ -257,8 +266,6 @@ export interface PlayerState {
   killsThisRound: number
   /** What this player's units target in a camp they hold */
   campFocus: Record<CampId, 'neutral' | 'enemy'>
-  /** Slain heroes, most recent last. Buyback returns one to hand. */
-  grave: string[]
   /** Face-down card under each tower, claimed by this player when that tower falls */
   towerCards: Record<LaneId, Record<TowerTier, string>>
   /** Glyph played this round: towers take no damage */
@@ -329,6 +336,8 @@ export interface GameState {
   /** One hero-and-creep deck for both players. `'creep'` and `'siege'` card ids are creeps. */
   unitDeck: UnitDeckCard[]
   unitDiscard: UnitDeckCard[]
+  /** Slain heroes from both sides, oldest first. Buyback may take one of your heroes from the last 10. */
+  heroDiscard: HeroDiscard[]
   itemDeck: string[]
   itemDiscard: string[]
   runeDeck: string[]
@@ -367,7 +376,9 @@ export const STARTING_HEROES = 5
 export const TOWER_HP = { t1: 3, t2: 5 } as const
 export const TOWER_DAMAGE = { t1: 1, t2: 2 } as const
 export const ANCIENT_HP = 10
-export const BUYBACK_COST = { behind: 2, even: 2, ahead: 3 } as const
+export const BUYBACK_COST = { behind: 4, even: 4, ahead: 5 } as const
+/** Buyback can reach only this many most recent heroes in the shared discard. */
+export const BUYBACK_WINDOW = 10
 export const ROSHAN_HP = 3
 /** If Roshan is flipped before this round, he is shuffled back and another camp is drawn. */
 export const ROSHAN_EARLIEST_ROUND = 4

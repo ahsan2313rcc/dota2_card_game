@@ -1,65 +1,29 @@
 import { ATTRIBUTE_COUNTERS, ROSHAN, TORMENTOR, getHero, getNeutral } from '@/game/cards'
 import { PLAYER_LABEL, ZONE_LABEL, attributeOf, ultCost } from '@/game/engine'
-import type { GameState, RoundStatus, Unit } from '@/game/types'
+import type { GameState, Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
+import { activeStatuses } from './statuses'
 import { ATTR_STYLE, SIDE_STYLE } from './styles'
 import { HeroPortrait } from './UnitToken'
 
-const STATUS: Array<[keyof RoundStatus, string, 'debuff' | 'buff']> = [
-  ['stunned', 'Stunned: no Ultimate, no attack', 'debuff'],
-  ['silenced', 'Silenced: no Ultimate', 'debuff'],
-  ['broken', 'Broken: passive off', 'debuff'],
-  ['disarmed', 'Disarmed: no attack', 'debuff'],
-  ['slowed', 'Slowed: attacks last', 'debuff'],
-  ['blinded', 'Blinded: attacks miss', 'debuff'],
-  ['rooted', 'Rooted: cannot move', 'debuff'],
-  ['muted', 'Muted: no items', 'debuff'],
-  ['cursed', 'Cursed: cannot heal', 'debuff'],
-  ['banished', 'Banished: untargetable and invulnerable', 'buff'],
-  ['immune', 'Immune: blocks magical damage and debuffs', 'buff'],
-  ['invulnerable', 'Invulnerable: blocks all damage', 'buff'],
-  ['ethereal', 'Ethereal: blocks attack damage, +1 magical', 'buff'],
-  ['feared', 'Feared: no ultimate, attack, or move', 'debuff'],
-  ['hexed', 'Hexed: 1 HP decoy, no attack', 'debuff'],
-  ['enfeeble', 'Enfeebled: attack −1', 'debuff'],
-  ['revealed', 'Revealed', 'debuff'],
-  ['cannotDie', 'Cannot die this turn', 'buff'],
-  ['rangedAttack', 'Attacks as Ranged', 'buff'],
-  ['lifesteal', 'Basic attacks heal', 'buff'],
-  ['rupture', 'Moving deals 2 magical damage', 'debuff'],
-  ['shield', 'Shield', 'buff'],
-  ['evade', 'Evade', 'buff'],
-  ['accuracy', 'Accuracy', 'buff'],
-  ['pierce', 'Pierce', 'buff'],
-  ['bonusDamage', '+Damage', 'buff'],
-  ['invisible', 'Invisible: enemies cannot target', 'buff'],
-  ['haste', 'Haste: attacks first', 'buff'],
-  ['bladeMail', 'Blade Mail', 'buff'],
-  ['aegis', 'Aegis', 'buff'],
-  ['reincarnation', 'Reincarnation', 'buff'],
-  ['borrowedTime', 'Borrowed Time', 'buff'],
-  ['focusFire', 'Focus Fire', 'buff'],
-]
-
 function StatusChips({ u }: { u: Unit }) {
-  const active = STATUS.filter(([k]) => {
-    const v = u.status[k]
-    return typeof v === 'number' ? v > 0 : !!v
-  })
-  if (u.status.poisonedBy) active.push(['poisonedBy', 'Poisoned: 1 damage at cleanup', 'debuff'])
+  const active = activeStatuses(u)
   if (active.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1">
-      {active.map(([k, l, kind]) => (
+      {active.map((mark) => (
         <span
-          key={k}
+          key={mark.key}
           className={cn(
-            'rounded px-1.5 py-0.5 text-[10px]',
-            kind === 'debuff' ? 'bg-fuchsia-500/15 text-fuchsia-200' : 'bg-cyan-500/15 text-cyan-200',
+            'rounded px-1.5 py-0.5 text-xs font-semibold',
+            mark.key === 'shield'
+              ? 'bg-cyan-400/25 text-cyan-100 ring-1 ring-cyan-300/70'
+              : mark.kind === 'debuff'
+                ? 'bg-fuchsia-500/15 text-fuchsia-200'
+                : 'bg-cyan-500/15 text-cyan-200',
           )}
         >
-          {l}
-          {typeof u.status[k] === 'number' && (u.status[k] as number) > 1 ? ` ×${u.status[k]}` : ''}
+          {mark.title}
         </span>
       ))}
     </div>
@@ -73,7 +37,7 @@ export function Inspector({ unit, state }: { unit?: Unit; state?: GameState }) {
         Click any icon on the map to inspect it. Counter loop: <span className="text-green-300">AGI</span> →{' '}
         <span className="text-red-300">STR</span> → <span className="text-sky-300">INT</span> →{' '}
         <span className="text-green-300">AGI</span>. A basic attack against the attribute it counters is an instant kill.{' '}
-        <span className="text-violet-300">UNI</span> sits outside the loop. Pink dots mark debuffs, cyan dots mark buffs.
+        <span className="text-violet-300">UNI</span> sits outside the loop. An active Shield and every other status are labeled on the hero.
       </p>
     )
   }

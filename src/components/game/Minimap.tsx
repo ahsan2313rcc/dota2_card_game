@@ -3,7 +3,7 @@ import { getItem } from '@/game/cards'
 import { PLAYER_LABEL, ZONE_LABEL, campHolder, campNeutral, lineup } from '@/game/engine'
 import { ANCIENT_HP, CAMPS, LANES, PLAYERS, TOWER_HP, ZONES, type GameState, type PlayerId, type ZoneId } from '@/game/types'
 import { cn } from '@/lib/utils'
-import { ANCIENT_POS, CAMP_POS, ROTATION_PATH, TOWER_POS, slotPos, type Pt } from './mapLayout'
+import { ANCIENT_POS, CAMP_POS, ROTATION_PATH, TOWER_POS, slotPos, statusAnchor, type Pt } from './mapLayout'
 import { UnitToken } from './UnitToken'
 
 export interface MapInteraction {
@@ -93,19 +93,19 @@ function Tower({
   const down = hp <= 0
   return (
     <div
-      style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: '3.4cqw', height: '3.4cqw' }}
+      style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: '6.2cqw', height: '6.2cqw' }}
       title={`${PLAYER_LABEL[owner]} Tier ${tier} tower: ${hp}/${max} · deals ${tier} damage${hidden ? ` · hidden card: ${hidden}` : ''}`}
       className={cn(
-        'absolute -translate-x-1/2 -translate-y-1/2 rounded-[0.6cqw] border text-center leading-none',
+        'absolute -translate-x-1/2 -translate-y-1/2 rounded-[0.7cqw] border-2 text-center leading-none shadow-[0_2px_8px_rgba(0,0,0,0.55)]',
         down
-          ? 'border-dashed border-zinc-500/40 bg-black/30 text-zinc-500'
+          ? 'border-dashed border-zinc-500/40 bg-black/40 text-zinc-500'
           : owner === 'radiant'
-            ? 'border-emerald-300/70 bg-emerald-900/90 text-emerald-100'
-            : 'border-red-300/70 bg-red-950/90 text-red-100',
+            ? 'border-emerald-200 bg-emerald-950/95 text-emerald-50'
+            : 'border-red-200 bg-red-950/95 text-red-50',
       )}
     >
-      <div className="pt-[0.35cqw] text-[1cqw] font-semibold opacity-70">T{tier}</div>
-      <div className="text-[1.4cqw] font-bold">{down ? '×' : hp}</div>
+      <div className="pt-[0.45cqw] text-[1.85cqw] font-black tracking-wide">T{tier}</div>
+      <div className="text-[2.85cqw] leading-none font-black tabular-nums">{down ? '×' : hp}</div>
     </div>
   )
 }
@@ -200,6 +200,7 @@ export function Minimap({ s, ia, viewer }: { s: GameState; ia: MapInteraction; v
               key={uid}
               unit={s.units[uid]}
               pos={slotPos(zone, p, i)}
+              labelSide={statusAnchor(zone, p, i)}
               position={i + 1}
               targetable={ia.targetable.has(uid)}
               selected={ia.inspected === uid}

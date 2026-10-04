@@ -4,6 +4,7 @@ import { ZONE_LABEL, campHolder, laneRole, lineup, shieldBlockReason, ultBlockRe
 import { HUMAN } from '@/game/useGame'
 import { SHIELD_XP_COST, ZONES, isLane, type CampId, type GameState, type Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
+import { activeStatuses } from './statuses'
 import { HeroPortrait } from './UnitToken'
 
 export interface RosterActions {
@@ -80,6 +81,7 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
   const picking = actions.ultCaster === u.uid
   const nextCost = u.kind === 'hero' && u.owner !== 'neutral' && s.players[u.owner].arcane ? 0 : ultCost(u, s)
   const morph = u.cardId === 'morphling' ? (u.morph ?? 'AGI') : undefined
+  const marks = activeStatuses(u)
   return (
     <li
       className={cn(
@@ -111,6 +113,26 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
             {morph ? ` · ${morph}` : ''}
             {u.kind === 'illusion' ? ' · decoy' : ''}
           </span>
+          {marks.length > 0 && (
+            <span className="mt-0.5 flex flex-wrap gap-0.5">
+              {marks.map((mark) => (
+                <span
+                  key={mark.key}
+                  title={mark.title}
+                  className={cn(
+                    'rounded px-1.5 py-0.5 text-[11px] leading-none font-bold tracking-tight',
+                    mark.key === 'shield'
+                      ? 'bg-cyan-300 text-cyan-950'
+                      : mark.kind === 'debuff'
+                        ? 'bg-fuchsia-600/80 text-white'
+                        : 'bg-sky-800 text-sky-50',
+                  )}
+                >
+                  {mark.short}
+                </span>
+              ))}
+            </span>
+          )}
         </span>
       </button>
       {s.phase === 'assign' && morph && (

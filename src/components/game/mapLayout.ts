@@ -43,6 +43,13 @@ export function slotPos(zone: ZoneId, player: PlayerId, index: number): Pt {
   return { x: origin.x + step.x * index, y: origin.y + step.y * index }
 }
 
+/** Where status labels sit so they stay off the next hero in the lineup. */
+export function statusAnchor(zone: ZoneId, player: PlayerId, index: number): 'below' | 'left' | 'right' {
+  const { step } = SLOTS[zone][player]
+  if (Math.abs(step.x) >= Math.abs(step.y)) return 'below'
+  return slotPos(zone, player, index).x > 55 ? 'left' : 'right'
+}
+
 export const CAMP_POS: Record<CampId, Pt> = {
   direJungle: { x: 34, y: 26 },
   radiantJungle: { x: 66, y: 74 },

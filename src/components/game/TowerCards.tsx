@@ -23,7 +23,7 @@ export function TowerCards({ s, onSwap }: { s: GameState; onSwap: (tier: TowerTi
 
   return (
     <div className="space-y-1.5 text-xs">
-      <div className="grid grid-cols-[2rem_repeat(3,1fr)] gap-1 text-[10px] tracking-wider text-zinc-500 uppercase">
+      <div className="grid grid-cols-[2.25rem_repeat(3,1fr)] gap-1 text-xs tracking-wider text-zinc-400 uppercase">
         <span />
         {LANES.map((l) => (
           <span key={l} className="text-center">
@@ -33,7 +33,7 @@ export function TowerCards({ s, onSwap }: { s: GameState; onSwap: (tier: TowerTi
       </div>
       {TIERS.map((tier) => (
         <div key={tier} className="grid grid-cols-[2rem_repeat(3,1fr)] items-center gap-1">
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase">{tier}</span>
+          <span className="text-sm font-black text-zinc-200 uppercase">{tier}</span>
           {LANES.map((lane) => {
             const standing = pl.structures.towers[lane][tier] > 0
             const card = getItem(pl.towerCards[lane][tier])
@@ -46,7 +46,7 @@ export function TowerCards({ s, onSwap }: { s: GameState; onSwap: (tier: TowerTi
                 title={standing ? card.text : 'Tower destroyed: its card went to your hand'}
                 onClick={() => click(tier, lane)}
                 className={cn(
-                  'truncate rounded-md border px-1 py-1 text-[10px] transition',
+                  'truncate rounded-md border px-1 py-1.5 text-xs font-semibold transition',
                   standing ? 'border-sky-500/30 bg-sky-500/10 text-sky-100' : 'border-dashed border-zinc-700 text-zinc-600 line-through',
                   canSwap && 'cursor-pointer hover:border-sky-300',
                   isPicked && 'border-amber-300 bg-amber-400/20 text-amber-100',
@@ -58,7 +58,7 @@ export function TowerCards({ s, onSwap }: { s: GameState; onSwap: (tier: TowerTi
           })}
         </div>
       ))}
-      <p className="flex items-center gap-1 text-[10px] text-zinc-500">
+      <p className="flex items-center gap-1 text-xs text-zinc-400">
         {canSwap ? (
           <>
             <ArrowLeftRight className="size-3" /> Click two cards in the same tier to swap them (round 1 only).

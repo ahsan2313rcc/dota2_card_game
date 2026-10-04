@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Crown, Flame, Mountain, ShieldHalf, Snowflake, Sparkles, Zap } from 'lucide-react'
+import { Crown, Flame, Mountain, Shield, ShieldHalf, Snowflake, Sparkles, Zap } from 'lucide-react'
 import { getHero, heroPortrait } from '@/game/cards'
 import { fullName } from '@/game/engine'
 import type { Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
 import type { Pt } from './mapLayout'
+import { activeStatuses } from './statuses'
 
 const ATTR_DOT = { STR: 'bg-red-500', AGI: 'bg-green-500', INT: 'bg-sky-500', UNI: 'bg-violet-500' } as const
 
@@ -36,16 +37,6 @@ export function HeroPortrait({ cardId, className }: { cardId: string; className?
   )
 }
 
-function debuffed(u: Unit) {
-  const st = u.status
-  return st.stunned || st.silenced || st.disarmed || st.broken || st.blinded || st.rooted || st.muted || st.cursed || st.slowed
-}
-
-function buffed(u: Unit) {
-  const st = u.status
-  return st.immune || st.shield > 0 || st.evade > 0 || st.accuracy || st.bonusDamage > 0 || st.aegis || st.bladeMail || st.invisible || st.haste
-}
-
 const SIZE: Record<Unit['kind'], number> = {
   hero: 4.8,
   illusion: 4.2,
@@ -60,23 +51,29 @@ interface Props {
   unit: Unit
   pos: Pt
   position?: number
+  /** Keeps status labels off the next hero in the lineup */
+  labelSide?: 'below' | 'left' | 'right'
   targetable?: boolean
   selected?: boolean
   declared?: boolean
   onClick: () => void
 }
 
-export function UnitToken({ unit, pos, position, targetable, selected, declared, onClick }: Props) {
+export function UnitToken({ unit, pos, position, labelSide = 'below', targetable, selected, declared, onClick }: Props) {
   const wounded = unit.hp < unit.maxHp
   const side =
     unit.owner === 'radiant' ? 'ring-emerald-400' : unit.owner === 'dire' ? 'ring-red-500' : 'ring-amber-400'
   const size = SIZE[unit.kind]
+  const marks = activeStatuses(unit)
+  const shown = marks.slice(0, 4)
+  const extra = marks.length - shown.length
+  const shielded = unit.status.shield > 0
 
   return (
     <button
       type="button"
       onClick={onClick}
-      title={`${fullName(unit)} · ${unit.hp}/${unit.maxHp}`}
+      title={[`${fullName(unit)} · ${unit.hp}/${unit.maxHp}`, ...marks.map((m) => m.title)].join('\n')}
       style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: `${size}cqw`, height: `${size}cqw` }}
       className={cn(
         'absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-300 outline-none',
@@ -93,6 +90,7 @@ export function UnitToken({ unit, pos, position, targetable, selected, declared,
           selected && 'ring-[3px] ring-sky-300',
           (unit.status.banished || unit.status.invisible) && 'opacity-40',
           unit.kind === 'illusion' && 'opacity-70 outline-2 outline-offset-2 outline-cyan-200 outline-dashed',
+          shielded && 'ring-[3px] ring-cyan-200 shadow-[0_0_14px_rgba(34,211,238,0.95)]',
         )}
       >
         {unit.kind === 'hero' && <HeroPortrait cardId={unit.cardId!} className="h-full w-full scale-[1.25]" />}
@@ -113,7 +111,6 @@ export function UnitToken({ unit, pos, position, targetable, selected, declared,
         {unit.kind === 'tormentor' && (
           <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500 to-indigo-950 text-violet-100">
             <ShieldHalf style={{ width: '55%', height: '55%' }} />
-            {unit.status.shield > 0 && <span className="absolute inset-[6%] rounded-full ring-2 ring-cyan-300/80" />}
           </span>
         )}
         {unit.kind === 'roshan' && (
@@ -140,10 +137,40 @@ export function UnitToken({ unit, pos, position, targetable, selected, declared,
       {declared && (
         <Sparkles className="absolute -top-[0.6cqw] -right-[0.6cqw] size-[1.8cqw] text-amber-300 drop-shadow" />
       )}
-      {(debuffed(unit) || buffed(unit)) && (
-        <span className="absolute -right-[0.3cqw] -bottom-[0.3cqw] flex gap-[0.2cqw]">
-          {debuffed(unit) && <span className="size-[1.1cqw] rounded-full bg-fuchsia-400 ring-1 ring-black" />}
-          {buffed(unit) && <span className="size-[1.1cqw] rounded-full bg-cyan-300 ring-1 ring-black" />}
+      {shielded && (
+        <span className="absolute -right-[0.85cqw] bottom-[0.15cqw] z-20 flex size-[2.2cqw] items-center justify-center rounded-full bg-cyan-300 text-cyan-950 shadow-[0_0_8px_rgba(34,211,238,0.9)] ring-1 ring-white">
+          <Shield className="size-[1.45cqw]" strokeWidth={2.75} />
+        </span>
+      )}
+      {shown.length > 0 && (
+        <span
+          className={cn(
+            'pointer-events-none absolute z-20 flex w-[12cqw] gap-[0.3cqw]',
+            labelSide === 'below' && 'top-full left-1/2 mt-[1.45cqw] -translate-x-1/2 flex-wrap justify-center',
+            labelSide === 'right' && 'top-1/2 left-full ml-[1.1cqw] -translate-y-1/2 flex-col items-start',
+            labelSide === 'left' && 'top-1/2 right-full mr-[1.1cqw] -translate-y-1/2 flex-col items-end',
+          )}
+        >
+          {shown.map((mark) => (
+            <span
+              key={mark.key}
+              className={cn(
+                'rounded-[0.4cqw] px-[0.5cqw] py-[0.18cqw] text-[1.7cqw] leading-none font-black tracking-tight shadow-[0_1px_4px_rgba(0,0,0,0.9)] ring-1',
+                mark.key === 'shield'
+                  ? 'bg-cyan-300 text-cyan-950 ring-white'
+                  : mark.kind === 'debuff'
+                    ? 'bg-fuchsia-600 text-white ring-fuchsia-100'
+                    : 'bg-sky-800 text-sky-50 ring-sky-200',
+              )}
+            >
+              {mark.short}
+            </span>
+          ))}
+          {extra > 0 && (
+            <span className="rounded-[0.4cqw] bg-black/85 px-[0.45cqw] py-[0.12cqw] text-[1.45cqw] leading-none font-bold text-zinc-100 ring-1 ring-zinc-400">
+              +{extra}
+            </span>
+          )}
         </span>
       )}
       {unit.maxHp > 1 && (

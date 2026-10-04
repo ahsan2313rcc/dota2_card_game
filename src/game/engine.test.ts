@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { playAiRound } from './ai'
+import { aiAssign, aiDraw, aiUlts, playAiRound } from './ai'
 import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyback,
@@ -482,6 +482,45 @@ describe('comeback rules and rotation', () => {
     s = placeHero(s, 'dire', 'b', 'direJungle')
     expect(heroesOnBoard(s, 'radiant')[0].zone).toBe('radiantJungle')
     expect(heroesOnBoard(s, 'dire')[0].zone).toBe('direJungle')
+  })
+})
+
+describe('opponent decisions', () => {
+  it('holds gold for a shop item instead of drawing the purse empty', () => {
+    let s = newGame(undefined, 1)
+    s.players.dire.gold = 3
+    s.players.dire.hand = [hero('h', 'axe'), item('deso', 'desolator')]
+    s = aiDraw(s, 'dire')
+    expect(s.players.dire.gold).toBeGreaterThanOrEqual(2)
+  })
+
+  it('assigns a counter into the lane that already holds the countered hero', () => {
+    let s = setup(1, [hero('sv', 'sven')], [hero('pa', 'phantom_assassin')])
+    s = placeHero(s, 'radiant', 'sv', 'mid')
+    s = aiAssign(s, 'dire')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'phantom_assassin')?.zone).toBe('mid')
+  })
+
+  it('will not Chronosphere a lane where its own heroes are stunned as well', () => {
+    let s = setup(2, [hero('e1', 'axe')], [hero('fv', 'faceless_void'), hero('ally', 'sven')])
+    s = placeHero(s, 'radiant', 'e1', 'mid')
+    s = placeHero(s, 'dire', 'fv', 'mid')
+    s = placeHero(s, 'dire', 'ally', 'mid')
+    s = endItems(reveal(s))
+    s.players.dire.xp = 5
+    s = aiUlts(s, 'dire')
+    expect(s.ultDeclarations.some((d) => s.units[d.uid]?.cardId === 'faceless_void')).toBe(false)
+  })
+
+  it('Chronospheres when Void is alone against more enemies', () => {
+    let s = setup(3, [hero('e1', 'axe'), hero('e2', 'sven')], [hero('fv', 'faceless_void')])
+    s = placeHero(s, 'radiant', 'e1', 'mid')
+    s = placeHero(s, 'radiant', 'e2', 'mid')
+    s = placeHero(s, 'dire', 'fv', 'mid')
+    s = endItems(reveal(s))
+    s.players.dire.xp = 5
+    s = aiUlts(s, 'dire')
+    expect(s.ultDeclarations.some((d) => s.units[d.uid]?.cardId === 'faceless_void')).toBe(true)
   })
 })
 

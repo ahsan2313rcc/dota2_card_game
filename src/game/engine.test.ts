@@ -319,6 +319,19 @@ describe('jungle, Roshan and Tormentor', () => {
     expect(s.players.radiant.gold).toBe(gold + 1)
   })
 
+  it('a rune from a neutral kill is kept even when the hand is already full', () => {
+    let s = setup(19, [hero('a', 'juggernaut')])
+    s.players.radiant.hand.push(...Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve')))
+    const golem = forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    golem.hp = 1
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    expect(handCount(s.players.radiant)).toBe(HAND_LIMIT)
+    s = fight(s)
+    expect(s.players.radiant.hand.some((c) => c.cardId.startsWith('rune_'))).toBe(true)
+    expect(handCount(s.players.radiant)).toBe(HAND_LIMIT)
+    expect(logHas(s, 'hand is full')).toBe(false)
+  })
+
   it('Roshan Roars from a jungle camp while he is at full health', () => {
     let s = setup(23, [hero('a', 'sven')])
     forceCamp(s, 'direJungle', 'roshan')

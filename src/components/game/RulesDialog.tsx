@@ -56,7 +56,8 @@ export function RulesDialog() {
                 Draw: both sides spend 1 Gold to take the top card of the one shared deck, or 1 Gold for an item from the
                 shared item deck (hand limit 7). The hero deck is 160 cards shuffled together: all 127 heroes, 25 lane
                 creeps and 8 siege creeps. You start with 5 cards from that deck. The item deck is 60 shop cards. Playing
-                one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two copies) and stays free.
+                one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two copies). Runes are free and do not
+                count toward the hand limit.
                 Buyback returns a slain hero from your grave to your hand for 2 Gold, or 3 if you have more towers standing
                 than the enemy. Each hero can be bought back only once; the next time it dies, the card goes back into the
                 shared deck.
@@ -107,10 +108,11 @@ export function RulesDialog() {
           </Section>
           <Section title="Runes & tower cards">
             Twenty rune cards (two each): Bounty (+1 Gold), Regeneration, Double Damage, Shield, Arcane (next Ultimate is
-            free), Illusion (1 HP decoy in front of a hero), Invisibility, Haste, Wisdom (+1 XP) and Water (cleanse). Under
-            each side's T1 and T2 towers lie Glyph (your towers take no damage this round), Lotus (heal all your heroes) and
-            Twin Gate (teleport all your heroes to one lane), shuffled; you may swap them within a tier in round 1. When a
-            tower falls its owner gains 1 Gold and that card, which does not count toward the hand limit.
+            free), Illusion (1 HP decoy in front of a hero), Invisibility, Haste, Wisdom (+1 XP) and Water (cleanse). A rune
+            does not count toward the hand limit, so a full hand still keeps it. Under each side's T1 and T2 towers lie
+            Glyph (your towers take no damage this round), Lotus (heal all your heroes) and Twin Gate (teleport all your
+            heroes to one lane), shuffled; you may swap them within a tier in round 1. When a tower falls its owner gains
+            1 Gold and that card, which also does not count toward the hand limit.
           </Section>
           <Section title="Status effects">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">

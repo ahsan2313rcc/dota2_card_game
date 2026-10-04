@@ -254,7 +254,9 @@ export default function App() {
 
           <section>
             <h2 className="mb-2 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-              Your hand ({handCount(me)}/{HAND_LIMIT}{me.hand.length > handCount(me) ? ' + tower cards' : ''})
+              Your hand ({handCount(me)}/{HAND_LIMIT}
+              {me.hand.some((c) => c.type === 'item' && getItem(c.cardId).kind === 'Rune') ? ' + runes' : ''}
+              {me.hand.some((c) => c.type === 'item' && getItem(c.cardId).kind === 'Tower') ? ' + tower cards' : ''})
             </h2>
             {me.hand.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">

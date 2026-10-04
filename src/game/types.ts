@@ -98,7 +98,7 @@ export type ItemTarget = 'allyHero' | 'allyWoundedHero' | 'enemyUnit' | 'enemyHe
 export interface ItemCard {
   id: string
   name: string
-  /** Runes drop from neutral camps. Tower cards are earned when a tower falls and do not count toward the hand limit. */
+  /** Runes drop from neutral camps. Runes and tower cards do not count toward the hand limit. */
   kind: 'Shop' | 'Rune' | 'Tower' | 'Special'
   text: string
   target: ItemTarget

@@ -69,7 +69,7 @@ const ITEM_TINT = {
 
 const ITEM_NOTE = {
   Shop: 'Shop item · single use',
-  Rune: 'Rune · instant, single use',
+  Rune: 'Rune · outside hand limit',
   Tower: 'Tower card · outside hand limit',
   Special: 'Boss reward · single use',
 } as const

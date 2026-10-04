@@ -335,13 +335,19 @@ function rules(s: GameState): ComebackRules {
   return s.settings.rules ?? ALL_RULES
 }
 
-function isTowerCard(c: HandCard) {
-  return c.type === 'item' && getItem(c.cardId).kind === 'Tower'
+function itemKind(c: { type: string; cardId: string }) {
+  return c.type === 'item' ? getItem(c.cardId).kind : undefined
 }
 
-/** Cards that count toward the hand limit (tower cards are exempt). */
+/** Runes and tower cards sit in hand without using a slot. */
+function outsideHandLimit(c: { type: string; cardId: string }) {
+  const kind = itemKind(c)
+  return kind === 'Rune' || kind === 'Tower'
+}
+
+/** Cards that count toward the hand limit. Runes and tower cards are exempt. */
 export function handCount(pl: PlayerState): number {
-  return pl.hand.filter((c) => !isTowerCard(c)).length
+  return pl.hand.filter((c) => !outsideHandLimit(c)).length
 }
 
 export function standingTowers(s: GameState, p: PlayerId): number {
@@ -750,7 +756,7 @@ function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: Tower
 }
 
 function giveCard(s: GameState, p: PlayerId, card: Omit<HandCard, 'iid'>, label: string) {
-  if (handCount(s.players[p]) >= HAND_LIMIT) {
+  if (!outsideHandLimit(card) && handCount(s.players[p]) >= HAND_LIMIT) {
     log(s, `${PLAYER_LABEL[p]}'s hand is full — ${label} is lost.`, 'info')
     if (card.type === 'item') discardItem(s, card.cardId)
     return

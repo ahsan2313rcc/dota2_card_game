@@ -85,6 +85,7 @@ def load_heroes() -> list[Hero]:
 
 
 ENOUGH_HEROES = 5
+STYLES = ("balanced", "lane", "jungler", "defender")
 
 
 @dataclass
@@ -157,10 +158,14 @@ class Game:
     neutral_deck: list[str] = field(default_factory=list)
     neutral_discard: list[str] = field(default_factory=list)
     attacked_towers: set[tuple[str, str]] = field(default_factory=set)
+    style: dict[str, str] = field(default_factory=lambda: {"radiant": "balanced", "dire": "balanced"})
+    # Heroes who rotated into the enemy jungle. Assignment cannot start there.
+    invade: dict[str, list[Unit]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.board = {p: {lane: [] for lane in LANES} for p in ("radiant", "dire")}
         self.jungle = {p: [] for p in ("radiant", "dire")}
+        self.invade = {p: [] for p in ("radiant", "dire")}
         self.camps = {p: None for p in ("radiant", "dire")}
         self.played = {p: 0 for p in ("radiant", "dire")}
         self.casts = {p: 0 for p in ("radiant", "dire")}
@@ -195,6 +200,7 @@ def upkeep(g: Game) -> None:
 def living(g: Game, p: str) -> list[tuple[str, Unit]]:
     rows = [(lane, unit) for lane in LANES for unit in g.board[p][lane] if unit.hp > 0]
     rows += [("jungle", unit) for unit in g.jungle[p] if unit.hp > 0]
+    rows += [("invade", unit) for unit in g.invade[p] if unit.hp > 0]
     return rows
 
 
@@ -203,7 +209,7 @@ def lane_heroes(g: Game, p: str) -> int:
 
 
 def board_size(g: Game, p: str) -> int:
-    return lane_heroes(g, p) + sum(1 for unit in g.jungle[p] if unit.hp > 0)
+    return len(living(g, p))
 
 
 def draw_and_deploy(g: Game) -> None:
@@ -220,8 +226,14 @@ def draw_and_deploy(g: Game) -> None:
             hero = side.hand.pop(0)
             unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
             lane = best_lane(g, p)
-            if jungle_value(g, p) > lane_value(g, p, lane):
+            lane_score = lane_value(g, p, lane)
+            jungle_score = jungle_value(g, p)
+            invade_score = invade_value(g, p)
+            if jungle_score > lane_score and jungle_score >= invade_score:
                 g.jungle[p].append(unit)
+                g.jungle_sent[p] += 1
+            elif invade_score > lane_score:
+                g.invade[p].append(unit)
                 g.jungle_sent[p] += 1
             else:
                 g.board[p][lane].append(unit)
@@ -262,52 +274,88 @@ def best_lane(g: Game, p: str) -> str:
 NEUTRAL_KILL = 5
 
 
-def garrison(t1: int, t2: int, foes: int) -> int:
-    """Ancient wants attackers + 1. Tier 2 matches them. Tier 1 wants one fewer."""
+def garrison(t1: int, t2: int, foes: int, style: str) -> int:
+    """Ancient is always answered. Lane and jungler skip Tier 1. Defender overfills."""
     if foes <= 0:
         return 0
     if t1 <= 0 and t2 <= 0:
-        return min(5, foes + 1)
+        return min(5, foes + (2 if style == "defender" else 1))
     if t1 <= 0:
+        if style == "lane":
+            return max(0, foes - 1)
+        if style == "defender":
+            return min(5, foes + 1)
+        if style == "jungler":
+            return min(5, foes + (1 if t2 < TOWER["t2"] else 0))
+        return foes
+    if style in ("jungler", "lane"):
+        return 0
+    if style == "defender":
         return foes
     matching = max(0, foes - 1)
     return max(matching, 1) if t1 <= foes else matching
 
 
-def defend_value(t1: int, t2: int, foes: int, mine: int) -> int:
+def defend_value(t1: int, t2: int, foes: int, mine: int, style: str) -> int:
     """One more defender. 0 once the garrison is full. A soaker cuts the Tier 2 score by 4."""
-    if mine >= garrison(t1, t2, foes):
+    if mine >= garrison(t1, t2, foes, style):
         return 0
     if t1 <= 0 and t2 <= 0:
         return 50 + foes
     if t1 <= 0:
         raw = 2 + 2 * max(t2, 0) + 3
-        return raw - 4 if mine else raw
+        scored = raw - 4 if mine else raw
+        return max(scored, 14) if style == "jungler" else scored
     return 8 if mine == 0 and foes >= t1 else 4
 
 
 def lane_value(g: Game, p: str, lane: str) -> int:
     """Attack the enemy building, or fill the garrison if that scores higher."""
+    style = g.style[p]
     foe = g.sides[other(p)].towers[lane]
     own = g.sides[p].towers[lane]
     foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
     mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
-    attack = tower_pressure(foe["t1"], foe["t2"]) * 2 + foes * 2 - mine * 3
+    crowd = max(0, mine - 2) if style == "lane" else mine * 3
+    attack = tower_pressure(foe["t1"], foe["t2"]) * (3 if style == "lane" else 2) + foes * 2 - crowd
     if foe["t1"] <= 0 and foe["t2"] <= 0:
         attack += 28
-    return max(attack, defend_value(own["t1"], own["t2"], foes, mine))
+    if style == "lane" and (foe["t1"] > 0 or foe["t2"] > 0):
+        attack += 12
+    return max(attack, defend_value(own["t1"], own["t2"], foes, mine, style))
 
 
 def jungle_value(g: Game, p: str) -> int:
-    """A camp is worth 5 once two heroes are in lanes. The garrison scores decide if it wins."""
+    """Balanced farms for 5. A jungler stacks three at 12. Lane and defender stay out."""
+    style = g.style[p]
+    if style in ("lane", "defender"):
+        return -999
     camp = g.camps[p]
-    if camp is None or camp.hp <= 0 or lane_heroes(g, p) < 2:
+    if camp is None or camp.hp <= 0:
         return -999
     mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
+    if style == "jungler":
+        return 12 if mine < 3 else -999
+    if lane_heroes(g, p) < 2:
+        return -999
     cap = 2 if camp.kind == "roshan" else 3
     if mine >= cap:
         return -999
     return NEUTRAL_KILL
+
+
+def invade_value(g: Game, p: str) -> int:
+    """A jungler steps into the enemy camp once two heroes are already clearing home."""
+    if g.style[p] != "jungler":
+        return -999
+    camp = g.camps[other(p)]
+    if camp is None or camp.hp <= 0:
+        return -999
+    home = sum(1 for unit in g.jungle[p] if unit.hp > 0)
+    mine = sum(1 for unit in g.invade[p] if unit.hp > 0)
+    if home < 2 or mine >= 3:
+        return -999
+    return 8
 
 
 def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
@@ -315,7 +363,7 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
     side = g.sides[p]
     best: tuple[tuple[int, int, int], str, Unit] | None = None
     for lane, unit in living(g, p):
-        if lane == "jungle":
+        if lane in ("jungle", "invade"):
             continue
         hero = unit.hero
         if hero.kind != "active" or unit.stunned:
@@ -362,8 +410,8 @@ def legal_shield(g: Game, p: str) -> Unit | None:
 
     def threat(unit: Unit) -> tuple[int, int]:
         lane = next(lane for lane, candidate in living(g, p) if candidate is unit)
-        if lane == "jungle":
-            camp = g.camps[p]
+        if lane in ("jungle", "invade"):
+            camp = g.camps[other(p) if lane == "invade" else p]
             return ((1 if camp is not None and camp.hp > 0 else 0), -unit.hp)
         foes = sum(1 for foe in g.board[other(p)][lane] if foe.hp > 0)
         return (foes, -unit.hp)
@@ -566,9 +614,11 @@ def claim_camp(g: Game, p: str, camp: Camp) -> None:
 
 
 def fight_jungle(g: Game) -> None:
-    """One home-camp swing. The hero hits the camp; the camp hits back. Shields block one physical hit."""
+    """One camp swing. Home heroes and enemy invaders both hit it. The larger surviving side claims the kill."""
     for p in ("radiant", "dire"):
-        heroes = [unit for unit in g.jungle[p] if unit.hp > 0]
+        home = [unit for unit in g.jungle[p] if unit.hp > 0]
+        invaders = [unit for unit in g.invade[other(p)] if unit.hp > 0]
+        heroes = home + invaders
         camp = g.camps[p]
         if not heroes or camp is None or camp.hp <= 0:
             continue
@@ -595,7 +645,9 @@ def fight_jungle(g: Game) -> None:
             if camp.kind == "tormentor":
                 hurt(g, hero, dealt, "neutral")
         if camp.hp <= 0:
-            claim_camp(g, p, camp)
+            owner_alive = sum(1 for unit in home if unit.hp > 0)
+            invade_alive = sum(1 for unit in invaders if unit.hp > 0)
+            claim_camp(g, other(p) if invade_alive > owner_alive else p, camp)
             continue
         if camp.kind == "tormentor":
             continue
@@ -668,9 +720,14 @@ def towers_fire(g: Game) -> None:
 
 def cleanup(g: Game) -> None:
     for p in ("radiant", "dire"):
-        for lane in (*LANES, "jungle"):
+        for lane in (*LANES, "jungle", "invade"):
             alive = []
-            pile = g.jungle[p] if lane == "jungle" else g.board[p][lane]
+            if lane == "invade":
+                pile = g.invade[p]
+            elif lane == "jungle":
+                pile = g.jungle[p]
+            else:
+                pile = g.board[p][lane]
             for unit in pile:
                 if unit.hp > 0:
                     unit.stunned = False
@@ -683,7 +740,9 @@ def cleanup(g: Game) -> None:
                     if not unit.persist_shield:
                         unit.shield = 0
                     alive.append(unit)
-            if lane == "jungle":
+            if lane == "invade":
+                g.invade[p] = alive
+            elif lane == "jungle":
                 g.jungle[p] = alive
             else:
                 g.board[p][lane] = alive
@@ -750,7 +809,7 @@ def rd(a: float, b: float) -> str:
     return f"{a:.2f}/{b:.2f}"
 
 
-def simulate(games: int, seed: int, limit: int) -> None:
+def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire: str = "balanced") -> dict[str, object]:
     heroes = load_heroes()
     wins: Counter[str] = Counter()
     lengths: list[int] = []
@@ -781,7 +840,13 @@ def simulate(games: int, seed: int, limit: int) -> None:
     first_t2_round: dict[str, list[int]] = {"radiant": [], "dire": [], "tie": []}
     for n in range(games):
         rng = random.Random(seed + n)
-        g = Game(rng=rng, heroes=heroes, sides={"radiant": Side(), "dire": Side()}, board={})
+        g = Game(
+            rng=rng,
+            heroes=heroes,
+            sides={"radiant": Side(), "dire": Side()},
+            board={},
+            style={"radiant": radiant, "dire": dire},
+        )
         for side in g.sides.values():
             side.hand = [rng.choice(heroes) for _ in range(5)]
         trace = play(g, limit)
@@ -828,7 +893,7 @@ def simulate(games: int, seed: int, limit: int) -> None:
     def avg(xs: list[int]) -> float:
         return sum(xs) / len(xs) if xs else 0
 
-    print(f"games {games}  seed {seed}  round cap {limit}")
+    print(f"games {games}  seed {seed}  round cap {limit}  radiant {radiant}  dire {dire}")
     print(f"finished {games - unfinished}  unfinished {unfinished}")
     print(f"radiant wins {wins['radiant']}  dire wins {wins['dire']}")
     if games:
@@ -911,6 +976,19 @@ def simulate(games: int, seed: int, limit: int) -> None:
     tie_n = first_t2_took["tie"]
     print(f"{'Same rnd':8} {tie_n:4d}  mean round {avg(first_t2_round['tie']):.2f}")
     print(f"{'Never':8} {first_t2_took['never']:4d}")
+    return {
+        "radiant": radiant,
+        "dire": dire,
+        "wins": dict(wins),
+        "games": games,
+        "unfinished": unfinished,
+        "length": avg(lengths),
+        "neutrals": (lifetime["radiant"][3] / games if games else 0, lifetime["dire"][3] / games if games else 0),
+        "jungle": (
+            sum(sent["radiant"] for sent in jungle_sent) / games if games else 0,
+            sum(sent["dire"] for sent in jungle_sent) / games if games else 0,
+        ),
+    }
 
 
 def up(row: Snap) -> int:
@@ -970,13 +1048,51 @@ def record_falls(
         first_t2_won[first_t2] += 1
 
 
+def tourney(games: int, seed: int, limit: int) -> None:
+    """Every style against every style. The cell is Radiant's win rate."""
+    rows: list[dict[str, object]] = []
+    for radiant in STYLES:
+        for dire in STYLES:
+            print()
+            print("=" * 88)
+            print(f"Radiant {radiant} vs Dire {dire}")
+            print("=" * 88)
+            rows.append(simulate(games, seed, limit, radiant, dire))
+    print()
+    print("Radiant win rate. Row is Radiant's style, column is Dire's style.")
+    print(f"{'':10}  " + "  ".join(f"{name:>10}" for name in STYLES))
+    by_seat = {name: [] for name in STYLES}
+    for radiant in STYLES:
+        cells = []
+        for dire in STYLES:
+            row = next(item for item in rows if item["radiant"] == radiant and item["dire"] == dire)
+            wins = row["wins"]
+            assert isinstance(wins, dict)
+            rate = wins.get("radiant", 0) / games if games else 0
+            cells.append(f"{rate:10.1%}")
+            by_seat[radiant].append(rate)
+            by_seat[dire].append(1 - rate)
+        print(f"{radiant:10}  " + "  ".join(cells))
+    print()
+    print("Mean win rate of each style across both seats and every opponent.")
+    for name in sorted(STYLES, key=lambda style: sum(by_seat[style]) / len(by_seat[style]), reverse=True):
+        rates = by_seat[name]
+        print(f"{name:10}  {sum(rates) / len(rates):.1%}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Version 3 viability simulation")
     parser.add_argument("--games", type=int, default=200)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--limit", type=int, default=40)
+    parser.add_argument("--radiant", choices=STYLES, default="balanced")
+    parser.add_argument("--dire", choices=STYLES, default="balanced")
+    parser.add_argument("--tourney", action="store_true", help="Play every style against every style")
     args = parser.parse_args()
-    simulate(args.games, args.seed, args.limit)
+    if args.tourney:
+        tourney(args.games, args.seed, args.limit)
+    else:
+        simulate(args.games, args.seed, args.limit, args.radiant, args.dire)
 
 
 if __name__ == "__main__":

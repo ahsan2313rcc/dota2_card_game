@@ -13,6 +13,7 @@ import {
   handCount,
   endDraw,
   endRotation,
+  enemyJungle,
   heroesOnBoard,
   homeJungle,
   isMelee,
@@ -59,6 +60,9 @@ import {
 } from './types'
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
+
+/** balanced keeps the current garrison. lane stacks on towers. jungler farms. defender holds lanes. */
+export type AiStyle = 'balanced' | 'lane' | 'jungler' | 'defender'
 
 const HARMFUL = new Set([
   'stun',
@@ -149,13 +153,20 @@ function campCap(neutral: Unit): number {
 
 /**
  * Minimum heroes on this lane while enemies are hitting it.
- * Ancient: one more than the attackers, up to the whole board.
- * Tier 2: the same number. Tier 1: one fewer, but at least one if they can destroy it this round.
+ * Ancient is always answered. A lane stack skips Tier 1. A jungler skips Tier 1 and holds Tier 2
+ * with an extra body once that tower is hurt. A defender matches Tier 1 and overfills Tier 2.
  */
-function garrison(t1: number, t2: number, foes: number): number {
+function garrison(t1: number, t2: number, foes: number, style: AiStyle): number {
   if (foes <= 0) return 0
-  if (t1 <= 0 && t2 <= 0) return Math.min(BOARD_LIMIT, foes + 1)
-  if (t1 <= 0) return foes
+  if (t1 <= 0 && t2 <= 0) return Math.min(BOARD_LIMIT, foes + (style === 'defender' ? 2 : 1))
+  if (t1 <= 0) {
+    if (style === 'lane') return Math.max(0, foes - 1)
+    if (style === 'defender') return Math.min(BOARD_LIMIT, foes + 1)
+    if (style === 'jungler') return Math.min(BOARD_LIMIT, foes + (t2 < TOWER_HP.t2 ? 1 : 0))
+    return foes
+  }
+  if (style === 'jungler' || style === 'lane') return 0
+  if (style === 'defender') return foes
   const matching = Math.max(0, foes - 1)
   return t1 <= foes ? Math.max(matching, 1) : matching
 }
@@ -165,13 +176,15 @@ function garrison(t1: number, t2: number, foes: number): number {
  * Tier 2: 2 + 2 per remaining health + 3. A full tower is 15, and a hero already soaking cuts 4.
  * Tier 1: 8 when the tower would fall, otherwise 4, under a camp.
  * Ancient: 50 plus the attackers, so the quota is filled before any push.
+ * A jungler still fills a Tier 2 quota before farming, so that score stays at least 14.
  */
-function defendValue(t1: number, t2: number, foes: number, mine: number): number {
-  if (mine >= garrison(t1, t2, foes)) return 0
+function defendValue(t1: number, t2: number, foes: number, mine: number, style: AiStyle): number {
+  if (mine >= garrison(t1, t2, foes, style)) return 0
   if (t1 <= 0 && t2 <= 0) return 50 + foes
   if (t1 <= 0) {
     const raw = 2 + 2 * Math.max(t2, 0) + 3
-    return mine > 0 ? raw - 4 : raw
+    const scored = mine > 0 ? raw - 4 : raw
+    return style === 'jungler' ? Math.max(scored, 14) : scored
   }
   return mine === 0 && foes >= t1 ? 8 : 4
 }
@@ -230,22 +243,26 @@ function counterScore(_attr: Attribute, _enemies: Unit[]): number {
   return 0
 }
 
-function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr?: Attribute): number {
+function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr: Attribute | undefined, style: AiStyle): number {
   const enemyTw = s.players[other(p)].structures.towers[lane]
   const ownTw = s.players[p].structures.towers[lane]
   const foes = enemyHeroes(s, p, lane)
   const mine = heroesIn(s, p, lane)
   const bodies = lineup(s, p, lane).length
-  let attack = towerPressure(enemyTw.t1, enemyTw.t2) * 2 + foes.length * 2 - bodies * 3
+  const crowd = style === 'lane' ? Math.max(0, bodies - 2) : bodies * 3
+  let attack = towerPressure(enemyTw.t1, enemyTw.t2) * (style === 'lane' ? 3 : 2) + foes.length * 2 - crowd
   if (enemyTw.t1 <= 0 && enemyTw.t2 <= 0) attack += 28
+  if (style === 'lane' && (enemyTw.t1 > 0 || enemyTw.t2 > 0)) attack += 12
   if (attr) attack += counterScore(attr, foes)
-  const defense = defendValue(ownTw.t1, ownTw.t2, foes.length, mine)
+  const defense = defendValue(ownTw.t1, ownTw.t2, foes.length, mine, style)
   return Math.max(attack, defense)
 }
 
-function pickLane(s: GameState, p: PlayerId, attr?: Attribute): LaneId {
+function pickLane(s: GameState, p: PlayerId, attr: Attribute | undefined, style: AiStyle): LaneId {
   return [...LANES].sort(
-    (a, b) => laneValue(s, p, b, attr) - laneValue(s, p, a, attr) || ZONE_PRIORITY[p].indexOf(a) - ZONE_PRIORITY[p].indexOf(b),
+    (a, b) =>
+      laneValue(s, p, b, attr, style) - laneValue(s, p, a, attr, style) ||
+      ZONE_PRIORITY[p].indexOf(a) - ZONE_PRIORITY[p].indexOf(b),
   )[0]
 }
 
@@ -253,24 +270,27 @@ function heroesIn(s: GameState, p: PlayerId, zone: ZoneId): number {
   return unitsIn(s, p, zone).filter((u) => u.kind === 'hero').length
 }
 
-/** A camp is 5 once two heroes are already in lanes. Garrison scores decide whether the camp wins. */
-function jungleValue(s: GameState, p: PlayerId): number {
+/** A camp is 5 once two heroes are already in lanes. A jungler farms earlier and stacks three. */
+function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
+  if (style === 'lane' || style === 'defender') return -999
   const home = homeJungle(p)
   const neutral = campNeutral(s, home)
   if (!neutral) return -999
+  const mine = heroesIn(s, p, home)
+  if (style === 'jungler') return mine < 3 ? 12 : -999
   const laneHeroes = LANES.reduce((sum, lane) => sum + heroesIn(s, p, lane), 0)
   if (laneHeroes < 2) return -999
-  if (heroesIn(s, p, home) >= campCap(neutral)) return -999
+  if (mine >= campCap(neutral)) return -999
   return NEUTRAL_KILL
 }
 
-function bestZone(s: GameState, p: PlayerId, attr?: Attribute): ZoneId {
-  const lane = pickLane(s, p, attr)
+function bestZone(s: GameState, p: PlayerId, attr: Attribute | undefined, style: AiStyle): ZoneId {
+  const lane = pickLane(s, p, attr, style)
   const home = homeJungle(p)
-  return jungleValue(s, p) > laneValue(s, p, lane, attr) ? home : lane
+  return jungleValue(s, p, style) > laneValue(s, p, lane, attr, style) ? home : lane
 }
 
-export function aiAssign(state: GameState, p: PlayerId): GameState {
+export function aiAssign(state: GameState, p: PlayerId, style: AiStyle = 'balanced'): GameState {
   let s = state
   while (!placeBlockReason(s, p)) {
     const heroes = s.players[p].hand.filter((c) => c.type === 'hero')
@@ -279,15 +299,15 @@ export function aiAssign(state: GameState, p: PlayerId): GameState {
     let bestScore = -Infinity
     for (const card of heroes) {
       const attr = getHero(card.cardId).attribute
-      const zone = bestZone(s, p, attr)
-      const score = isLane(zone) ? laneValue(s, p, zone, attr) : jungleValue(s, p)
+      const zone = bestZone(s, p, attr, style)
+      const score = isLane(zone) ? laneValue(s, p, zone, attr, style) : jungleValue(s, p, style)
       if (score > bestScore) {
         bestScore = score
         best = card
       }
     }
     const attr = getHero(best.cardId).attribute
-    const next = placeHero(s, p, best.iid, bestZone(s, p, attr))
+    const next = placeHero(s, p, best.iid, bestZone(s, p, attr, style))
     if (next === s) break
     s = next
   }
@@ -339,7 +359,7 @@ function laneMostEnemies(s: GameState, p: PlayerId): LaneId | undefined {
   const lanes = LANES.filter((lane) => enemyHeroes(s, p, lane).length > 0)
   if (!lanes.length) return undefined
   return [...lanes].sort(
-    (a, b) => enemyHeroes(s, p, b).length - enemyHeroes(s, p, a).length || laneValue(s, p, b) - laneValue(s, p, a),
+    (a, b) => enemyHeroes(s, p, b).length - enemyHeroes(s, p, a).length || laneValue(s, p, b, undefined, 'balanced') - laneValue(s, p, a, undefined, 'balanced'),
   )[0]
 }
 
@@ -351,7 +371,7 @@ function busiestContested(s: GameState, p: PlayerId): LaneId | undefined {
 
 function pickBuff(s: GameState, p: PlayerId, targets: Unit[]): Unit | undefined {
   if (!targets.length) return undefined
-  const hot = pickLane(s, p)
+  const hot = pickLane(s, p, undefined, 'balanced')
   const inHot = targets.filter((t) => t.zone === hot)
   const fighting = targets.filter((t) => enemyHeroes(s, p, t.zone).length > 0 || !!campNeutral(s, t.zone))
   const pool = inHot.length ? inHot : fighting.length ? fighting : targets
@@ -439,7 +459,7 @@ function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard): Gam
 }
 
 function aiTeleport(s: GameState, p: PlayerId, iid: string, heroes: Unit[]): GameState {
-  const lane = pickLane(s, p)
+  const lane = pickLane(s, p, undefined, 'balanced')
   const idle = heroes.find(
     (u) => u.zone !== lane && lineup(s, other(p), u.zone).length === 0 && !campNeutral(s, u.zone) && !soleDefender(s, p, u),
   )
@@ -447,11 +467,11 @@ function aiTeleport(s: GameState, p: PlayerId, iid: string, heroes: Unit[]): Gam
 }
 
 /** One full round with the AI playing both sides, ending in the report (or game over). */
-export function playAiRound(state: GameState): GameState {
+export function playAiRound(state: GameState, styles: Partial<Record<PlayerId, AiStyle>> = {}): GameState {
   let s = state
   for (const p of PLAYERS) s = aiDraw(s, p)
   s = endDraw(s)
-  for (const p of PLAYERS) s = aiAssign(s, p)
+  for (const p of PLAYERS) s = aiAssign(s, p, styles[p] ?? 'balanced')
   s = reveal(s)
   for (let guard = 0; s.phase === 'response' && guard < 200; guard++) {
     const next = aiOneResponse(s, s.priority)
@@ -459,7 +479,7 @@ export function playAiRound(state: GameState): GameState {
     s = next
   }
   if (s.phase === 'rotate') {
-    for (const p of PLAYERS) s = takeRotations(s, p)
+    for (const p of PLAYERS) s = takeRotations(s, p, styles[p] ?? 'balanced')
     s = endRotation(s)
   }
   for (const p of PLAYERS) s = discardToHandLimit(s, p)
@@ -467,51 +487,60 @@ export function playAiRound(state: GameState): GameState {
 }
 
 /** Use up to two rotations, then stop. A pass spends whatever is left. */
-export function takeRotations(s: GameState, p: PlayerId): GameState {
+export function takeRotations(s: GameState, p: PlayerId, style: AiStyle = 'balanced'): GameState {
   while (s.phase === 'rotate' && s.players[p].rotationsUsed < ROTATIONS_PER_ROUND) {
     const before = s.players[p].rotationsUsed
-    s = aiRotate(s, p)
+    s = aiRotate(s, p, style)
     if (s.players[p].rotationsUsed === before) break
   }
   return s
 }
 
-function stayValue(s: GameState, p: PlayerId, u: Unit): number {
+function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
   let stay = lineup(s, other(p), u.zone).length * 2
   if (campNeutral(s, u.zone)) stay += 3
-  if (!isLane(u.zone)) return stay
+  if (!isLane(u.zone)) {
+    if (style === 'jungler' && u.zone === homeJungle(p) && heroesIn(s, p, u.zone) < 3) stay += 12
+    return stay
+  }
   const ownTw = s.players[p].structures.towers[u.zone]
   const foes = enemyHeroes(s, p, u.zone).length
   const mine = heroesIn(s, p, u.zone)
-  stay += defendValue(ownTw.t1, ownTw.t2, foes, Math.max(0, mine - 1))
+  stay += defendValue(ownTw.t1, ownTw.t2, foes, Math.max(0, mine - 1), style)
   stay += exposedBonus(towerPressure(s.players[other(p)].structures.towers[u.zone].t1, s.players[other(p)].structures.towers[u.zone].t2))
   if (soleDefender(s, p, u)) stay += 10
   return stay
 }
 
-function destValue(s: GameState, p: PlayerId, zone: ZoneId): number {
+function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle): number {
   const foes = lineup(s, other(p), zone).length
   const friends = lineup(s, p, zone).length
   let score = foes * 2 - friends
   if (!isLane(zone)) {
     const camp = campNeutral(s, zone)
-    if (camp && heroesIn(s, p, zone) < campCap(camp)) score += NEUTRAL_KILL
+    const mine = heroesIn(s, p, zone)
+    if (style === 'jungler') {
+      if (zone === homeJungle(p) && camp && mine < 3) score += 12
+      if (zone === enemyJungle(p) && camp && mine < 3 && heroesIn(s, p, homeJungle(p)) >= 2) score += 8
+      return score
+    }
+    if (style !== 'lane' && style !== 'defender' && camp && zone === homeJungle(p) && mine < campCap(camp)) score += NEUTRAL_KILL
     return score
   }
   const enemyTw = s.players[other(p)].structures.towers[zone]
   const ownTw = s.players[p].structures.towers[zone]
   score += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
-  score += defendValue(ownTw.t1, ownTw.t2, enemyHeroes(s, p, zone).length, heroesIn(s, p, zone))
+  score += defendValue(ownTw.t1, ownTw.t2, enemyHeroes(s, p, zone).length, heroesIn(s, p, zone), style)
   return score
 }
 
 /** Move a hero when the destination is strictly better than staying, including leaving a fight to push or defend. */
-export function aiRotate(state: GameState, p: PlayerId): GameState {
+export function aiRotate(state: GameState, p: PlayerId, style: AiStyle = 'balanced'): GameState {
   let best: { uid: string; zone: ZoneId; margin: number } | undefined
   for (const u of heroesOnBoard(state, p)) {
-    const stay = stayValue(state, p, u)
+    const stay = stayValue(state, p, u, style)
     for (const zone of rotationTargets(state, u.uid)) {
-      const score = destValue(state, p, zone)
+      const score = destValue(state, p, zone, style)
       const margin = score - stay
       if (score > stay && (!best || margin > best.margin)) best = { uid: u.uid, zone, margin }
     }

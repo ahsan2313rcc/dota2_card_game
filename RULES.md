@@ -101,7 +101,7 @@ Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
 
 ### XP out
 
-Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be cast once per turn. A Refresher Orb allows one more cast that turn. Items, runes, rewards, and abilities are interrupts: one card, then the other player, resolving as they are played. Odd rounds Radiant starts. Even rounds Dire starts. Two passes resolve the next swing. Shields are not bought with XP.
+Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be cast once per turn. A Refresher Orb allows one more cast that turn. Items, runes, rewards, abilities, and a 3 XP Shield are interrupts: one action, then the other player, resolving as they are played. Odd rounds Radiant starts. Even rounds Dire starts. Two passes resolve the next swing. Spending 3 XP puts one Shield on an allied hero. It lasts until that Shield blocks a hit, and a hero cannot hold a second one.
 
 If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune reduces one allied hero's cost by 1 XP, to a minimum of 0. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the ability be played again later in the round as another interrupt, and that cast can choose a new target. If it is never played again, the same cast repeats when attacks begin.
 

@@ -65,7 +65,8 @@ export function activeStatuses(u: Unit): StatusMark[] {
     const on = typeof value === 'number' ? value > 0 : !!value
     if (!on) continue
     const extra = typeof value === 'number' && value > 1 ? ` ×${value}` : ''
-    marks.push({ ...mark, short: mark.short + extra, key: mark.key })
+    const title = mark.key === 'shield' && u.persistentShield ? 'Shield: lasts until it blocks a physical hit' : mark.title
+    marks.push({ ...mark, short: mark.short + extra, title, key: mark.key })
   }
   if (u.status.poisonedBy) {
     marks.push({ key: 'poison', short: 'Poison', title: 'Poisoned: 1 damage at cleanup', kind: 'debuff' })

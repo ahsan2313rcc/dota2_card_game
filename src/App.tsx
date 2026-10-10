@@ -29,6 +29,7 @@ import {
   itemLanes,
   itemTargets,
   rotationTargets,
+  shieldBlockReason,
   assignableZones,
   placeBlockReason,
   ultBlockReason,
@@ -121,8 +122,10 @@ export default function App() {
     setInspected(uid)
   }
 
-  function onShield(_u: Unit) {
-    toast.error('Shields come from cards, not from XP.')
+  function onShield(u: Unit) {
+    const r = shieldBlockReason(s, HUMAN, u.uid)
+    if (r) return toast.error(r)
+    dispatch({ type: 'buyShield', uid: u.uid })
   }
 
   function onUlt(u: Unit) {
@@ -431,7 +434,7 @@ function ActionBar({
                 : 'Choose a highlighted hero to teleport.'
               : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
           : s.priority === HUMAN
-            ? `Play one item, rune, reward, or ability, or pass. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A second pass on each side resolves the next swing. You can interrupt again between swings and after the towers fire.`
+            ? `Play one item, rune, reward, ability, or a 3 XP Shield, or pass. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A Shield lasts until it blocks a hit and does not stack. A second pass on each side resolves the next swing. You can interrupt again between swings and after the towers fire.`
             : 'Dire is answering.'
       cta = 'Pass'
       break

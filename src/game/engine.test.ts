@@ -4,6 +4,7 @@ import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyShield,
   buyback,
+  shieldBlockReason,
   buybackBlockReason,
   buybackCost,
   discardFromHand,
@@ -744,24 +745,56 @@ describe('gold and xp sinks', () => {
     expect(s.unitDiscard).toContainEqual({ cardId: 'creep', buybackUsed: false })
   })
 
-  it('Shields are not bought with XP, and a Shield ends at cleanup', () => {
-    let s = setup(17, [hero('a', 'sven'), item('i', 'rune_shield')])
-    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
-    const camp = s.camps.radiantJungle
-    if (camp) {
-      delete s.units[camp]
-      s.camps.radiantJungle = null
-    }
+  it('3 XP buys one Shield that lasts until it blocks a hit, and a second Shield is refused', () => {
+    let s = setup(17, [hero('a', 'sven'), item('i', 'rune_shield')], [hero('b', 'juggernaut')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
     const uid = heroesOnBoard(s, 'radiant')[0].uid
-    s.players.radiant.xp = 3
-    const refused = buyShield(s, 'radiant', uid)
-    expect(refused).toBe(s)
+    s.players.radiant.xp = 6
+    s = buyShield(s, 'radiant', uid)
     expect(s.players.radiant.xp).toBe(3)
-    s = playItem(s, 'radiant', 'i', uid)
     expect(s.units[uid].status.shield).toBe(1)
-    s = endRotation(resolveRound(endItems(s)))
+    expect(s.units[uid].persistentShield).toBe(true)
+    expect(s.priority).toBe('dire')
+    s = passResponse(s, 'dire')
+    const stacked = buyShield(s, 'radiant', uid)
+    expect(stacked).toBe(s)
+    expect(shieldBlockReason(s, 'radiant', uid)).toBe('Already has a Shield')
+    expect(s.units[uid].status.shield).toBe(1)
+    s = resolveRound(s)
+    expect(s.units[uid].hp).toBe(2)
     expect(s.units[uid].status.shield).toBe(0)
+    expect(s.units[uid].persistentShield).toBeFalsy()
+  })
+
+  it('a Shield bought for XP survives cleanup, and a rune Shield does not', () => {
+    const alone = (seed: number) => {
+      let s = setup(seed, [hero('a', 'sven')])
+      s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+      const camp = s.camps.radiantJungle
+      if (camp) {
+        delete s.units[camp]
+        s.camps.radiantJungle = null
+      }
+      return reveal(s)
+    }
+    let bought = alone(19)
+    const boughtUid = heroesOnBoard(bought, 'radiant')[0].uid
+    bought.players.radiant.xp = 3
+    bought = buyShield(bought, 'radiant', boughtUid)
+    bought = endRotation(resolveRound(bought))
+    expect(bought.units[boughtUid].status.shield).toBe(1)
+    expect(bought.units[boughtUid].persistentShield).toBe(true)
+
+    let rune = alone(21)
+    rune.players.radiant.hand.push(item('r', 'rune_shield'))
+    const runeUid = heroesOnBoard(rune, 'radiant')[0].uid
+    rune = playItem(rune, 'radiant', 'r', runeUid)
+    expect(rune.units[runeUid].status.shield).toBe(1)
+    expect(rune.units[runeUid].persistentShield).toBeFalsy()
+    rune = endRotation(resolveRound(rune))
+    expect(rune.units[runeUid].status.shield).toBe(0)
   })
 })
 

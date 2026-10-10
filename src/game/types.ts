@@ -404,7 +404,7 @@ export const HAND_LIMIT = 7
 /** Counting cards you may hold while drawing. The end of the turn still discards down to HAND_LIMIT. */
 export const DRAW_CAP = 10
 
-/** Kept so older calls compile. Version 3 does not sell Shields for XP. */
+/** XP spent, as an interrupt, to put one Shield on an allied hero. It lasts until it blocks a hit. */
 export const SHIELD_XP_COST = 3
 /** Gold the attacker is paid when a tower falls. The defender still takes the hidden card. */
 export const TOWER_GOLD = { t1: 3, t2: 5 } as const

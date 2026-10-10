@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { getHero } from '@/game/cards'
-import { ZONE_LABEL, campHolder, laneRole, lineup, ultBlockReason, ultCost, unitName } from '@/game/engine'
+import { ZONE_LABEL, campHolder, laneRole, lineup, shieldBlockReason, ultBlockReason, ultCost, unitName } from '@/game/engine'
 import { HUMAN } from '@/game/useGame'
 import { ZONES, isLane, type CampId, type GameState, type Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
@@ -78,6 +78,7 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
   const declaration = s.ultDeclarations.find((d) => d.uid === u.uid)
   const declared = !!declaration
   const reason = u.kind === 'hero' ? ultBlockReason(s, u.uid) : null
+  const shieldReason = u.kind === 'hero' && u.owner !== 'neutral' ? shieldBlockReason(s, u.owner, u.uid) : 'Not your hero'
   const picking = actions.ultCaster === u.uid
   const hero = u.cardId && u.kind === 'hero' ? getHero(u.cardId) : undefined
   const active = hero?.script?.kind === 'active'
@@ -161,6 +162,19 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
             </IconBtn>
           )}
         </span>
+      )}
+      {s.phase === 'response' && s.priority === u.owner && u.kind === 'hero' && (
+        <button
+          type="button"
+          onClick={() => actions.onShield(u)}
+          title={shieldReason ?? 'Spend 3 XP. The Shield lasts until it blocks a physical hit, and it does not stack.'}
+          className={cn(
+            'shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold transition',
+            shieldReason ? 'bg-zinc-800 text-zinc-500' : 'bg-cyan-400/20 text-cyan-100 hover:bg-cyan-400/30',
+          )}
+        >
+          Shield · 3
+        </button>
       )}
       {s.phase === 'response' && s.priority === u.owner && active && (
         <button

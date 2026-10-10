@@ -55,6 +55,7 @@ import {
   ROSHAN_EARLIEST_ROUND,
   firstPlayer,
   ROSHAN_HP,
+  SHIELD_XP_COST,
   STARTING_HEROES,
   TORMENTOR_HP,
   TOWER_DAMAGE,
@@ -511,10 +512,13 @@ function makeUnit(s: GameState, partial: Pick<Unit, 'kind' | 'owner' | 'zone' | 
   return u
 }
 
+/** Shared so a damage reaction cannot call another damage reaction until it finishes. */
+const kitDepth = { n: 0 }
+
 function kitApi(s: GameState): KitApi {
   return {
     s,
-    depth: { n: 0 },
+    depth: kitDepth,
     log: (text, owner) => log(s, text, owner && owner !== 'neutral' ? owner : 'info'),
     name: (u) => fullName(u),
     magic: (src, tid, n, label) => dealDamage(s, src, tid, n, 'ult', { label: src ? `${unitName(src)}'s ${label}` : label }),
@@ -1477,13 +1481,26 @@ export function ultBlockReason(s: GameState, uid: string): string | null {
   return null
 }
 
-export function shieldBlockReason(_s: GameState, _p: PlayerId, _uid: string): string | null {
-  return 'Shields are not bought with XP'
+export function shieldBlockReason(s: GameState, p: PlayerId, uid: string): string | null {
+  const u = s.units[uid]
+  if (!u || u.dead || u.kind !== 'hero' || u.owner !== p) return 'Not your hero'
+  if (s.phase !== 'response') return 'Shields are interrupts during combat'
+  if (s.priority !== p) return 'Wait for priority'
+  if (u.status.shield > 0) return 'Already has a Shield'
+  if (s.players[p].xp < SHIELD_XP_COST) return `Needs ${SHIELD_XP_COST} XP`
+  return null
 }
 
-/** Version 3 does not sell Shields for XP. The call is refused. */
-export function buyShield(state: GameState, _p: PlayerId, _uid: string): GameState {
-  return state
+/** Spend 3 XP to put one Shield on an allied hero. It resolves immediately and lasts until it blocks a hit. */
+export function buyShield(state: GameState, p: PlayerId, uid: string): GameState {
+  if (shieldBlockReason(state, p, uid)) return state
+  const s = clone(state)
+  const u = s.units[uid]
+  s.players[p].xp -= SHIELD_XP_COST
+  giveShield(s, u, true)
+  log(s, `${PLAYER_LABEL[p]} spends ${SHIELD_XP_COST} XP on that Shield.`, tone(p))
+  tookPriority(s, p)
+  return s
 }
 
 export function declareUlt(state: GameState, uid: string, target?: string): GameState {
@@ -2544,8 +2561,13 @@ export function endRotation(state: GameState): GameState {
       const mute = !!u.foreverMute
       const silenced = !!u.foreverSilence
       const cursed = !!u.foreverCurse
+      const keepShield = !!u.persistentShield && u.status.shield > 0
       u.status = freshStatus()
       u.persistentShield = false
+      if (keepShield) {
+        u.status.shield = 1
+        u.persistentShield = true
+      }
       if (mute) u.status.muted = true
       if (silenced) u.status.silenced = true
       if (cursed) u.status.cursed = true

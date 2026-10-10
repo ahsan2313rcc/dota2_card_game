@@ -1,6 +1,7 @@
 import { getHero, getItem } from './cards'
 import {
   ZONE_PRIORITY,
+  buyShield,
   buyback,
   buybackBlockReason,
   buybackChoices,
@@ -28,6 +29,7 @@ import {
   playItem,
   reveal,
   rotateHero,
+  shieldBlockReason,
   rotationTargets,
   setCampFocus,
   ultBlockReason,
@@ -40,6 +42,7 @@ import {
   CAMPS,
   DRAW_CAP,
   HAND_LIMIT,
+  SHIELD_XP_COST,
   LANES,
   PLAYERS,
   ROTATIONS_PER_ROUND,
@@ -600,6 +603,16 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
   return s
 }
 
+/** Spend leftover XP on one Shield. Abilities are tried first, and a hero who already has a Shield is skipped. */
+function aiBuyShield(state: GameState, p: PlayerId): GameState {
+  if (state.players[p].xp < SHIELD_XP_COST) return state
+  const open = heroesOnBoard(state, p).filter((u) => !shieldBlockReason(state, p, u.uid))
+  if (!open.length) return state
+  const threat = (u: Unit) => enemyHeroes(state, p, u.zone).length + (isLane(u.zone) ? 2 : 0)
+  const pick = [...open].sort((a, b) => threat(b) - threat(a) || a.hp - b.hp)[0]
+  return buyShield(state, p, pick.uid)
+}
+
 /** The side with priority plays one interrupt, or passes. */
 export function aiOneResponse(state: GameState, p: PlayerId): GameState {
   if (state.phase !== 'response' || state.priority !== p) return state
@@ -607,5 +620,7 @@ export function aiOneResponse(state: GameState, p: PlayerId): GameState {
   if (item !== state) return item
   const cast = aiUlts(state, p)
   if (cast.ultDeclarations.length > state.ultDeclarations.length) return cast
+  const shielded = aiBuyShield(cast, p)
+  if (shielded !== cast) return shielded
   return passResponse(cast, p)
 }

@@ -81,7 +81,7 @@ function reducer(s: GameState, a: Action): GameState {
     case 'discard':
       return discardFromHand(s, HUMAN, a.handIid)
     case 'buyShield':
-      return buyShield(s, HUMAN, a.uid)
+      return respondAi(buyShield(s, HUMAN, a.uid))
     case 'swapTowers':
       return swapTowerCards(s, HUMAN, a.tier, a.a, a.b)
     case 'endDraw':

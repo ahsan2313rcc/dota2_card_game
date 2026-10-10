@@ -11,7 +11,7 @@ const STATUSES: Array<[string, string]> = [
   ['Evade', 'Dodges the next incoming attack.'],
   ['Immune', 'Blocks magical damage and debuffs.'],
   ['Ethereal', 'Blocks attack damage and takes +1 magical damage.'],
-  ['Shield', 'Blocks one attack. Shields reset at the end of the turn unless a card says otherwise.'],
+  ['Shield', 'Blocks one physical hit. A Shield bought for 3 XP lasts until it blocks that hit. Only one Shield at a time.'],
   ['Invulnerable', 'Blocks all damage.'],
   ['Banish', 'Untargetable and invulnerable.'],
   ['Invisible', 'Untargetable until Revealed.'],
@@ -61,8 +61,8 @@ export function RulesDialog() {
               </li>
               <li>Reveal: both sides flip.</li>
               <li>
-                Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards, and
-                abilities are interrupts. Play one, it resolves immediately, then the other side plays one. Odd rounds
+                Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards,
+                abilities, and a 3 XP Shield are interrupts. Play one, it resolves immediately, then the other side plays one. Odd rounds
                 Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. You can interrupt
                 again between swings and after the towers fire.
               </li>
@@ -79,8 +79,8 @@ export function RulesDialog() {
                 lane to lane.
               </li>
               <li>
-                Cleanup: wounds persist. Statuses end, including Shield, unless a card says the effect lasts (Doom, Wraith
-                King, Necrophos). A slain hero joins the shared discard. Illusions vanish.
+                Cleanup: wounds persist. A Shield bought for 3 XP stays until it blocks a hit. Other statuses end unless a
+                card says the effect lasts (Doom, Wraith King, Necrophos). A slain hero joins the shared discard. Illusions vanish.
               </li>
               <li>Income: +1 Gold and +1 XP per enemy hero killed, plus +1 XP per lane holding a living hero.</li>
             </ol>

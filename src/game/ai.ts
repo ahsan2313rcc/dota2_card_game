@@ -40,6 +40,7 @@ import {
 } from './engine'
 import {
   CAMPS,
+  BOARD_LIMIT,
   DRAW_CAP,
   HAND_LIMIT,
   SHIELD_XP_COST,
@@ -159,8 +160,7 @@ function heroCount(s: GameState, p: PlayerId): number {
   return inHand + heroesOnBoard(s, p).length
 }
 
-/** A board with this many heroes is ready to spend gold on items. Below that, gold buys hero cards. */
-const ENOUGH_HEROES = 3
+/** Items are bought only once the board is full. Until then, gold draws heroes to defend lanes. */
 
 /**
  * Draw until the gold is gone. A thin board takes hero and creep cards from the shared deck.
@@ -172,7 +172,7 @@ export function aiDraw(state: GameState, p: PlayerId): GameState {
   for (let guard = 0; guard < DRAW_CAP; guard++) {
     const pl = s.players[p]
     if (pl.gold < 1) break
-    const stocked = heroesOnBoard(s, p).length >= ENOUGH_HEROES
+    const stocked = heroesOnBoard(s, p).length >= BOARD_LIMIT
     if (handCount(pl) >= (stocked ? HAND_LIMIT : DRAW_CAP)) break
     const want = stocked ? 'item' : 'unit'
     const fallback = want === 'unit' ? 'item' : 'unit'
@@ -197,16 +197,18 @@ function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr?: Attribute): n
   const enemyTw = s.players[other(p)].structures.towers[lane]
   const ownTw = s.players[p].structures.towers[lane]
   const foes = enemyHeroes(s, p, lane)
-  let score = towerPressure(enemyTw.t1, enemyTw.t2) * 2 + foes.length * 2
-  score -= lineup(s, p, lane).length * 3
-  const ownWounded = ownTw.t1 < TOWER_HP.t1 || ownTw.t2 < TOWER_HP.t2
-  const ownStanding = ownTw.t1 > 0 || ownTw.t2 > 0
-  if (ownWounded && foes.length > 0 && ownStanding) score += 8 + foes.length * 2
-  if (!ownStanding && foes.length > 0) score += 10
-  // A live Tier 2 hits every hero in the lane. A healthy one is a worse assignment than a camp.
-  if (enemyTw.t1 <= 0 && enemyTw.t2 > 0) score -= 8
-  if (attr) score += counterScore(attr, foes)
-  return score
+  const mine = lineup(s, p, lane).length
+  const ownDamaged = (ownTw.t1 > 0 && ownTw.t1 < TOWER_HP.t1) || (ownTw.t2 > 0 && ownTw.t2 < TOWER_HP.t2)
+  const ownOpen = ownTw.t1 <= 0 && ownTw.t2 <= 0
+  const enemyOpen = enemyTw.t1 <= 0 && enemyTw.t2 <= 0
+  let attack = towerPressure(enemyTw.t1, enemyTw.t2) * 2 + foes.length * 2 - mine * 3
+  if (enemyOpen) attack += 28
+  let defense = 0
+  if (ownOpen && foes.length > 0) defense = 36 + foes.length * 4
+  else if (ownDamaged) defense = 16 + foes.length * 4
+  defense -= mine * 3
+  if (attr) attack += counterScore(attr, foes)
+  return Math.max(attack, defense)
 }
 
 function pickLane(s: GameState, p: PlayerId, attr?: Attribute): LaneId {
@@ -220,12 +222,13 @@ function jungleValue(s: GameState, p: PlayerId): number {
   const home = homeJungle(p)
   const neutral = campNeutral(s, home)
   if (!neutral) return -999
-  const crisis = LANES.some((lane) => {
+  const mustDefend = LANES.some((lane) => {
     const tw = s.players[p].structures.towers[lane]
-    const hurt = tw.t1 < TOWER_HP.t1 || tw.t2 < TOWER_HP.t2
-    return hurt && enemyHeroes(s, p, lane).length > 0
+    const damaged = (tw.t1 > 0 && tw.t1 < TOWER_HP.t1) || (tw.t2 > 0 && tw.t2 < TOWER_HP.t2)
+    const open = tw.t1 <= 0 && tw.t2 <= 0
+    return damaged || (open && enemyHeroes(s, p, lane).length > 0)
   })
-  if (crisis) return -999
+  if (mustDefend) return -999
   const laneHeroes = LANES.reduce((sum, lane) => sum + unitsIn(s, p, lane).filter((u) => u.kind === 'hero').length, 0)
   if (laneHeroes < 2) return -999
   const mine = lineup(s, p, home).length

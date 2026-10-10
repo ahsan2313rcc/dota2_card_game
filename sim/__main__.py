@@ -84,7 +84,7 @@ def load_heroes() -> list[Hero]:
     return heroes
 
 
-ENOUGH_HEROES = 3
+ENOUGH_HEROES = 5
 
 
 @dataclass
@@ -154,6 +154,7 @@ class Game:
     camps: dict[str, "Camp | None"] = field(default_factory=dict)
     neutral_deck: list[str] = field(default_factory=list)
     neutral_discard: list[str] = field(default_factory=list)
+    attacked_towers: set[tuple[str, str]] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.board = {p: {lane: [] for lane in LANES} for p in ("radiant", "dire")}
@@ -167,6 +168,7 @@ class Game:
         self.buybacks = {p: 0 for p in ("radiant", "dire")}
         self.neutral_kills = {p: 0 for p in ("radiant", "dire")}
         self.jungle_sent = {p: 0 for p in ("radiant", "dire")}
+        self.attacked_towers = set()
         self.aegis = {p: 0 for p in ("radiant", "dire")}
         deck = ["golem", "thunderhide", "ice_shaman", "dragon"] * 3 + ["roshan", "tormentor", "tormentor"]
         self.rng.shuffle(deck)
@@ -215,11 +217,12 @@ def draw_and_deploy(g: Game) -> None:
         while side.hand and placed < 3 and board_size(g, p) < 5:
             hero = side.hand.pop(0)
             unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
-            if jungle_value(g, p) > max(lane_value(g, p, lane) for lane in LANES):
+            lane = best_lane(g, p)
+            if jungle_value(g, p) > lane_value(g, p, lane):
                 g.jungle[p].append(unit)
                 g.jungle_sent[p] += 1
             else:
-                g.board[p][weakest_lane(g, p)].append(unit)
+                g.board[p][lane].append(unit)
             placed += 1
             g.played[p] += 1
         # Items are played onto heroes already on the board, so the gold leaves the bank.
@@ -249,22 +252,29 @@ def tower_pressure(t1: int, t2: int) -> int:
     return TOWER["t1"] - t1 + 1
 
 
+def best_lane(g: Game, p: str) -> str:
+    return max(LANES, key=lambda lane: (lane_value(g, p, lane), -RANK[p][lane]))
+
+
 def lane_value(g: Game, p: str, lane: str) -> int:
+    """Defending a damaged tower or an exposed Ancient outranks hitting a healthy tower."""
     foe = g.sides[other(p)].towers[lane]
     own = g.sides[p].towers[lane]
     foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
     mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
-    score = tower_pressure(foe["t1"], foe["t2"]) * 2 + foes * 2 - mine * 3
-    wounded = own["t1"] < TOWER["t1"] or own["t2"] < TOWER["t2"]
-    standing_tw = own["t1"] > 0 or own["t2"] > 0
-    if wounded and foes > 0 and standing_tw:
-        score += 8 + foes * 2
-    if not standing_tw and foes > 0:
-        score += 10
-    # A live Tier 2 hits every hero. A healthy one is a worse assignment than a camp.
-    if foe["t1"] <= 0 and foe["t2"] > 0:
-        score -= 8
-    return score
+    own_damaged = (own["t1"] > 0 and own["t1"] < TOWER["t1"]) or (own["t2"] > 0 and own["t2"] < TOWER["t2"])
+    own_open = own["t1"] <= 0 and own["t2"] <= 0
+    enemy_open = foe["t1"] <= 0 and foe["t2"] <= 0
+    attack = tower_pressure(foe["t1"], foe["t2"]) * 2 + foes * 2 - mine * 3
+    if enemy_open:
+        attack += 28
+    defense = 0
+    if own_open and foes > 0:
+        defense = 36 + foes * 4
+    elif own_damaged:
+        defense = 16 + foes * 4
+    defense -= mine * 3
+    return max(attack, defense)
 
 
 def jungle_value(g: Game, p: str) -> int:
@@ -274,9 +284,10 @@ def jungle_value(g: Game, p: str) -> int:
         return -999
     for lane in LANES:
         own = g.sides[p].towers[lane]
-        wounded = own["t1"] < TOWER["t1"] or own["t2"] < TOWER["t2"]
+        damaged = (own["t1"] > 0 and own["t1"] < TOWER["t1"]) or (own["t2"] > 0 and own["t2"] < TOWER["t2"])
+        opened = own["t1"] <= 0 and own["t2"] <= 0
         foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
-        if wounded and foes > 0:
+        if damaged or (opened and foes > 0):
             return -999
     if lane_heroes(g, p) < 2:
         return -999
@@ -288,17 +299,6 @@ def jungle_value(g: Game, p: str) -> int:
     if camp.kind not in ("roshan", "tormentor") and mine == 0:
         return 8
     return -999
-
-
-def weakest_lane(g: Game, p: str) -> str:
-    foe = g.sides[other(p)]
-
-    def score(lane: str) -> tuple[int, int]:
-        tw = foe.towers[lane]
-        hp = tw["t1"] + tw["t2"] + (0 if tw["t1"] or tw["t2"] else ANCIENT)
-        return (hp, len(g.board[p][lane]), RANK[p][lane])
-
-    return min(LANES, key=score)
 
 
 def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
@@ -598,7 +598,7 @@ def fight_jungle(g: Game) -> None:
 
 def combat(g: Game) -> None:
     """Interrupt window, then one swing, then another window, repeating through the towers."""
-    before = {(p, lane): (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) for p in g.sides for lane in LANES}
+    g.attacked_towers = set()
     cast(g)
     fight_jungle(g)
     if g.winner is not None:
@@ -616,13 +616,7 @@ def combat(g: Game) -> None:
         cast(g)
     if g.winner is not None:
         return
-    damaged = {
-        (p, lane)
-        for p, lane in before
-        if (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) != before[(p, lane)]
-        and (g.sides[p].towers[lane]["t1"] > 0 or g.sides[p].towers[lane]["t2"] > 0)
-    }
-    towers_fire(g, damaged)
+    towers_fire(g)
     if g.winner is None:
         cast(g)
 
@@ -630,6 +624,8 @@ def combat(g: Game) -> None:
 def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str) -> None:
     side = g.sides[defender]
     tw = side.towers[lane]
+    if tw["t1"] > 0 or tw["t2"] > 0:
+        g.attacked_towers.add((defender, lane))
     if tw["t1"] > 0:
         tw["t1"] = max(0, tw["t1"] - dmg)
         if tw["t1"] == 0:
@@ -646,8 +642,9 @@ def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str) ->
             g.winner = attacker
 
 
-def towers_fire(g: Game, damaged: set[tuple[str, str]]) -> None:
-    for defender, lane in damaged:
+def towers_fire(g: Game) -> None:
+    """A tower fires because it was attacked, even when the hit dealt no damage."""
+    for defender, lane in g.attacked_towers:
         tw = g.sides[defender].towers[lane]
         foes = [u for u in g.board[other(defender)][lane] if u.hp > 0]
         if not foes:
@@ -655,8 +652,8 @@ def towers_fire(g: Game, damaged: set[tuple[str, str]]) -> None:
         if tw["t1"] > 0:
             physical(g, foes[0], 1, defender)
         elif tw["t2"] > 0:
-            # 1 to every enemy. This sim has no creep cards; a creep would soak the shot alone.
-            for foe in foes:
+            # First 3 units, 1 each. This sim has no creeps, so the front heroes take the shots.
+            for foe in foes[:3]:
                 physical(g, foe, 1, defender)
 
 
@@ -691,7 +688,7 @@ def cleanup(g: Game) -> None:
             if tw["t1"] > 0 or tw["t2"] > 0:
                 continue
             for unit in g.board[p][lane]:
-                if unit.hp > 0:
+                if unit.hp > 0 and unit.owner == p:
                     unit.hp = 2
         while len(side.hand) > 7:
             side.hand.pop()

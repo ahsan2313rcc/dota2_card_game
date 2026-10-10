@@ -37,14 +37,14 @@ export function RulesDialog() {
         <div className="space-y-3 text-sm leading-relaxed text-zinc-300">
           <Section title="Goal">
             Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1, worth 3 Gold) and a Tier 2
-            tower (5 hits, deals 1 to every enemy, worth 5 Gold). A creep in the line takes the Tier 2 shot alone. The attacker
-            is paid. The defender still takes the hidden card. Each lane with both towers down adds +1 Gold to upkeep, so three
-            open lanes pay 4 Gold (1 + 3). At the end of the turn your Ancient fully heals allied heroes in every lane where
-            you have no towers left. Fountain still heals 1 in such a lane at the start of the round.
+            tower (5 hits, deals 1 to the first 3 units, creeps first, worth 5 Gold). The attacker is paid. The defender still
+            takes the hidden card. Each lane with both towers down adds +1 Gold to upkeep, so three open lanes pay 4 Gold
+            (1 + 3). At the end of the turn your Ancient fully heals your own heroes in a lane where your towers are gone.
+            Enemies in that lane are not healed. Curse blocks the heal, and poison lands after it.
           </Section>
           <Section title="Round">
             <ol className="list-decimal space-y-0.5 pl-5">
-              <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
+              <li>Upkeep: +1 Gold, +1 XP (plus bonuses). Empty jungle camps draw from the jungle deck.</li>
               <li>
                 Draw: both sides spend 1 Gold to take the top card of the one shared deck, or 1 Gold for an item from the
                 shared item deck. You may draw up to 10 counting cards. At the end of the turn, discard counting cards until 7 remain.
@@ -80,9 +80,10 @@ export function RulesDialog() {
                 lane to lane.
               </li>
               <li>
-                Cleanup: the Ancient fully heals allied heroes in a lane with no towers left. Other wounds persist. A Shield
-                bought for 3 XP stays until it blocks a hit. Other statuses end unless a card says the effect lasts (Doom,
-                Wraith King, Necrophos). A slain hero joins the shared discard. Illusions vanish.
+                Cleanup: your Ancient fully heals your own heroes in a lane with no towers left. A Cursed hero does not heal.
+                Poison and other delayed damage happen after that heal. A Shield bought for 3 XP stays until it blocks a hit.
+                Other statuses end unless a card says the effect lasts (Doom, Wraith King, Necrophos). A slain hero joins the
+                shared discard. Illusions vanish.
               </li>
               <li>Income: +1 Gold and +1 XP per enemy hero killed, plus +1 XP per lane holding a living hero.</li>
             </ol>
@@ -91,9 +92,9 @@ export function RulesDialog() {
             Heroes take 2 hits: Healthy → Wounded → slain. Attributes do not instakill. They only order basic attacks:
             Agility, then Universal, then Intelligence, then Strength. The lane order breaks ties inside a bracket: safe lane,
             mid, off lane, own jungle, enemy jungle. If that is still a tie, both units attack at the same time. There is no
-            day and night cycle. In Phase 3, every standing tower that took damage this round fires. Tier 1 deals 1 to a
-            creep in the attacking line, otherwise Position 1. Tier 2 deals 1 to every enemy, unless a creep is in the line,
-            in which case only the first creep is hit.
+            day and night cycle. In Phase 3, a standing tower fires if an enemy attacked it, even when Glyph stopped the
+            damage. Tier 1 deals 1 to a creep in the attacking line, otherwise Position 1. Tier 2 deals 1 to each of the
+            first 3 units, and creeps are hit before heroes.
             Physical damage is attacks and towers. Magical damage is ultimates, passives and items. Immunity blocks magical
             damage and debuffs. Ethereal blocks physical attack damage and takes 1 extra magical damage.
           </Section>

@@ -20,6 +20,7 @@ import {
   attackExtra,
   combatAuras,
   endStep,
+  endStepDamage,
   enemyEntered,
   hasTag,
   isZoneId,
@@ -655,18 +656,6 @@ function startRound(s: GameState) {
   spawnCamps(s)
   for (const p of PLAYERS) {
     const pl = s.players[p]
-    if (rules(s).fountain) {
-      for (const lane of LANES) {
-        const tw = pl.structures.towers[lane]
-        if (tw.t1 > 0 || tw.t2 > 0) continue
-        for (const uid of lineup(s, p, lane)) {
-          const u = s.units[uid]
-          if (u.kind !== 'hero' || u.hp >= u.maxHp) continue
-          u.hp += 1
-          log(s, `${fullName(u)} heals 1 at the Fountain (${ZONE_LABEL[lane]} has no towers left).`, tone(p))
-        }
-      }
-    }
     const xpAura = heroesOnBoard(s, p).filter((u) => hasTag(u, 'xpAura')).length
     const opened = openedLanes(s, other(p))
     const gold = 1 + opened
@@ -2148,13 +2137,13 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
   const tw = st.towers[lane]
   const dmg = (u.kind === 'siege' ? 2 : 1 + u.status.bonusDamage + (u.permanentAtk || 0)) + towerBonus(u)
   const who = fullName(u)
-  if ((tw.t1 > 0 || tw.t2 > 0) && s.players[enemy].glyph) {
-    log(s, `${who}'s attack bounces off the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower (Glyph).`, 'info')
-    return
-  }
   if (tw.t1 > 0 || tw.t2 > 0) {
     const key = towerKey(enemy, lane, tw.t1 > 0 ? 't1' : 't2')
     if (!s.towersHit.includes(key)) s.towersHit.push(key)
+  }
+  if ((tw.t1 > 0 || tw.t2 > 0) && s.players[enemy].glyph) {
+    log(s, `${who}'s attack bounces off the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower (Glyph).`, 'info')
+    return
   }
   if (tw.t1 > 0) {
     tw.t1 = Math.max(0, tw.t1 - dmg)
@@ -2367,6 +2356,23 @@ function resolveAttackBatch(s: GameState, uids: string[]) {
   for (const uid of uids) if (!s.attacked.includes(uid)) s.attacked.push(uid)
 }
 
+function isCreepUnit(s: GameState, id: string) {
+  const kind = s.units[id]?.kind
+  return kind === 'creep' || kind === 'siege'
+}
+
+/** Tier 1 hits a creep or else Position 1. Tier 2 hits the first 3 units, creeps before heroes, for 1 each. */
+function towerTargets(s: GameState, defender: PlayerId, lane: LaneId, tier: 't1' | 't2'): string[] {
+  const ids = targetableLineup(s, other(defender), lane)
+  if (tier === 't1') {
+    const front = ids.find((id) => isCreepUnit(s, id)) ?? ids[0]
+    return front ? [front] : []
+  }
+  const creeps = ids.filter((id) => isCreepUnit(s, id))
+  const rest = ids.filter((id) => !isCreepUnit(s, id))
+  return [...creeps, ...rest].slice(0, 3)
+}
+
 function fireTowers(s: GameState) {
   log(s, 'Phase 3 — Tower aggro', 'phase')
   let fired = false
@@ -2377,10 +2383,7 @@ function fireTowers(s: GameState) {
         if (!s.towersHit.includes(towerKey(defender, lane, tier)) || tw[tier] <= 0) continue
         if (s.silencedTowers.includes(`${defender}:${lane}`)) continue
         const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
-        const ids = targetableLineup(s, other(defender), lane)
-        const creep = ids.find((id) => s.units[id].kind === 'creep' || s.units[id].kind === 'siege')
-        // Tier 1 hits the creep, or Position 1. Tier 2 hits every enemy for 1, unless a creep is in the line: then only that first creep.
-        const targets = tier === 't1' ? [creep ?? ids[0]].filter((id): id is string => !!id) : creep ? [creep] : ids
+        const targets = towerTargets(s, defender, lane, tier)
         fired = true
         if (!targets.length) {
           log(s, `${label} has no attacker left to fire at.`, 'info')
@@ -2393,7 +2396,7 @@ function fireTowers(s: GameState) {
       }
     }
   }
-  if (!fired) log(s, 'No surviving tower took damage this round, so no tower fires.', 'info')
+  if (!fired) log(s, 'No tower was attacked this round, so no tower fires.', 'info')
   settleBossKills(s)
 }
 
@@ -2535,7 +2538,19 @@ export function endRotation(state: GameState): GameState {
 
   if (!s.winner) {
     log(s, 'Cleanup', 'phase')
+    // Heal while Curse is still on the hero. Poison and other delayed damage land after.
+    for (const p of PLAYERS) {
+      for (const lane of LANES) {
+        const tw = s.players[p].structures.towers[lane]
+        if (tw.t1 > 0 || tw.t2 > 0) continue
+        for (const uid of lineup(s, p, lane)) {
+          const u = s.units[uid]
+          if (u.owner === p && u.kind === 'hero') heal(s, u, `${PLAYER_LABEL[p]} Ancient`)
+        }
+      }
+    }
     endStep(kitApi(s))
+    endStepDamage(kitApi(s))
     for (const u of Object.values(s.units)) {
       if (!u.dead && u.status.poisonedBy) {
         dealDamage(s, null, u.uid, 1, 'passive', { label: 'Poison Sting', sourceOwner: u.status.poisonedBy })
@@ -2585,16 +2600,6 @@ export function endRotation(state: GameState): GameState {
   s.resolvedUlts = []
 
   if (!s.winner) {
-    for (const p of PLAYERS) {
-      for (const lane of LANES) {
-        const tw = s.players[p].structures.towers[lane]
-        if (tw.t1 > 0 || tw.t2 > 0) continue
-        for (const uid of lineup(s, p, lane)) {
-          const u = s.units[uid]
-          if (u.kind === 'hero') heal(s, u, `${PLAYER_LABEL[p]} Ancient`)
-        }
-      }
-    }
     log(s, 'Income', 'phase')
     for (const p of PLAYERS) {
       const pl = s.players[p]

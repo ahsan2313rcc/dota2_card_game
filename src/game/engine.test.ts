@@ -210,43 +210,85 @@ describe('setup and core rules', () => {
     expect(s.priority).toBe('radiant')
   })
 
-  it('a Tier 2 tower deals 1 to every attacker, and a creep soaks that shot alone', () => {
-    let s = setup(6, [hero('a', 'axe'), hero('b', 'sven')])
+  it('a Tier 2 tower deals 1 to the first 3 units, creeps before heroes', () => {
+    let s = setup(6, [hero('a', 'axe'), hero('b', 'sven'), hero('d', 'pudge'), hero('e', 'tidehunter')])
     s.players.dire.structures.towers.mid.t1 = 0
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'radiant', 'b', 'mid')
+    s = placeHero(s, 'radiant', 'd', 'mid')
+    s.players.radiant.placedThisRound = 0
+    s = placeHero(s, 'radiant', 'e', 'mid')
     s = fight(s)
-    const [axe, sven] = heroesOnBoard(s, 'radiant')
-    expect(axe.hp).toBe(1)
-    expect(sven.hp).toBe(1)
-    expect(s.log.filter((l) => l.text.includes('Tier 2 tower') && l.text.includes('deals 1'))).toHaveLength(2)
+    const hit = heroesOnBoard(s, 'radiant').filter((u) => u.hp === 1)
+    const safe = heroesOnBoard(s, 'radiant').filter((u) => u.hp === 2)
+    expect(hit).toHaveLength(3)
+    expect(safe).toHaveLength(1)
+    expect(s.log.filter((l) => l.text.includes('Tier 2 tower') && l.text.includes('deals 1'))).toHaveLength(3)
 
-    let soaked = setup(7, [hero('c', 'axe'), { iid: 'k', type: 'creep', cardId: 'creep' }])
-    soaked.players.dire.structures.towers.mid.t1 = 0
-    soaked = placeHero(soaked, 'radiant', 'c', 'mid')
-    soaked = placeCreep(soaked, 'radiant', 'k', 'mid')
-    soaked = fight(soaked)
-    expect(heroesOnBoard(soaked, 'radiant')[0].hp).toBe(2)
-    const shots = soaked.log.filter((l) => l.text.includes('Tier 2 tower') && (l.text.includes('deals') || l.text.includes('slays')))
-    expect(shots).toHaveLength(1)
-    expect(shots[0].text).toContain('Creep')
+    let creeps = setup(7, [hero('c', 'axe')], [])
+    creeps.players.radiant.hand.push(
+      { iid: 'k1', type: 'creep', cardId: 'creep' },
+      { iid: 'k2', type: 'creep', cardId: 'creep' },
+      { iid: 'k3', type: 'creep', cardId: 'creep' },
+    )
+    creeps.players.dire.structures.towers.mid.t1 = 0
+    creeps = placeHero(creeps, 'radiant', 'c', 'mid')
+    creeps = placeCreep(creeps, 'radiant', 'k1', 'mid')
+    creeps = placeCreep(creeps, 'radiant', 'k2', 'mid')
+    creeps = placeCreep(creeps, 'radiant', 'k3', 'mid')
+    creeps = fight(creeps)
+    expect(heroesOnBoard(creeps, 'radiant')[0].hp).toBe(2)
+    const shots = creeps.log.filter((l) => l.text.includes('Tier 2 tower') && (l.text.includes('deals') || l.text.includes('slays')))
+    expect(shots).toHaveLength(3)
+    expect(shots.every((l) => l.text.includes('Creep'))).toBe(true)
   })
 
-  it('the Ancient fully heals allies at end of turn in a lane with no towers', () => {
-    let s = setup(8, [hero('a', 'axe'), hero('b', 'sven')])
+  it('the Ancient heals only its own heroes, Curse blocks it, and poison lands after', () => {
+    let s = setup(8, [hero('a', 'axe'), hero('b', 'sven')], [hero('c', 'lina')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'radiant', 'b', 'bot')
+    s = placeHero(s, 'dire', 'c', 'mid')
     s.phase = 'rotate'
     s.players.radiant.structures.towers.mid.t1 = 0
     s.players.radiant.structures.towers.mid.t2 = 0
     const open = heroesOnBoard(s, 'radiant').find((u) => u.zone === 'mid')!
     const covered = heroesOnBoard(s, 'radiant').find((u) => u.zone === 'bot')!
+    const enemy = heroesOnBoard(s, 'dire')[0]
     open.hp = 1
     covered.hp = 1
+    enemy.hp = 1
     s = endRotation(s)
     expect(s.units[open.uid].hp).toBe(2)
     expect(s.units[covered.uid].hp).toBe(1)
+    expect(s.units[enemy.uid].hp).toBe(1)
     expect(logHas(s, 'heals to Healthy (Radiant Ancient)')).toBe(true)
+
+    let cursed = setup(9, [hero('a', 'axe')])
+    cursed = placeHero(cursed, 'radiant', 'a', 'mid')
+    cursed.phase = 'rotate'
+    cursed.players.radiant.structures.towers.mid.t1 = 0
+    cursed.players.radiant.structures.towers.mid.t2 = 0
+    const marked = heroesOnBoard(cursed, 'radiant')[0]
+    marked.hp = 1
+    marked.status.cursed = true
+    cursed = endRotation(cursed)
+    expect(cursed.units[marked.uid].hp).toBe(1)
+    expect(logHas(cursed, 'Cursed and cannot heal')).toBe(true)
+
+    let stung = setup(10, [hero('a', 'axe')])
+    stung = placeHero(stung, 'radiant', 'a', 'mid')
+    stung.phase = 'rotate'
+    stung.players.radiant.structures.towers.mid.t1 = 0
+    stung.players.radiant.structures.towers.mid.t2 = 0
+    const poisoned = heroesOnBoard(stung, 'radiant')[0]
+    poisoned.hp = 1
+    poisoned.status.poisonedBy = 'dire'
+    stung = endRotation(stung)
+    expect(stung.units[poisoned.uid].hp).toBe(1)
+    const healAt = stung.log.findIndex((l) => l.text.includes('heals to Healthy'))
+    const poisonAt = stung.log.findIndex((l) => l.text.includes('Poison Sting'))
+    expect(healAt).toBeGreaterThan(-1)
+    expect(poisonAt).toBeGreaterThan(healAt)
   })
 
   it('a damaged tower fires at the attacking side Position 1; undamaged towers stay silent', () => {
@@ -558,7 +600,7 @@ describe('comeback rules and rotation', () => {
     expect(slainBy('lina', 'unit')).toHaveLength(0)
   })
 
-  it('Glyph: towers take no damage and do not fire', () => {
+  it('Glyph: a tower takes no damage and still fires at its attacker', () => {
     let s = setup(61, [hero('a', 'sven')], [item('g', 'glyph')])
     s = placeHero(s, 'radiant', 'a', 'top')
     s = reveal(s)
@@ -566,7 +608,8 @@ describe('comeback rules and rotation', () => {
     s = playItem(s, 'dire', 'g')
     s = resolveRound(s)
     expect(s.players.dire.structures.towers.top.t1).toBe(3)
-    expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(2)
+    expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(1)
+    expect(logHas(s, 'Glyph')).toBe(true)
   })
 
   it('buyback costs 4 Gold, or 5 while ahead on towers, from the shared discard', () => {
@@ -661,18 +704,36 @@ describe('opponent decisions', () => {
     expect(s.players.dire.hand.filter((c) => c.type === 'hero' || c.type === 'creep').length).toBeGreaterThan(1)
   })
 
-  it('a stocked board spends gold drawing items to play', () => {
-    let s = setup(4, [], ['axe', 'sven', 'pudge'].map((id, i) => hero(String(i), id)))
-    s = placeHero(s, 'dire', '0', 'top')
-    s = placeHero(s, 'dire', '1', 'mid')
-    s = placeHero(s, 'dire', '2', 'bot')
-    s.phase = 'draw'
-    s.players.dire.gold = 4
-    s.players.dire.hand = []
-    s = aiDraw(s, 'dire')
-    expect(heroesOnBoard(s, 'dire')).toHaveLength(3)
-    expect(s.players.dire.hand.some((c) => c.type === 'item')).toBe(true)
-    expect(s.players.dire.gold).toBeLessThan(4)
+  it('gold draws heroes until five are on the board, then it draws items', () => {
+    const ids = ['axe', 'sven', 'pudge', 'lina', 'tidehunter']
+    let thin = setup(4, [], ids.slice(0, 4).map((id, i) => hero(String(i), id)))
+    thin = placeHero(thin, 'dire', '0', 'top')
+    thin = placeHero(thin, 'dire', '1', 'mid')
+    thin = placeHero(thin, 'dire', '2', 'bot')
+    thin.players.dire.placedThisRound = 0
+    thin = placeHero(thin, 'dire', '3', 'top')
+    thin.phase = 'draw'
+    thin.players.dire.gold = 4
+    thin.players.dire.hand = []
+    thin = aiDraw(thin, 'dire')
+    expect(heroesOnBoard(thin, 'dire')).toHaveLength(4)
+    expect(thin.players.dire.hand.some((c) => c.type === 'hero' || c.type === 'creep')).toBe(true)
+    expect(thin.players.dire.hand.some((c) => c.type === 'item')).toBe(false)
+
+    let full = setup(5, [], ids.map((id, i) => hero(`f${i}`, id)))
+    full = placeHero(full, 'dire', 'f0', 'top')
+    full = placeHero(full, 'dire', 'f1', 'mid')
+    full = placeHero(full, 'dire', 'f2', 'bot')
+    full.players.dire.placedThisRound = 0
+    full = placeHero(full, 'dire', 'f3', 'top')
+    full = placeHero(full, 'dire', 'f4', 'mid')
+    full.phase = 'draw'
+    full.players.dire.gold = 4
+    full.players.dire.hand = []
+    full = aiDraw(full, 'dire')
+    expect(heroesOnBoard(full, 'dire')).toHaveLength(5)
+    expect(full.players.dire.hand.some((c) => c.type === 'item')).toBe(true)
+    expect(full.players.dire.gold).toBeLessThan(4)
   })
 
   it('the same ability can be cast again next round, and only a Refresher allows a second cast this turn', () => {

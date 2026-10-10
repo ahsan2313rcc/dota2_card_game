@@ -929,8 +929,17 @@ export function endStep(api: KitApi) {
     if (hasTag(u, 'aura:healJungle') && !isLane(u.zone)) api.heal(u, psv)
     if (hasTag(u, 'aura:healSafe') && (u.status.invisible || foes(api.s, u, u.zone).length === 0)) api.heal(u, psv)
     if (hasTag(u, 'aura:healAlliesEnd')) for (const a of heroes(friends(api.s, u, u.zone))) api.heal(a, psv)
+  }
+}
+
+/** Delayed end-of-turn damage. It lands after the Ancient heal, so a Curse can still block that heal. */
+export function endStepDamage(api: KitApi) {
+  const s = api.s
+  for (const u of Object.values(s.units)) {
+    if (u.dead || u.kind !== 'hero') continue
+    const psv = u.cardId ? getHero(u.cardId).passive.name : 'End'
     if (hasTag(u, 'aura:mdmgWoundedEnd')) {
-      for (const e of foes(api.s, u, u.zone)) if (e.status.tookDamage && !e.dead) api.magic(u, e.uid, 1, psv)
+      for (const e of foes(s, u, u.zone)) if (e.status.tookDamage && !e.dead) api.magic(u, e.uid, 1, psv)
     }
   }
 }

@@ -51,7 +51,7 @@ export const ITEMS: ItemCard[] = [
   { id: 'rune_water', name: 'Water Rune', kind: 'Rune', text: 'Remove all debuffs from an allied hero.', target: 'allyHero' },
   { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'The hero revives immediately the next time it dies. Flips back to Roshan once used.', target: 'allyHero' },
   { id: 'refresher_shard', name: 'Refresher Shard', kind: 'Special', text: "That hero's ability costs 0 XP. Flips back to a Tormentor once used.", target: 'allyHero' },
-  { id: 'glyph', name: 'Glyph of Fortification', kind: 'Tower', text: 'Your towers take no damage this round (so they do not fire either).', target: 'none' },
+  { id: 'glyph', name: 'Glyph of Fortification', kind: 'Tower', text: 'Your towers take no damage this round. A tower that was attacked still fires.', target: 'none' },
   { id: 'lotus', name: 'Lotus Pool', kind: 'Tower', text: 'Heal all your heroes to Healthy.', target: 'none' },
   { id: 'gate', name: 'Twin Gate', kind: 'Tower', text: 'Teleport all your heroes on the board (except Rooted ones) to a lane of your choice.', target: 'lane' },
 ]

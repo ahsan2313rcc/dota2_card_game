@@ -7,8 +7,9 @@ economy. It is a lane-level model: two heuristic sides, real ability costs, atta
 order, tower bounties, and hero-kill income. A thin board spends gold drawing heroes.
 A stocked board spends gold playing items. Each side can send a hero to its home jungle
 once the lanes are covered. Each active ability can be cast once per
-round, or twice that round when a Refresher is played. The full status list is not
-simulated.
+round, or twice that round when a Refresher is played. Silence is simulated: it blocks
+the cast and turns a passive off. Invisibility is not, so Gem of True Sight has no
+effect here. The rest of the status list is not simulated.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import argparse
 import random
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +56,10 @@ class Hero:
     tower: int = 0
     # Eye of the Storm: a wounded lane enemy, otherwise the standing tower.
     razor: bool = False
+    # "", "lane", "board", or "one". Silence blocks the cast and turns a passive off.
+    silence_scope: str = ""
+    # Doom's Silence stays on. Every other Silence clears at the end of the round.
+    silence_lock: bool = False
 
 
 def load_heroes() -> list[Hero]:
@@ -80,6 +85,14 @@ def load_heroes() -> list[Hero]:
                 tower = int(bits[1]) if len(bits) > 1 and bits[1].isdigit() else 1
             elif bits[0] == "razor":
                 razor = True
+        scope = ""
+        if "silence" in ult:
+            if "boardH" in ult:
+                scope = "board"
+            elif "laneE" in ult:
+                scope = "lane"
+            else:
+                scope = "one"
         heroes.append(
             Hero(
                 id=m.group("id"),
@@ -93,6 +106,8 @@ def load_heroes() -> list[Hero]:
                 cleave="targets:all" in tags or "targets:cleave" in tags,
                 tower=tower,
                 razor=razor,
+                silence_scope=scope,
+                silence_lock="lock" in ult and scope != "",
             )
         )
     if len(heroes) != 127:
@@ -110,6 +125,9 @@ class Unit:
     owner: str = ""
     hp: int = 2
     stunned: bool = False
+    silenced: bool = False
+    # A locked Silence (Doom) survives cleanup.
+    silence_lock: bool = False
     disarmed: bool = False
     haste: bool = False
     slow: bool = False
@@ -417,6 +435,49 @@ def invade_value(g: Game, p: str) -> int:
     return 8
 
 
+def living_enemies(g: Game, p: str) -> list[Unit]:
+    enemy = other(p)
+    found = [unit for lane in LANES for unit in g.board[enemy][lane] if unit.hp > 0]
+    found.extend(unit for unit in g.jungle[enemy] if unit.hp > 0)
+    found.extend(unit for unit in g.invade[enemy] if unit.hp > 0)
+    return found
+
+
+def silence_targets(g: Game, p: str, hero: Hero, lane: str) -> list[Unit]:
+    """Who this Silence hits. A single-target Silence prefers a hero whose passive is still on."""
+    if hero.silence_scope == "board":
+        return living_enemies(g, p)
+    foes = [unit for unit in g.board[other(p)][lane] if unit.hp > 0]
+    if hero.silence_scope == "lane":
+        return foes
+    if hero.silence_scope != "one" or not foes:
+        return []
+    return [min(foes, key=lambda unit: 0 if passive_live(unit) else 1)]
+
+
+def passive_live(unit: Unit) -> bool:
+    """Amplify or cleave printed on a passive. Silence turns it off. An active Amplify stays."""
+    if unit.silenced:
+        return False
+    return unit.hero.cleave or (unit.hero.amp and unit.hero.kind == "passive")
+
+
+def kit_bonus(unit: Unit) -> int:
+    """The printed +1. Silence removes the passive source and leaves an active Amplify in place."""
+    active_amp = unit.hero.amp and unit.hero.kind != "passive"
+    if active_amp or passive_live(unit):
+        return 1
+    return 0
+
+
+def apply_silence(unit: Unit, lock: bool) -> None:
+    unit.silenced = True
+    if lock:
+        unit.silence_lock = True
+    if unit.hero.kind == "passive" and unit.hero.amp:
+        unit.haste = False
+
+
 def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
     """One cast per hero each round. A Refresher allows a second cast that same round, at 0 XP."""
     side = g.sides[p]
@@ -425,7 +486,7 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
         if lane in ("jungle", "invade"):
             continue
         hero = unit.hero
-        if hero.kind != "active" or unit.stunned:
+        if hero.kind != "active" or unit.stunned or unit.silenced:
             continue
         limit = 2 if unit.refresher else 1
         if unit.casts >= limit:
@@ -436,7 +497,8 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
         foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
         tw = g.sides[other(p)].towers[lane]
         standing = tw["t1"] > 0 or tw["t2"] > 0
-        power = cast_power(hero, foes, standing)
+        victims = silence_targets(g, p, hero, lane)
+        power = cast_power(hero, foes, standing, victims)
         if power <= 0:
             continue
         score = (power, len(foes), -hero.cost)
@@ -445,7 +507,7 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
     return None if best is None else (best[1], best[2])
 
 
-def cast_power(hero: Hero, foes: list[Unit], standing: bool) -> int:
+def cast_power(hero: Hero, foes: list[Unit], standing: bool, silenced: list[Unit] | None = None) -> int:
     """How much this ultimate does right now. Generic damage needs a unit. A tower hit needs a standing tower."""
     wounded = any(unit.hp < 2 for unit in foes)
     power = 0
@@ -455,6 +517,10 @@ def cast_power(hero: Hero, foes: list[Unit], standing: bool) -> int:
         power += 1
     if hero.amp:
         power += 1
+    if silenced and hero.silence_scope:
+        power += 1
+        if any(passive_live(unit) for unit in silenced):
+            power += 1
     if hero.razor and (wounded or standing):
         power += 1
     elif hero.tower and standing:
@@ -473,6 +539,8 @@ def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
     if unit.hero.stun:
         for foe in foes:
             foe.stunned = True
+    for foe in silence_targets(g, p, unit.hero, lane):
+        apply_silence(foe, unit.hero.silence_lock)
     if unit.hero.damage and foes:
         for foe in foes:
             hurt(g, foe, unit.hero.damage, p)
@@ -593,7 +661,7 @@ def resolve_batch(g: Game, batch: list[tuple[int, int, int, str, str, Unit]]) ->
         foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
         shots.append((p, lane, unit, foes[0] if foes else None))
     for p, lane, unit, foe in shots:
-        dmg = 1 + unit.amplify + (1 if unit.hero.amp or unit.hero.cleave else 0)
+        dmg = 1 + unit.amplify + kit_bonus(unit)
         if foe:
             physical(g, foe, dmg, p)
             if unit.hero.cleave and len(g.board[other(p)][lane]) > 1:
@@ -667,19 +735,7 @@ def apply_rune(g: Game, p: str) -> None:
     elif rune == "haste" and hero is not None:
         hero.haste = True
     elif rune == "arcane" and hero is not None and hero.casts == 0:
-        hero.hero = Hero(
-            hero.hero.id,
-            hero.hero.name,
-            hero.hero.attr,
-            hero.hero.kind,
-            max(0, hero.hero.cost - 1),
-            hero.hero.damage,
-            hero.hero.stun,
-            hero.hero.amp,
-            hero.hero.cleave,
-            hero.hero.tower,
-            hero.hero.razor,
-        )
+        hero.hero = replace(hero.hero, cost=max(0, hero.hero.cost - 1))
 
 
 def claim_camp(g: Game, p: str, camp: Camp) -> None:
@@ -712,6 +768,10 @@ def fight_jungle(g: Game) -> None:
         camp = g.camps[p]
         if not heroes or camp is None or camp.hp <= 0:
             continue
+        # The Ice Shaman aura silences the camp. It is not the ultimate, so one hero is enough.
+        if camp.kind == "ice_shaman":
+            for hero in heroes:
+                apply_silence(hero, False)
         # Roar, Thunder Clap, Freezing Blast, and Fire Pit need 2 units in the camp.
         if len(heroes) >= 2:
             if camp.kind == "roshan":
@@ -834,11 +894,13 @@ def cleanup(g: Game) -> None:
             for unit in pile:
                 if unit.hp > 0:
                     unit.stunned = False
+                    if not unit.silence_lock:
+                        unit.silenced = False
                     unit.disarmed = False
                     unit.casts = 0
                     unit.refresher = False
                     unit.amplify = 0
-                    unit.haste = unit.hero.amp and unit.hero.kind == "passive"
+                    unit.haste = unit.hero.amp and unit.hero.kind == "passive" and not unit.silenced
                     unit.slow = False
                     if not unit.persist_shield:
                         unit.shield = 0

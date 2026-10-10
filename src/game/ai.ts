@@ -422,14 +422,22 @@ function pickWounded(targets: Unit[]): Unit | undefined {
   return [...targets].sort((a, b) => b.maxHp - b.hp - (a.maxHp - a.hp) || a.hp - b.hp)[0]
 }
 
+function passiveStillOn(u: Unit): boolean {
+  if (u.kind !== 'hero' || !u.cardId || u.dead || u.status.broken || u.status.silenced) return false
+  return getHero(u.cardId).script?.kind === 'passive'
+}
+
 function pickEnemy(s: GameState, p: PlayerId, caster: Unit | undefined, targets: Unit[]): Unit | undefined {
   if (!targets.length) return undefined
+  const silence = caster ? ultCommands(caster).some((c) => c.verb === 'silence') : false
   const score = (t: Unit) => {
     let n = threat(t)
     if (t.hp === 1) n += 8
     else if (t.hp < t.maxHp) n += 3
     if (caster && t.zone === caster.zone) n += 4
     if (lineup(s, p, t.zone).length > 0) n += 2
+    // Silence turns the passive off, so a single-target Silence aims at one that is still working.
+    if (silence && passiveStillOn(t)) n += 4
     return n
   }
   return [...targets].sort((a, b) => score(b) - score(a))[0]

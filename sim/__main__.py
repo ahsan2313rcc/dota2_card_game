@@ -120,8 +120,10 @@ class Side:
             self.towers = {lane: {"t1": TOWER["t1"], "t2": TOWER["t2"]} for lane in LANES}
 
 
-def standing(side: Side) -> int:
-    return sum(1 for lane in LANES for tier in ("t1", "t2") if side.towers[lane][tier] > 0)
+def tier_counts(side: Side) -> tuple[int, int]:
+    t1 = sum(1 for lane in LANES if side.towers[lane]["t1"] > 0)
+    t2 = sum(1 for lane in LANES if side.towers[lane]["t2"] > 0)
+    return t1, t2
 
 
 @dataclass
@@ -694,14 +696,17 @@ def cleanup(g: Game) -> None:
             side.hand.pop()
 
 
-Snap = tuple[int, int, int, int, int, int, int, int, int]
+# t1 standing, t2 standing, gold, xp, heroes, abilities, items, neutrals, shields, buybacks
+Snap = tuple[int, int, int, int, int, int, int, int, int, int]
+SNAP_LEN = 10
+ACTION_AT = 4
 
 
 def end_of_turn(g: Game) -> dict[str, Snap]:
-    """Towers, gold, XP, heroes, abilities, items, neutrals killed, Shields, and buybacks this round."""
+    """Tier 1, Tier 2, gold, XP, heroes, abilities, items, neutrals killed, Shields, and buybacks."""
     return {
         p: (
-            standing(g.sides[p]),
+            *tier_counts(g.sides[p]),
             g.sides[p].gold,
             g.sides[p].xp,
             g.played[p],
@@ -748,7 +753,7 @@ def simulate(games: int, seed: int, limit: int) -> None:
     unfinished = 0
     neutral_games = 0
     jungle_sent: list[dict[str, int]] = []
-    # round -> sums of (towers, gold, xp, heroes, abilities, items, neutrals, shields, buybacks)
+    # round -> sums of (t1, t2, gold, xp, heroes, abilities, items, neutrals, shields, buybacks)
     reached: Counter[int] = Counter()
     totals: dict[int, dict[str, list[int]]] = {}
     lifetime = {"radiant": [0, 0, 0, 0, 0, 0], "dire": [0, 0, 0, 0, 0, 0]}
@@ -758,6 +763,15 @@ def simulate(games: int, seed: int, limit: int) -> None:
     behind: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     comeback: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     even: Counter[int] = Counter()
+    # ordinal 0..5: round the nth tower of that tier fell anywhere on the map
+    map_fall: dict[str, list[list[int]]] = {"t1": [[] for _ in range(6)], "t2": [[] for _ in range(6)]}
+    # ordinal 0..2: round that side lost its nth tower of that tier
+    side_fall: dict[str, dict[str, list[list[int]]]] = {
+        tier: {p: [[] for _ in range(3)] for p in ("radiant", "dire")} for tier in ("t1", "t2")
+    }
+    first_t2_took: Counter[str] = Counter()
+    first_t2_won: Counter[str] = Counter()
+    first_t2_round: dict[str, list[int]] = {"radiant": [], "dire": [], "tie": []}
     for n in range(games):
         rng = random.Random(seed + n)
         g = Game(rng=rng, heroes=heroes, sides={"radiant": Side(), "dire": Side()}, board={})
@@ -780,25 +794,26 @@ def simulate(games: int, seed: int, limit: int) -> None:
         towers.append(g.towers_fallen)
         for rnd, snap in trace.items():
             reached[rnd] += 1
-            bucket = totals.setdefault(rnd, {"radiant": [0] * 9, "dire": [0] * 9})
+            bucket = totals.setdefault(rnd, {"radiant": [0] * SNAP_LEN, "dire": [0] * SNAP_LEN})
             for p in ("radiant", "dire"):
                 for i, value in enumerate(snap[p]):
                     bucket[p][i] += value
-                    if i >= 3:
-                        lifetime[p][i - 3] += value
+                    if i >= ACTION_AT:
+                        lifetime[p][i - ACTION_AT] += value
+        record_falls(trace, map_fall, side_fall, first_t2_took, first_t2_won, first_t2_round, g.winner)
         for mark in marks:
             snap = trace.get(mark)
             if snap is None or g.winner is None:
                 continue
-            rt, dt = snap["radiant"][0], snap["dire"][0]
+            rt, dt = up(snap["radiant"]), up(snap["dire"])
             if rt == dt:
                 even[mark] += 1
             for p in ("radiant", "dire"):
-                if snap[p][0] > snap[other(p)][0]:
+                if up(snap[p]) > up(snap[other(p)]):
                     ahead[mark][p] += 1
                     if g.winner == p:
                         held[mark][p] += 1
-                elif snap[p][0] < snap[other(p)][0]:
+                elif up(snap[p]) < up(snap[other(p)]):
                     behind[mark][p] += 1
                     if g.winner == p:
                         comeback[mark][p] += 1
@@ -828,14 +843,14 @@ def simulate(games: int, seed: int, limit: int) -> None:
     print()
     print("end of turn, games still going. Each cell is Radiant/Dire.")
     print("Hero, Ability, Item, Neutral, Shield, and Buyback are counts for that round.")
-    labels = ("Tower", "Gold", "XP", "Hero", "Ability", "Item", "Neutral", "Shield", "Buyback")
+    labels = ("T1", "T2", "Gold", "XP", "Hero", "Ability", "Item", "Neutral", "Shield", "Buyback")
     print(f"{'rnd':>3} {'games':>5}  " + "  ".join(f"{label:>9}" for label in labels))
     for rnd in sorted(totals):
         n = reached[rnd]
-        cells = [rd(totals[rnd]["radiant"][i] / n, totals[rnd]["dire"][i] / n) for i in range(9)]
+        cells = [rd(totals[rnd]["radiant"][i] / n, totals[rnd]["dire"][i] / n) for i in range(SNAP_LEN)]
         print(f"{rnd:3d} {n:5d}  " + "  ".join(f"{cell:>9}" for cell in cells))
     print()
-    print("Advantage is more standing towers. Lead held is how often that side then wins.")
+    print("Advantage is more standing towers (Tier 1 + Tier 2). Lead held is how often that side then wins.")
     print("Comeback is fewer towers, and that side still wins. Even is a tower tie.")
     print(f"{'rnd':>3} {'games':>5}  {'ahead R/D':>11}  {'lead held':>13}  {'even':>5}  {'comeback R':>14}  {'comeback D':>14}")
     for mark in marks:
@@ -854,6 +869,98 @@ def simulate(games: int, seed: int, limit: int) -> None:
             f"{mark:3d} {n:5d}  {ar:4d}/{ad:<4d}  {hr:5.1%}/{hd:<5.1%}  {even[mark]:5d}  "
             f"{cr:4d}/{br:<4d} {rr:5.1%}  {cd:4d}/{bd:<4d} {rd_:5.1%}"
         )
+    print()
+    print("Round a tower falls. R/D is the side that lost it. Same-round falls share that round.")
+    print(f"{'':8}  " + "  ".join(f"{label:>14}" for label in ("1st", "2nd", "3rd")))
+    for tier, title in (("t1", "T1 lost"), ("t2", "T2 lost")):
+        rounds = []
+        counts = []
+        for ordinal in range(3):
+            rs = side_fall[tier]["radiant"][ordinal]
+            ds = side_fall[tier]["dire"][ordinal]
+            left = f"{avg(rs):.2f}" if rs else "—"
+            right = f"{avg(ds):.2f}" if ds else "—"
+            rounds.append(f"{left:>5}/{right:<5}")
+            counts.append(f"{len(rs):5d}/{len(ds):<5d}")
+        print(f"{title:8}  " + "  ".join(f"{cell:>14}" for cell in rounds))
+        print(f"{'games':8}  " + "  ".join(f"{cell:>14}" for cell in counts))
+    print()
+    print("Nth tower of that tier to fall anywhere. Round is the mean among games that reached it.")
+    print(f"{'':6}  " + "  ".join(f"{n:>8}" for n in range(1, 7)))
+    for tier, title in (("t1", "T1"), ("t2", "T2")):
+        means = [f"{avg(xs):8.2f}" if xs else f"{'—':>8}" for xs in map_fall[tier]]
+        counts = [f"{len(xs):8d}" for xs in map_fall[tier]]
+        print(f"{title:6}  " + "  ".join(means))
+        print(f"{'games':6}  " + "  ".join(counts))
+    print()
+    print("First Tier 2. Took it is the side that destroyed it. Won is how often that side then wins.")
+    print("A same-round pair is a tie. Never is a finished or capped game where no Tier 2 fell.")
+    for p, name in (("radiant", "Radiant"), ("dire", "Dire")):
+        took = first_t2_took[p]
+        won = first_t2_won[p]
+        rate = won / took if took else 0
+        when = avg(first_t2_round[p])
+        print(f"{name:8} took {took:4d}  won {won:4d} ({rate:5.1%})  mean round {when:.2f}")
+    tie_n = first_t2_took["tie"]
+    print(f"{'Same rnd':8} {tie_n:4d}  mean round {avg(first_t2_round['tie']):.2f}")
+    print(f"{'Never':8} {first_t2_took['never']:4d}")
+
+
+def up(row: Snap) -> int:
+    return row[0] + row[1]
+
+
+def record_falls(
+    trace: dict[int, dict[str, Snap]],
+    map_fall: dict[str, list[list[int]]],
+    side_fall: dict[str, dict[str, list[list[int]]]],
+    first_t2_took: Counter[str],
+    first_t2_won: Counter[str],
+    first_t2_round: dict[str, list[int]],
+    winner: str | None,
+) -> None:
+    """Credit each standing-count drop to the other side. A Tier 2 cannot fall before its Tier 1."""
+    prev = {"radiant": (3, 3), "dire": (3, 3)}
+    lost_n = {"t1": {"radiant": 0, "dire": 0}, "t2": {"radiant": 0, "dire": 0}}
+    map_n = {"t1": 0, "t2": 0}
+    first_t2: str | None = None
+    first_t2_at = 0
+    for rnd in sorted(trace):
+        snap = trace[rnd]
+        lost: dict[str, tuple[int, int]] = {}
+        for p in ("radiant", "dire"):
+            now = (snap[p][0], snap[p][1])
+            lost[p] = (prev[p][0] - now[0], prev[p][1] - now[1])
+            prev[p] = now
+        for tier, slot in (("t1", 0), ("t2", 1)):
+            for p in ("radiant", "dire"):
+                n = lost[p][slot]
+                if n <= 0:
+                    continue
+                for _ in range(n):
+                    ordinal = lost_n[tier][p]
+                    if ordinal < 3:
+                        side_fall[tier][p][ordinal].append(rnd)
+                    lost_n[tier][p] = ordinal + 1
+                    if map_n[tier] < 6:
+                        map_fall[tier][map_n[tier]].append(rnd)
+                    map_n[tier] += 1
+        if first_t2 is None:
+            radiant_took = lost["dire"][1]
+            dire_took = lost["radiant"][1]
+            if radiant_took and dire_took:
+                first_t2, first_t2_at = "tie", rnd
+            elif radiant_took:
+                first_t2, first_t2_at = "radiant", rnd
+            elif dire_took:
+                first_t2, first_t2_at = "dire", rnd
+    if first_t2 is None:
+        first_t2_took["never"] += 1
+        return
+    first_t2_took[first_t2] += 1
+    first_t2_round[first_t2].append(first_t2_at)
+    if first_t2 in ("radiant", "dire") and winner == first_t2:
+        first_t2_won[first_t2] += 1
 
 
 def main() -> None:

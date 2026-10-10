@@ -752,7 +752,7 @@ def simulate(games: int, seed: int, limit: int) -> None:
     reached: Counter[int] = Counter()
     totals: dict[int, dict[str, list[int]]] = {}
     lifetime = {"radiant": [0, 0, 0, 0, 0, 0], "dire": [0, 0, 0, 0, 0, 0]}
-    marks = [2, 4, 6, 8, 10]
+    marks = [5, 10, 15]
     ahead: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     held: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     behind: dict[int, Counter[str]] = {mark: Counter() for mark in marks}

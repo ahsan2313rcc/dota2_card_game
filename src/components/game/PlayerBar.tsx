@@ -1,5 +1,5 @@
 import { Castle, Coins, Layers, Skull, Sparkles, Users } from 'lucide-react'
-import { LANE_LABEL, PLAYER_LABEL, handCount, heroesOnBoard } from '@/game/engine'
+import { PLAYER_LABEL, handCount, heroesOnBoard, other, standingTowers } from '@/game/engine'
 import { ANCIENT_HP, BOARD_LIMIT, HAND_LIMIT, type GameState, type PlayerId } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { CardBack } from './HandCard'
@@ -46,10 +46,8 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
           </div>
         </div>
       </div>
-      {pl.bonusIncomeLanes.length > 0 && (
-        <span className="text-[11px] text-amber-300">
-          +{pl.bonusIncomeLanes.length} passive Gold ({pl.bonusIncomeLanes.map((l) => LANE_LABEL[l]).join(', ')} broken)
-        </span>
+      {standingTowers(s, other(player)) === 0 && (
+        <span className="text-[11px] text-amber-300">+1 passive Gold (every enemy lane tower is down)</span>
       )}
     </div>
   )

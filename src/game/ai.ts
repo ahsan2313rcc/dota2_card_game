@@ -1,8 +1,6 @@
-import { ATTRIBUTE_COUNTERS, getHero, getItem } from './cards'
+import { getHero, getItem } from './cards'
 import {
   ZONE_PRIORITY,
-  attributeOf,
-  buyShield,
   buyback,
   buybackBlockReason,
   buybackChoices,
@@ -15,7 +13,6 @@ import {
   endDraw,
   endItems,
   endRotation,
-  favoredPlayer,
   heroesOnBoard,
   homeJungle,
   isMelee,
@@ -34,7 +31,6 @@ import {
   rotateHero,
   rotationTargets,
   setCampFocus,
-  shieldBlockReason,
   ultBlockReason,
   ultCost,
   ultNeedsTarget,
@@ -47,7 +43,6 @@ import {
   LANES,
   PLAYERS,
   ROTATIONS_PER_ROUND,
-  SHIELD_XP_COST,
   TOWER_HP,
   isLane,
   type Attribute,
@@ -86,6 +81,18 @@ const HARMFUL = new Set([
   'tower',
   'pull',
   'shove',
+  'hood',
+  'luna',
+  'razor',
+  'snap',
+  'astral',
+  'hand',
+  'stealxp',
+  'disarmtower',
+  'sky',
+  'timber',
+  'visage',
+  'slam',
 ])
 
 const ENEMY_WHO = new Set([
@@ -189,15 +196,8 @@ export function aiDraw(state: GameState, p: PlayerId): GameState {
   return s
 }
 
-function counterScore(attr: Attribute, enemies: Unit[]): number {
-  let score = 0
-  for (const enemy of enemies) {
-    const theirs = attributeOf(enemy)
-    if (!theirs) continue
-    if (ATTRIBUTE_COUNTERS[attr] === theirs) score += 5
-    else if (ATTRIBUTE_COUNTERS[theirs] === attr) score -= 5
-  }
-  return score
+function counterScore(_attr: Attribute, _enemies: Unit[]): number {
+  return 0
 }
 
 function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr?: Attribute): number {
@@ -432,8 +432,7 @@ export function playAiRound(state: GameState): GameState {
   for (const p of PLAYERS) s = aiUlts(s, p)
   s = resolveRound(s)
   if (s.phase === 'rotate') {
-    const first = favoredPlayer(s.round, s.cycle)
-    for (const p of [first, other(first)]) s = takeRotations(s, p)
+    for (const p of PLAYERS) s = takeRotations(s, p)
     s = endRotation(s)
   }
   for (const p of PLAYERS) s = discardToHandLimit(s, p)
@@ -529,11 +528,11 @@ function ultShape(u: Unit) {
     return !who && (target.startsWith('enemy') || target === 'heroInLane')
   }
   return {
-    friendlyFire: cmds.some((c) => c.who === 'laneAll' && HARMFUL.has(c.verb)),
+    friendlyFire: cmds.some((c) => (c.who === 'laneAll' || c.who === 'others') && HARMFUL.has(c.verb)),
     selfHarm: cmds.some((c) => c.who === 'self' && (c.verb === 'mdmg' || c.verb === 'pdmg')),
     global: cmds.some((c) => c.who === 'boardH' || c.who === 'pos1each' || c.who === 'intH' || c.who === 'strH'),
     hitsEnemy: cmds.some((c) => harmfulOn(c.verb, c.who)),
-    healOnly: cmds.length > 0 && cmds.every((c) => c.verb === 'heal'),
+    healOnly: cmds.length > 0 && cmds.every((c) => c.verb === 'heal' || c.verb === 'healboard'),
     buff: cmds.some((c) => BUFF_VERBS.has(c.verb)),
   }
 }
@@ -613,15 +612,5 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
     const enemiesHere = enemyHeroes(s, p, u.zone).length + (campNeutral(s, u.zone) ? 1 : 0)
     if (shape.hitsEnemy && enemiesHere > 0) s = declareUlt(s, u.uid)
   }
-  return buyAiShield(s, p)
-}
-
-/** One Shield, bought with whatever XP the ultimates left, on a hero who is about to be hit. */
-function buyAiShield(s: GameState, p: PlayerId): GameState {
-  if (s.players[p].xp < SHIELD_XP_COST) return s
-  const lanes = [...LANES].sort((a, b) => zoneUltScore(s, p, b) - zoneUltScore(s, p, a))
-  const candidates = lanes.flatMap((lane) => lineup(s, p, lane).map((id) => s.units[id]))
-  const hero = candidates.find((u) => u.kind === 'hero' && !u.dead && u.status.shield < 1 && (enemyHeroes(s, p, u.zone).length > 0 || (isLane(u.zone) && towerPressure(s.players[other(p)].structures.towers[u.zone].t1, s.players[other(p)].structures.towers[u.zone].t2) > 0)))
-  if (!hero || shieldBlockReason(s, p, hero.uid)) return s
-  return buyShield(s, p, hero.uid)
+  return s
 }

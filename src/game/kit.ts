@@ -151,6 +151,8 @@ function resolveWho(api: KitApi, caster: Unit, focus: Focus, token: string): Uni
       return heroes(ally)
     case 'laneAll':
       return [...heroes(ally), ...heroes(foe)]
+    case 'others':
+      return [...heroes(ally), ...heroes(foe)].filter((u) => u.uid !== caster.uid)
     case 'boardH':
       return Object.values(s.units).filter((u) => u.owner === other(caster.owner as PlayerId) && u.kind === 'hero' && !u.dead && !hidden(u))
     case 'intH':
@@ -307,6 +309,23 @@ function applyVerb(api: KitApi, caster: Unit, t: Unit, verb: string, ult: string
     case 'lifestealAura':
       st.lifestealAura = true
       break
+    case 'healend':
+      st.healEnd = true
+      api.log(`${api.name(t)} heals at the end of the turn.`, from)
+      break
+    case 'evadeall':
+      st.evadeAll = true
+      api.log(`${api.name(t)} evades physical damage this turn.`, from)
+      break
+    case 'lock':
+      t.foreverMute = true
+      t.foreverSilence = true
+      t.foreverCurse = true
+      st.muted = true
+      st.silenced = true
+      st.cursed = true
+      api.log(`${api.name(t)} is Doomed for the rest of the game.`, from)
+      break
     case 'ranged':
       st.rangedAttack = true
       api.log(`${api.name(t)} attacks at range.`, from)
@@ -378,15 +397,15 @@ function runLine(api: KitApi, caster: Unit, focus: Focus, line: string) {
     return
   }
   if (cmd === 'sky') {
-    const n = [...friends(api.s, caster, focus.zone), ...foes(api.s, caster, focus.zone)].filter((u) => u.kind === 'hero' && attrOf(u) === 'INT').length
+    const n = Object.values(api.s.units).filter((u) => u.owner === caster.owner && u.kind === 'hero' && !u.dead && attrOf(u) === 'INT').length
     const t = focus.target ? api.s.units[focus.target] : undefined
     if (t && n > 0) api.magic(caster, t.uid, n, ult)
     return
   }
   if (cmd === 'visage') {
-    const n = api.s.resolvedUlts.filter((z) => z === focus.zone).length
+    const n = api.s.resolvedUlts.filter((z) => z === focus.zone).length + 1
     const t = focus.target ? api.s.units[focus.target] : undefined
-    if (t && n > 0) api.magic(caster, t.uid, n, ult)
+    if (t) api.magic(caster, t.uid, n, ult)
     return
   }
   if (cmd === 'zapinvis') {
@@ -442,9 +461,145 @@ function runLine(api: KitApi, caster: Unit, focus: Focus, line: string) {
       const b = a === caster ? t : caster
       api.strike(a, b.uid, Math.max(1, api.attackPower(a)), 'Duel')
     }
-    if (!caster.dead && t.dead) {
-      caster.permanentAtk += 1
-      api.log(`${api.name(caster)} wins the duel and gains +1 attack permanently.`, caster.owner)
+    if (!caster.dead && t.dead && caster.owner !== 'neutral') {
+      api.gold(caster.owner, 2)
+      api.log(`${api.name(caster)} wins the duel and gains 2 Gold.`, caster.owner)
+    } else if (caster.dead && !t.dead && t.owner !== 'neutral') {
+      api.gold(t.owner, 2)
+      api.log(`${api.name(t)} wins the duel and gains 2 Gold.`, t.owner)
+    }
+    return
+  }
+  if (cmd === 'lock') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (t && !t.dead) applyVerb(api, caster, t, 'lock', ult)
+    return
+  }
+  if (cmd === 'pay') {
+    if (caster.owner !== 'neutral') {
+      const pl = api.s.players[caster.owner]
+      const lost = Math.min(1, pl.xp)
+      pl.xp -= lost
+      api.log(`${api.name(caster)} spends ${lost} XP.`, caster.owner)
+    }
+    return
+  }
+  if (cmd === 'stealxp') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (t && t.owner !== 'neutral' && caster.owner !== 'neutral' && t.owner !== caster.owner) {
+      const victim = api.s.players[t.owner]
+      const lost = Math.min(1, victim.xp)
+      victim.xp -= lost
+      api.xp(caster.owner, lost)
+      api.log(`${api.name(caster)} steals ${lost} XP.`, caster.owner)
+    }
+    return
+  }
+  if (cmd === 'hood') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (t && !t.dead) api.magic(caster, t.uid, isLane(t.zone) ? 1 : 2, ult)
+    return
+  }
+  if (cmd === 'luna') {
+    const n = Number(parts[1]) || 3
+    const list = foes(api.s, caster, focus.zone)
+    for (let i = 0; i < n && list.length; i++) {
+      const t = list[i % list.length]
+      if (!t.dead) api.magic(caster, t.uid, 1, ult)
+    }
+    return
+  }
+  if (cmd === 'razor') {
+    const wounded = heroes(foes(api.s, caster, focus.zone)).find((e) => e.hp < e.maxHp)
+    if (wounded) api.physical(caster, wounded.uid, 1, ult)
+    else if (isLane(caster.zone)) api.hitTower(caster, caster.zone, 1)
+    return
+  }
+  if (cmd === 'hand') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (t && !t.dead && t.kind === 'hero' && t.owner !== 'neutral') api.returnToHand(t)
+    return
+  }
+  if (cmd === 'astral') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (!t || t.dead) return
+    if (t.owner !== caster.owner) {
+      api.magic(caster, t.uid, 1, ult)
+      if (caster.owner !== 'neutral') api.xp(caster.owner, 1)
+    }
+    if (!t.dead) applyVerb(api, caster, t, 'banish', ult)
+    return
+  }
+  if (cmd === 'swaphp') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (!t || t.dead) return
+    const a = caster.hp
+    const b = t.hp
+    caster.hp = Math.max(1, Math.min(caster.maxHp, b))
+    t.hp = Math.max(1, Math.min(t.maxHp, a))
+    api.log(`${api.name(caster)} swaps health with ${api.name(t)}.`, caster.owner)
+    return
+  }
+  if (cmd === 'disarmtower') {
+    if (caster.owner !== 'neutral' && isLane(caster.zone)) api.silenceTower(other(caster.owner), caster.zone)
+    return
+  }
+  if (cmd === 'tpunit') {
+    const t = focus.target ? api.s.units[focus.target] : undefined
+    if (t && !t.dead && !caster.status.rooted && !caster.status.stunned) {
+      api.move(caster, t.zone, false, 'tp')
+      focus.zone = t.zone
+    }
+    return
+  }
+  if (cmd === 'skewer' && isZoneId(focus.target)) {
+    const enemy = foes(api.s, caster, caster.zone).find((e) => !e.status.rooted && !e.dead)
+    if (!caster.status.rooted) api.move(caster, focus.target, false, 'move')
+    if (enemy && !enemy.dead) api.move(enemy, focus.target, true, 'move')
+    focus.zone = focus.target
+    return
+  }
+  if (cmd === 'sidekick' && isZoneId(focus.target)) {
+    const ally = heroes(friends(api.s, caster, caster.zone)).find((u) => u.uid !== caster.uid && !u.status.rooted)
+    if (!caster.status.rooted) api.move(caster, focus.target, false, 'move')
+    if (ally && !ally.dead) api.move(ally, focus.target, false, 'move')
+    focus.zone = focus.target
+    return
+  }
+  if (cmd === 'npshot') {
+    const ordered = [focus.zone, ...ZONES.filter((z) => z !== focus.zone)]
+    let hits = 0
+    for (const z of ordered) {
+      const front = foes(api.s, caster, z)[0]
+      if (!front || front.dead) continue
+      api.magic(caster, front.uid, 1, ult)
+      if (++hits >= 2) break
+    }
+    return
+  }
+  if (cmd === 'snap') {
+    for (const e of foes(api.s, caster, focus.zone)) {
+      if (!e.dead) api.magic(caster, e.uid, isMeleeUnit(e) ? 2 : 1, ult)
+    }
+    return
+  }
+  if (cmd === 'hastecreeps') {
+    for (const a of friends(api.s, caster, caster.zone)) {
+      if (a.kind === 'creep' || a.kind === 'siege') a.status.haste = true
+    }
+    return
+  }
+  if (cmd === 'spawncreep') {
+    if (caster.owner === 'neutral') return
+    const creep = api.make({ kind: 'creep', owner: caster.owner, zone: caster.zone, hp: 1 })
+    api.s.zones[caster.zone][caster.owner].push(creep.uid)
+    api.log(`${api.name(caster)} summons a creep.`, caster.owner)
+    return
+  }
+  if (cmd === 'healboard') {
+    if (caster.owner === 'neutral') return
+    for (const a of Object.values(api.s.units)) {
+      if (a.owner === caster.owner && a.kind === 'hero' && !a.dead && a.hp < a.maxHp) api.heal(a, ult)
     }
     return
   }
@@ -609,6 +764,7 @@ export function onUltCast(api: KitApi, caster: Unit) {
   if (hasTag(caster, 'onUlt:invis')) applyVerb(api, caster, caster, 'invisible', ult)
   for (const a of friends(api.s, caster, caster.zone)) {
     if (a.uid === caster.uid || a.status.broken) continue
+    if (hasTag(a, 'onUlt:healLane')) for (const ally of heroes(friends(api.s, a, a.zone))) api.heal(ally, getHero(a.cardId!).passive.name)
     if (hasTag(a, 'onUlt:largo')) for (const e of foes(api.s, a, a.zone).slice(0, 1)) api.magic(a, e.uid, 1, getHero(a.cardId!).passive.name)
     if (hasTag(a, 'onUlt:ogre')) {
       const e = foes(api.s, a, a.zone)[0]
@@ -700,6 +856,15 @@ export function opening(api: KitApi) {
     }
     if (hasTag(u, 'aura:slowLane')) for (const e of foes(s, u, u.zone)) applyVerb(api, u, e, 'slow', psv)
     if (hasTag(u, 'aura:curseLane')) for (const e of foes(s, u, u.zone)) applyVerb(api, u, e, 'curse', psv)
+    if (hasTag(u, 'aura:stripShield')) {
+      for (const e of foes(s, u, u.zone)) {
+        if (e.status.shield > 0) {
+          e.status.shield = 0
+          e.persistentShield = false
+          api.log(`${api.name(e)} loses Shield.`, u.owner)
+        }
+      }
+    }
     if (hasTag(u, 'aura:rootEnemies')) for (const e of heroes(foes(s, u, u.zone))) applyVerb(api, u, e, 'root', psv)
     if (hasTag(u, 'aura:enfeeblePos1') || hasTag(u, 'aura:silencePos1') || hasTag(u, 'aura:slowPos1')) {
       const front = foes(s, u, u.zone)[0]
@@ -765,7 +930,7 @@ export function endStep(api: KitApi) {
     if (hasTag(u, 'aura:healSafe') && (u.status.invisible || foes(api.s, u, u.zone).length === 0)) api.heal(u, psv)
     if (hasTag(u, 'aura:healAlliesEnd')) for (const a of heroes(friends(api.s, u, u.zone))) api.heal(a, psv)
     if (hasTag(u, 'aura:mdmgWoundedEnd')) {
-      for (const e of heroes(foes(api.s, u, u.zone))) if (e.hp < e.maxHp) api.magic(u, e.uid, 1, psv)
+      for (const e of foes(api.s, u, u.zone)) if (e.status.tookDamage && !e.dead) api.magic(u, e.uid, 1, psv)
     }
   }
 }
@@ -891,7 +1056,7 @@ export function onDeath(api: KitApi, dead: Unit, src: Unit | null) {
       const enemyHero = dead.kind === 'hero' && dead.owner !== u.owner
       if (hasTag(u, 'death:gold') && creep) api.gold(u.owner as PlayerId, 1)
       if (hasTag(u, 'death:heal') && enemyHero) api.heal(u, psv)
-      if (hasTag(u, 'death:shield') && enemyHero) api.shield(u, false)
+      if (hasTag(u, 'death:shield') && dead.owner !== u.owner) api.shield(u, false)
       if (hasTag(u, 'death:amp') && enemyHero) u.status.bonusDamage += 1
       if (hasTag(u, 'death:xp') && dead.owner !== u.owner && u.owner !== 'neutral') api.xp(u.owner, 1)
       if (hasTag(u, 'death:decoy') && dead.kind === 'hero' && dead.owner === u.owner) {
@@ -909,6 +1074,14 @@ export function onDeath(api: KitApi, dead: Unit, src: Unit | null) {
     }
     if (hasTag(dead, 'death:techies')) {
       for (const e of foes(api.s, dead, dead.zone)) api.magic(dead, e.uid, 1, getHero(dead.cardId!).passive.name)
+    }
+    if (hasTag(dead, 'death:tower') && dead.owner !== 'neutral' && isLane(dead.zone)) {
+      api.hitTower(dead, dead.zone, 1)
+    }
+    if (hasTag(dead, 'death:clone') && !dead.copy && dead.owner !== 'neutral') {
+      const copy = api.make({ kind: 'hero', cardId: dead.cardId, owner: dead.owner, zone: dead.zone, hp: 1, copy: true })
+      api.s.zones[dead.zone][dead.owner].push(copy.uid)
+      api.log('A wounded double remains.', dead.owner)
     }
     if (hasTag(dead, 'deathUlt')) runUlt(api, dead)
     if (hasTag(dead, 'link:ld')) {

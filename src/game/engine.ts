@@ -1,6 +1,5 @@
 import {
   ATTACK_ORDER,
-  ATTRIBUTE_COUNTERS,
   BOSS_REWARD,
   HEROES,
   ITEMS,
@@ -13,7 +12,6 @@ import {
   TORMENTOR,
   TORMENTOR_COPIES,
   TOWER_CARD_IDS,
-  ULT_ORDER,
   getHero,
   getItem,
   getNeutral,
@@ -47,8 +45,9 @@ import {
   BUYBACK_COST,
   BUYBACK_WINDOW,
   CAMPS,
+  DRAW_CAP,
   HAND_LIMIT,
-  SHIELD_XP_COST,
+  TOWER_GOLD,
   LANES,
   PLACE_PER_ROUND,
   ROTATIONS_PER_ROUND,
@@ -209,6 +208,8 @@ function freshStatus(): RoundStatus {
     halfDamage: false,
     doubleHeal: false,
     healEnd: false,
+    tookDamage: false,
+    evadeAll: false,
     skadi: false,
     rapier: false,
     bloodthorn: false,
@@ -356,13 +357,13 @@ function itemKind(c: { type: string; cardId: string }) {
   return c.type === 'item' ? getItem(c.cardId).kind : undefined
 }
 
-/** Runes and tower cards sit in hand without using a slot. */
+/** Runes, tower cards and boss rewards sit in hand without using a slot. */
 function outsideHandLimit(c: { type: string; cardId: string }) {
   const kind = itemKind(c)
-  return kind === 'Rune' || kind === 'Tower'
+  return kind === 'Rune' || kind === 'Tower' || kind === 'Special'
 }
 
-/** Heroes, creeps, shop cards, and boss rewards count. Runes and tower cards do not. */
+/** Heroes, creeps and shop cards count. Runes, tower cards and boss rewards do not. */
 export function countsTowardHand(c: { type: string; cardId: string }) {
   return !outsideHandLimit(c)
 }
@@ -526,9 +527,11 @@ function kitApi(s: GameState): KitApi {
       if (tw.t1 <= 0 && tw.t2 <= 0) return
       const key = towerKey(enemy, lane, tw.t1 > 0 ? 't1' : 't2')
       if (!s.towersHit.includes(key)) s.towersHit.push(key)
-      if (tw.t1 > 0) tw.t1 = Math.max(0, tw.t1 - dmg)
+      const tier = tw.t1 > 0 ? 't1' : 't2'
+      if (tier === 't1') tw.t1 = Math.max(0, tw.t1 - dmg)
       else tw.t2 = Math.max(0, tw.t2 - dmg)
       log(s, `${fullName(src)} blasts the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower for ${dmg}.`, 'structure')
+      if (tw[tier] === 0) onTowerLost(s, enemy, lane, tier, src.owner)
     },
     xp: (p, n) => {
       s.players[p].xp = Math.max(0, s.players[p].xp + n)
@@ -627,7 +630,7 @@ function startRound(s: GameState) {
   s.ultDeclarations = []
   s.bossKills = []
   s.cycle = undefined
-  log(s, `Round ${s.round} — ${isDay(s.round) ? 'Day (Radiant has priority)' : 'Night (Dire has priority)'}`, 'phase')
+  log(s, `Round ${s.round}`, 'phase')
   spawnCamps(s)
   for (const p of PLAYERS) {
     const pl = s.players[p]
@@ -643,8 +646,15 @@ function startRound(s: GameState) {
         }
       }
     }
+    const ancientLane = p === 'radiant' ? 'bot' : 'top'
+    for (const uid of lineup(s, p, ancientLane)) {
+      const u = s.units[uid]
+      if (u.kind !== 'hero' || u.hp >= u.maxHp) continue
+      heal(s, u, p === 'radiant' ? 'Radiant Ancient' : 'Dire Ancient')
+    }
     const xpAura = heroesOnBoard(s, p).filter((u) => hasTag(u, 'xpAura')).length
-    const gold = 1 + pl.bonusIncomeLanes.length
+    const cleared = standingTowers(s, other(p)) === 0
+    const gold = 1 + (cleared ? 1 : 0)
     pl.gold += gold
     pl.xp += 1 + xpAura
     pl.placedThisRound = 0
@@ -676,6 +686,7 @@ export function drawBlockReason(s: GameState, p: PlayerId, type: DrawType): stri
   if (s.phase !== 'draw') return 'Not the draw step'
   const pl = s.players[p]
   if (pl.gold < 1) return 'Need 1 Gold'
+  if (handCount(pl) >= DRAW_CAP) return `Draw cap is ${DRAW_CAP} counting cards`
   if (deckSize(s, type) === 0) return 'Deck is empty'
   return null
 }
@@ -800,7 +811,12 @@ export function swapTowerCards(state: GameState, p: PlayerId, tier: TowerTier, a
   return s
 }
 
-function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: TowerTier) {
+function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: TowerTier, attacker?: PlayerId) {
+  const bounty = TOWER_GOLD[tier]
+  if (attacker) {
+    s.players[attacker].gold += bounty
+    log(s, `${PLAYER_LABEL[attacker]} claims ${bounty} Gold for destroying the ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower.`, tone(attacker))
+  }
   if (!rules(s).towerCards) return
   const pl = s.players[defender]
   const cardId = pl.towerCards[lane][tier]
@@ -1075,7 +1091,7 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
     case 'allyWoundedHero':
       return allies.filter((u) => u.hp < u.maxHp).map((u) => u.uid)
     case 'allyHero':
-      if (itemId === 'refresher_shard') return allies.filter((u) => u.ultCasts > 0).map((u) => u.uid)
+      if (itemId === 'refresher_shard') return allies.map((u) => u.uid)
       if (itemId === 'rune_water') return allies.filter((u) => DEBUFFS.some((d) => u.status[d]) || u.status.poisonedBy).map((u) => u.uid)
       return allies.map((u) => u.uid)
     case 'allyHeroToLane':
@@ -1142,8 +1158,6 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     pl.gold += 1
   } else if (item.id === 'rune_wisdom') {
     pl.xp += 1
-  } else if (item.id === 'rune_arcane') {
-    pl.arcane = true
   } else if (item.id === 'clarity') {
     pl.xp += 1
   } else if (item.id === 'greaves') {
@@ -1177,7 +1191,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.bladeMail = true
         break
       case 'vanguard':
-        giveShield(s, t, true)
+        giveShield(s, t, false)
         break
       case 'bkb':
         st.immune = true
@@ -1261,8 +1275,12 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.aegis = true
         break
       case 'refresher_shard':
-        t.ultCasts = 0
-        t.ultUsed = false
+        t.costZero = true
+        log(s, `${fullName(t)}'s ability costs 0 XP.`, tone(p))
+        break
+      case 'rune_arcane':
+        t.arcaneDiscount = (t.arcaneDiscount ?? 0) + 1
+        log(s, `${fullName(t)}'s ability costs 1 less XP.`, tone(p))
         break
       case 'rune_regen':
         heal(s, t, 'Regeneration Rune')
@@ -1271,7 +1289,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.bonusDamage += 1
         break
       case 'rune_shield':
-        giveShield(s, t, true)
+        giveShield(s, t, false)
         break
       case 'rune_illusion': {
         const decoy = makeUnit(s, { kind: 'illusion', cardId: t.cardId, owner: p, zone: t.zone, hp: 1 })
@@ -1374,14 +1392,17 @@ export function ultNeedsTarget(u: Unit) {
   return u.kind === 'hero' && getHero(u.cardId!).ult.target !== 'none'
 }
 
-/** XP the next Ultimate costs. The first cast of a deployment is 1, then 2, then 3. Tinker stays at 1. */
+/** Printed XP cost of an active ability. Passives cannot be cast. KotL reduces an ally's cost by 1, to a minimum of 1. */
 export function ultCost(u: Unit, s?: GameState): number {
+  if (u.costZero) return 0
   const script = u.cardId && u.kind === 'hero' ? getHero(u.cardId).script : undefined
-  let cost = script?.fixedCost ? 1 : u.ultCasts + 1
+  if (script?.kind === 'passive') return 0
+  let cost = script?.xpCost ?? 1
   if (s && u.owner !== 'neutral' && isPos1(s, u)) {
     const kotl = lineup(s, u.owner, u.zone).some((id) => hasTag(s.units[id], 'kotl'))
     if (kotl) cost = Math.max(1, cost - 1)
   }
+  if (u.arcaneDiscount) cost = Math.max(0, cost - u.arcaneDiscount)
   return cost
 }
 
@@ -1398,33 +1419,27 @@ export function ultBlockReason(s: GameState, uid: string): string | null {
   const u = s.units[uid]
   if (!u || u.kind !== 'hero' || u.owner === 'neutral') return 'Not a hero'
   if (s.phase !== 'ults') return 'Ultimates are declared during the ULT step'
-  if (s.ultDeclarations.some((d) => d.uid === uid)) return 'Already declared'
+  const script = u.cardId ? getHero(u.cardId).script : undefined
+  if (script?.kind !== 'active') return 'Passive ability'
+  const prior = s.ultDeclarations.filter((d) => d.uid === uid)
+  if (prior.length >= 2) return 'Already declared'
+  const echoing = prior.length === 1
+  if (echoing && !u.status.echoUlt) return 'Already declared'
   const r = castPreventedReason(s, u)
   if (r) return r
-  const cost = ultCost(u, s)
-  if (s.players[u.owner].xp < cost && !s.players[u.owner].arcane) return `Needs ${cost} XP`
+  const cost = echoing ? 0 : ultCost(u, s)
+  if (!echoing && s.players[u.owner].xp < cost) return `Needs ${cost} XP`
   if (ultNeedsTarget(u) && ultTargets(s, uid).length === 0 && ultZones(s, uid).length === 0) return 'No valid targets'
   return null
 }
 
-export function shieldBlockReason(s: GameState, p: PlayerId, uid: string): string | null {
-  if (s.phase !== 'ults') return 'A Shield is bought during the Ultimate step'
-  const u = s.units[uid]
-  if (!u || u.owner !== p || u.dead || u.kind !== 'hero') return 'Choose one of your heroes'
-  if (u.status.shield >= 1) return 'Shields do not stack'
-  if (s.players[p].xp < SHIELD_XP_COST) return `Need ${SHIELD_XP_COST} XP`
-  return null
+export function shieldBlockReason(_s: GameState, _p: PlayerId, _uid: string): string | null {
+  return 'Shields are not bought with XP'
 }
 
-/** Spend 3 XP for one Shield. It lasts until it blocks a hit. */
-export function buyShield(state: GameState, p: PlayerId, uid: string): GameState {
-  if (shieldBlockReason(state, p, uid)) return state
-  const s = clone(state)
-  const u = s.units[uid]
-  s.players[p].xp -= SHIELD_XP_COST
-  grantShield(u, true)
-  log(s, `${PLAYER_LABEL[p]} spends ${SHIELD_XP_COST} XP: ${fullName(u)} gains a Shield.`, tone(p))
-  return s
+/** Version 3 does not sell Shields for XP. The call is refused. */
+export function buyShield(state: GameState, _p: PlayerId, _uid: string): GameState {
+  return state
 }
 
 export function declareUlt(state: GameState, uid: string, target?: string): GameState {
@@ -1437,17 +1452,17 @@ export function declareUlt(state: GameState, uid: string, target?: string): Game
   const owner = u.owner as PlayerId
   const s = clone(state)
   const pl = s.players[owner]
-  const cost = ultCost(u, state)
-  const free = pl.arcane
-  if (free) pl.arcane = false
-  else pl.xp -= cost
-  s.ultDeclarations.push({ uid, owner, target, free, cost: free ? 0 : cost })
+  const echoing = state.ultDeclarations.some((d) => d.uid === uid)
+  const cost = echoing ? 0 : ultCost(u, state)
+  if (!echoing) pl.xp -= cost
+  else s.units[uid].status.echoUlt = false
+  s.ultDeclarations.push({ uid, owner, target, cost, echo: echoing || undefined })
   return s
 }
 
-function refundUlt(s: GameState, d: { owner: PlayerId; free?: boolean; cost: number }) {
+function refundUlt(s: GameState, d: { owner: PlayerId; free?: boolean; echo?: boolean; cost: number }) {
   if (d.free) s.players[d.owner].arcane = true
-  else s.players[d.owner].xp += d.cost
+  else if (!d.echo) s.players[d.owner].xp += d.cost
 }
 
 export function toggleMorph(state: GameState, uid: string): GameState {
@@ -1481,11 +1496,13 @@ interface DamageOpts {
   physical?: boolean
 }
 
-function counters(a: Unit, b: Unit) {
-  const aa = attributeOf(a)
-  const ba = attributeOf(b)
-  return !!aa && !!ba && ATTRIBUTE_COUNTERS[aa] === ba
+/** Lethal attribute counters are gone in version 3. Attributes only order basic attacks. */
+function counters(_a: Unit, _b: Unit) {
+  return false
 }
+
+let deferLethal = false
+const pendingKills: { uid: string; src: Unit | null; label: string; killer: Owner | undefined }[] = []
 
 function removeFromBoard(s: GameState, u: Unit) {
   if (u.owner === 'neutral') {
@@ -1517,8 +1534,10 @@ function tormentorReflect(s: GameState, torm: Unit, src: Unit | null, sourceOwne
   if (!side) return
   const label = 'Tormentor Reflection'
   if (src && !src.dead && src.owner === side) dealDamage(s, torm, src.uid, amount, 'reflect', { label })
-  const front = targetableLineup(s, other(side), torm.zone)[0]
-  if (front) dealDamage(s, torm, front, amount, 'reflect', { label })
+  for (const p of PLAYERS) {
+    const front = targetableLineup(s, p, torm.zone)[0]
+    if (front && front !== src?.uid) dealDamage(s, torm, front, amount, 'reflect', { label })
+  }
 }
 
 function applyDamage(
@@ -1552,10 +1571,6 @@ function applyDamage(
     log(s, `Roshan ignores the first damage from ${label}.`, 'info')
     return 0
   }
-  if (t.cardId === 'golem' && magic) {
-    log(s, `Stone Golem is immune to ${label}.`, 'info')
-    return 0
-  }
   if (fromEnemy && preDamage(t)) {
     log(s, `${label} feeds ${fullName(t)}'s Borrowed Time.`, 'info')
     return 0
@@ -1572,6 +1587,10 @@ function applyDamage(
   }
   if (st.ethereal && physicalHit) {
     log(s, `${fullName(t)} is Ethereal and takes no physical damage from ${label}.`, 'info')
+    return 0
+  }
+  if (physicalHit && st.evadeAll && !accuracy) {
+    log(s, `${fullName(t)} evades the physical damage from ${label}.`, 'info')
     return 0
   }
   if (basic && !accuracy) {
@@ -1620,15 +1639,11 @@ function applyDamage(
   }
 
   let dmg = amount
-  if (basic && src && counters(src, t)) {
-    dmg = t.hp
-    log(s, `${attributeOf(src)} counters ${attributeOf(t)}: ${label}'s strike is lethal!`, 'kill')
-  }
   if (magic && st.ethereal) dmg += 1
   if (basic && st.bloodthorn) dmg += 1
   if (basic && src && src.owner !== t.owner && src.kind === 'hero' && hasTag(t, 'atk:less')) dmg = Math.max(0, dmg - 1)
+  if (hasTag(t, 'dmg:-1')) dmg = Math.max(0, dmg - 1)
   if (st.halfDamage && dmg > 0) dmg = Math.max(1, Math.ceil(dmg / 2))
-  if (t.cardId === 'golem') dmg = Math.min(dmg, 1)
   if (rapier) dmg = Math.max(dmg, t.hp)
   if (dmg <= 0) {
     log(s, `${label} deals no damage to ${fullName(t)}.`, 'info')
@@ -1641,8 +1656,14 @@ function applyDamage(
   }
 
   t.hp -= dmg
+  st.tookDamage = true
   if (t.hp > 0) {
     log(s, `${label} deals ${dmg} to ${fullName(t)} (${t.hp}/${t.maxHp} left).`, 'damage')
+    onDamaged(kitApi(s), t, src, dmg)
+  } else if (deferLethal) {
+    t.hp = 0
+    if (!pendingKills.some((p) => p.uid === t.uid)) pendingKills.push({ uid: t.uid, src, label, killer: srcOwner })
+    log(s, `${label} deals ${dmg} to ${fullName(t)} (simultaneous).`, 'damage')
     onDamaged(kitApi(s), t, src, dmg)
   } else {
     handleLethal(s, t, src, label, srcOwner)
@@ -1683,9 +1704,8 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
     s.neutralDiscard.push(t.cardId!)
     if (byPlayer) {
       const pl = s.players[byPlayer]
-      pl.xp += 1
       pl.gold += 1
-      log(s, `${PLAYER_LABEL[byPlayer]} clears the camp: +1 XP, +1 Gold.`, tone(byPlayer))
+      log(s, `${PLAYER_LABEL[byPlayer]} clears the camp: +1 Gold and a rune.`, tone(byPlayer))
       const rune = takeRune(s)
       if (rune) giveCard(s, byPlayer, { type: 'item', cardId: rune }, `a rune card (${getItem(rune).name})`)
     }
@@ -1704,11 +1724,10 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
 // ---------- combat ----------
 
 function priorityKey(s: GameState, u: Unit): number[] {
-  if (u.owner === 'neutral') return [99, 2, 0]
+  if (u.owner === 'neutral') return [99, 0]
   const zoneRank = ZONE_PRIORITY[u.owner].indexOf(u.zone)
-  const fav = u.owner === favoredPlayer(s.round, s.cycle) ? 0 : 1
   const pos = s.zones[u.zone][u.owner].indexOf(u.uid)
-  return [zoneRank, fav, pos]
+  return [zoneRank, pos]
 }
 
 function byPriority(s: GameState) {
@@ -1951,11 +1970,41 @@ function refreshNeutralAuras(s: GameState) {
   for (const camp of CAMPS) {
     const u = campNeutral(s, camp)
     if (!u) continue
+    if (u.cardId === 'golem') {
+      u.status.immune = true
+      u.status.shield = Math.max(u.status.shield, 1)
+    }
     if (u.cardId === 'thunderhide') u.status.haste = true
-    if (u.cardId === 'dragon') u.status.accuracy = true
+    if (u.cardId === 'dragon') {
+      for (const p of PLAYERS) for (const id of lineup(s, p, camp)) applyStatus(s, 'neutral', s.units[id], 'cursed', 'Black Dragon', true)
+    }
     if (u.kind === 'tormentor') u.status.shield = Math.max(u.status.shield, 1)
     if (u.cardId === 'ice_shaman') {
-      for (const p of PLAYERS) for (const id of lineup(s, p, camp)) applyStatus(s, 'neutral', s.units[id], 'cursed', 'Ice Shaman', true)
+      for (const p of PLAYERS) for (const id of lineup(s, p, camp)) applyStatus(s, 'neutral', s.units[id], 'silenced', 'Ice Shaman', true)
+    }
+  }
+}
+
+/** Contested camp passives. They are not ultimates, so they do not follow declaration order. */
+function contestStrikes(s: GameState) {
+  for (const camp of CAMPS) {
+    const u = campNeutral(s, camp)
+    if (!u || u.dead) continue
+    const present = PLAYERS.some((p) => lineup(s, p, camp).length > 0)
+    if (!present) continue
+    const everyone = PLAYERS.flatMap((p) => targetableLineup(s, p, camp))
+    if (u.kind === 'roshan') roshanRoar(s, u)
+    if (u.cardId === 'thunderhide') {
+      for (const id of everyone) dealDamage(s, u, id, 1, 'passive', { label: 'Thunder Clap' })
+    }
+    if (u.cardId === 'ice_shaman') {
+      for (const p of PLAYERS) {
+        const front = targetableLineup(s, p, camp)[0]
+        if (front) dealDamage(s, u, front, 1, 'passive', { label: 'Freezing Blast' })
+      }
+    }
+    if (u.cardId === 'dragon') {
+      for (const id of everyone) dealDamage(s, u, id, 1, 'passive', { label: 'Fire Pit' })
     }
   }
 }
@@ -2048,19 +2097,14 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
     log(s, `${who} hits the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 1 tower for ${dmg} (${tw.t1}/${TOWER_HP.t1}).`, 'structure')
     if (tw.t1 === 0) {
       log(s, `${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 1 tower is destroyed!`, 'structure')
-      onTowerLost(s, enemy, lane, 't1')
+      onTowerLost(s, enemy, lane, 't1', owner)
     }
   } else if (tw.t2 > 0) {
     tw.t2 = Math.max(0, tw.t2 - dmg)
     log(s, `${who} hits the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 2 tower for ${dmg} (${tw.t2}/${TOWER_HP.t2}).`, 'structure')
     if (tw.t2 === 0) {
       log(s, `${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} Tier 2 tower is destroyed!`, 'structure')
-      onTowerLost(s, enemy, lane, 't2')
-      const pl = s.players[owner]
-      if (!pl.bonusIncomeLanes.includes(lane)) {
-        pl.bonusIncomeLanes.push(lane)
-        log(s, `${PLAYER_LABEL[owner]} breaks ${ZONE_LABEL[lane]} lane: +1 passive Gold per round.`, tone(owner))
-      }
+      onTowerLost(s, enemy, lane, 't2', owner)
     }
   } else {
     st.ancient = Math.max(0, st.ancient - dmg)
@@ -2142,6 +2186,22 @@ function singleAttack(s: GameState, u: Unit) {
   }
 }
 
+function sameSwing(s: GameState, a: Unit, b: Unit) {
+  if (attributeOf(a) !== attributeOf(b)) return false
+  const ka = priorityKey(s, a)
+  const kb = priorityKey(s, b)
+  return ka[0] === kb[0] && ka[1] === kb[1]
+}
+
+function flushPendingKills(s: GameState) {
+  deferLethal = false
+  const queued = pendingKills.splice(0, pendingKills.length)
+  for (const p of queued) {
+    const t = s.units[p.uid]
+    if (t && !t.dead && t.hp <= 0) handleLethal(s, t, p.src, p.label, p.killer)
+  }
+}
+
 function basicAttack(s: GameState, u: Unit) {
   if (u.dead || s.winner || u.status.banished) return
   if (u.status.stunned || u.status.feared) {
@@ -2156,17 +2216,16 @@ function basicAttack(s: GameState, u: Unit) {
   if (u.status.focusFire) singleAttack(s, u)
 }
 
-/** Hasted first, then AGI → UNI → INT → STR → creeps; each bracket sorted by lane priority and day/night. */
+/** Hasted first, then AGI → UNI → INT → STR → creeps. Slowed units are passed in separately and act last. */
 function attackOrder(s: GameState, all: Unit[]): Unit[] {
   const attackers = all.filter(canAttack)
-  const order = attackers.filter((u) => u.status.haste).sort(byPriority(s))
-  const units = attackers.filter((u) => !u.status.haste)
-  for (const attr of ATTACK_ORDER) {
-    const group = units.filter((u) => attributeOf(u) === attr).sort(byPriority(s))
-    if (attr === 'INT') group.sort((a, b) => Number(b.fierySoul && !b.status.broken) - Number(a.fierySoul && !a.status.broken))
-    order.push(...group)
+  const order: Unit[] = []
+  const pushBracket = (pool: Unit[]) => {
+    for (const attr of ATTACK_ORDER) order.push(...pool.filter((u) => attributeOf(u) === attr).sort(byPriority(s)))
+    order.push(...pool.filter((u) => !attributeOf(u)).sort(byPriority(s)))
   }
-  order.push(...units.filter((u) => !attributeOf(u)).sort(byPriority(s)))
+  pushBracket(attackers.filter((u) => u.status.haste))
+  pushBracket(attackers.filter((u) => !u.status.haste))
   return order
 }
 
@@ -2184,13 +2243,15 @@ function checkWinner(s: GameState) {
 export function resolveRound(state: GameState): GameState {
   if (state.phase !== 'ults') return state
   const s = clone(state)
+  deferLethal = false
+  pendingKills.length = 0
   s.towersHit = []
 
   s.resolvedUlts = []
   opening(kitApi(s))
   refreshNeutralAuras(s)
-  log(s, 'Phase 1 — Ultimates (STR → INT → UNI → AGI)', 'phase')
-  type Cast = { kind: 'hero'; u: Unit; target?: string; free?: boolean; cost: number } | { kind: 'roar'; u: Unit }
+  log(s, 'Phase 1 — Abilities (last declared resolves first)', 'phase')
+  type Cast = { u: Unit; target?: string; free?: boolean; echo?: boolean; cost: number }
   const casts: Cast[] = []
   for (const d of s.ultDeclarations) {
     const u = s.units[d.uid]
@@ -2198,26 +2259,12 @@ export function resolveRound(state: GameState): GameState {
       refundUlt(s, d)
       continue
     }
-    casts.push({ kind: 'hero', u, target: d.target, free: d.free, cost: d.cost })
+    casts.push({ u, target: d.target, free: d.free, echo: d.echo, cost: d.cost })
   }
-  for (const camp of CAMPS) {
-    const rosh = campNeutral(s, camp)
-    if (rosh?.kind === 'roshan' && rosh.hp === rosh.maxHp && PLAYERS.some((p) => lineup(s, p, camp).length > 0)) {
-      casts.push({ kind: 'roar', u: rosh })
-    }
-  }
-  casts.sort((a, b) => {
-    const ra = ULT_ORDER.indexOf(attributeOf(a.u)!)
-    const rb = ULT_ORDER.indexOf(attributeOf(b.u)!)
-    return ra !== rb ? ra - rb : byPriority(s)(a.u, b.u)
-  })
-  if (casts.length === 0) log(s, 'No Ultimates were declared.', 'info')
+  casts.reverse()
+  if (casts.length === 0) log(s, 'No abilities were declared.', 'info')
   for (const c of casts) {
     if (s.winner) break
-    if (c.kind === 'roar') {
-      if (!c.u.dead && !c.u.status.stunned) roshanRoar(s, c.u)
-      continue
-    }
     const u = c.u
     const owner = u.owner as PlayerId
     const reason = castPreventedReason(s, u)
@@ -2228,7 +2275,7 @@ export function resolveRound(state: GameState): GameState {
       (zoneCast ? !ZONES.includes(c.target as ZoneId) : !target || target.dead || (target.owner !== u.owner && hiddenFromEnemies(target)))
     if (reason || targetGone) {
       refundUlt(s, { owner, free: c.free, cost: c.cost })
-      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.free ? 'Arcane rune' : `${c.cost} XP`} refunded.`, 'info')
+      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.echo ? 'the extra cast is lost' : `${c.cost} XP refunded`}.`, 'info')
       continue
     }
     log(s, `${fullName(u)} casts ${getHero(u.cardId!).ult.name}${target ? ` on ${fullName(target)}` : ''}.`, tone(owner))
@@ -2246,17 +2293,30 @@ export function resolveRound(state: GameState): GameState {
 
   if (!s.winner) {
     combatAuras(kitApi(s))
+    contestStrikes(s)
     log(s, 'Phase 2 — Basic attacks (Haste, then AGI → UNI → INT → STR → Creeps, Slowed last)', 'phase')
     const isSlowed = (u: Unit) => u.status.slowed && !u.status.haste
     const alive = Object.values(s.units).filter((u) => !u.dead)
     const acted = new Set<string>()
-    for (const u of attackOrder(s, alive.filter((x) => !isSlowed(x)))) {
-      if (isSlowed(u)) continue
-      acted.add(u.uid)
-      basicAttack(s, u)
+    const swing = (list: Unit[]) => {
+      const order = attackOrder(s, list)
+      for (let i = 0; i < order.length; ) {
+        const batch = [order[i]]
+        while (i + batch.length < order.length && sameSwing(s, batch[0], order[i + batch.length])) batch.push(order[i + batch.length])
+        i += batch.length
+        if (batch.length > 1) {
+          deferLethal = true
+          log(s, `${batch.map((u) => fullName(u)).join(' and ')} attack at the same time.`, 'info')
+        }
+        for (const u of batch) {
+          acted.add(u.uid)
+          basicAttack(s, u)
+        }
+        if (batch.length > 1) flushPendingKills(s)
+      }
     }
-    const slowed = Object.values(s.units).filter((u) => !u.dead && isSlowed(u) && !acted.has(u.uid))
-    for (const u of attackOrder(s, slowed)) basicAttack(s, u)
+    swing(alive.filter((x) => !isSlowed(x)))
+    swing(Object.values(s.units).filter((u) => !u.dead && isSlowed(u) && !acted.has(u.uid)))
   }
 
   if (!s.winner) {
@@ -2290,7 +2350,7 @@ export function resolveRound(state: GameState): GameState {
     s.phase = 'gameover'
     return s
   }
-  log(s, `Rotation — each side may move ${ROTATIONS_PER_ROUND} heroes (${PLAYER_LABEL[favoredPlayer(s.round, s.cycle)]} first)`, 'phase')
+  log(s, `Rotation — each side may move ${ROTATIONS_PER_ROUND} heroes`, 'phase')
   for (const p of PLAYERS) {
     s.players[p].rotationsUsed = 0
     s.players[p].rotatedUids = []
@@ -2377,10 +2437,14 @@ export function endRotation(state: GameState): GameState {
       removeFromBoard(s, u)
       delete s.units[u.uid]
     } else {
-      const lasting = !!u.persistentShield && u.status.shield > 0
+      const mute = !!u.foreverMute
+      const silenced = !!u.foreverSilence
+      const cursed = !!u.foreverCurse
       u.status = freshStatus()
-      if (lasting) u.status.shield = 1
-      else u.persistentShield = false
+      u.persistentShield = false
+      if (mute) u.status.muted = true
+      if (silenced) u.status.silenced = true
+      if (cursed) u.status.cursed = true
     }
   }
   for (const p of PLAYERS) s.players[p].glyph = false
@@ -2393,8 +2457,8 @@ export function endRotation(state: GameState): GameState {
       const pl = s.players[p]
       const lanes = LANES.filter((l) => lineup(s, p, l).some((uid) => s.units[uid].kind === 'hero')).length
       pl.gold += pl.killsThisRound
-      pl.xp += lanes
-      log(s, `${PLAYER_LABEL[p]} earns ${pl.killsThisRound} Gold from kills and ${lanes} XP from lanes held.`, tone(p))
+      pl.xp += pl.killsThisRound + lanes
+      log(s, `${PLAYER_LABEL[p]} earns ${pl.killsThisRound} Gold and ${pl.killsThisRound} XP from hero kills, and ${lanes} XP from lanes held.`, tone(p))
     }
   }
 

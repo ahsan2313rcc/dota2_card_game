@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Coins, Footprints, Moon, RotateCcw, ScrollText, Skull, Sparkles, Sun, Swords, Trophy } from 'lucide-react'
+import { Coins, Footprints, RotateCcw, ScrollText, Skull, Sparkles, Swords, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import { CombatLog, LogLines } from '@/components/game/CombatLog'
 import { HandCard } from '@/components/game/HandCard'
@@ -24,10 +24,7 @@ import {
   discardBlockReason,
   drawBlockReason,
   excessHand,
-  shieldBlockReason,
-  favoredPlayer,
   handCount,
-  isDay,
   itemBlockReason,
   itemLanes,
   itemTargets,
@@ -41,7 +38,7 @@ import {
   type DrawType,
 } from '@/game/engine'
 import { HUMAN, useGame } from '@/game/useGame'
-import { BUYBACK_WINDOW, HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, SHIELD_XP_COST, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
+import { BUYBACK_WINDOW, DRAW_CAP, HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
 
 export default function App() {
   const [s, dispatch] = useGame()
@@ -124,10 +121,8 @@ export default function App() {
     setInspected(uid)
   }
 
-  function onShield(u: Unit) {
-    const r = shieldBlockReason(s, HUMAN, u.uid)
-    if (r) return toast.error(r)
-    dispatch({ type: 'buyShield', uid: u.uid })
+  function onShield(_u: Unit) {
+    toast.error('Shields come from cards, not from XP.')
   }
 
   function onUlt(u: Unit) {
@@ -214,15 +209,9 @@ export default function App() {
             <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
               Runes {s.runeDeck.length}
             </span>
-            {isDay(s.round, s.cycle) ? (
-              <span className="flex items-center gap-1 text-amber-300">
-                <Sun className="size-4" /> Day
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-indigo-300">
-                <Moon className="size-4" /> Night
-              </span>
-            )}
+            <span className="text-zinc-500" title="Version 3. Abilities, items, runes and reward cards resolve immediately. Several abilities declared together resolve last-in, first-out.">
+              v3
+            </span>
           </div>
           <PhaseTracker phase={s.phase} />
           <div className="ml-auto flex items-center gap-3">
@@ -419,7 +408,7 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold to draw, as many times as you can pay. The hand may pass ${HAND_LIMIT}; discard back to ${HAND_LIMIT} at the end of the turn. Buyback is ${buybackCost(s, HUMAN)} Gold for any of the last ${BUYBACK_WINDOW} discarded heroes.`
+      hint = `Spend 1 Gold to draw, up to ${DRAW_CAP} counting cards. Discard back to ${HAND_LIMIT} at the end of the turn. Runes and reward cards do not count. Buyback is ${buybackCost(s, HUMAN)} Gold for any of the last ${BUYBACK_WINDOW} discarded heroes.`
       cta = 'Done drawing'
       break
     case 'assign':
@@ -448,15 +437,14 @@ function ActionBar({
         ? ultZones(s, ultCaster).length
           ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
           : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
-        : `Declare Ultimates in "Your board", or spend ${SHIELD_XP_COST} XP there for one Shield. Shields do not stack and last until they block a hit. Declared: ${s.ultDeclarations.length}.`
+        : `Declare abilities on your board. Each one costs its printed XP. If several are declared together, the last one resolves first. Declared: ${s.ultDeclarations.length}.`
       cta = 'Resolve combat'
       break
     case 'rotate': {
       title = 'Rotation'
-      const first = favoredPlayer(s.round, s.cycle) === HUMAN
       hint = rotator
         ? `Click a green + to move ${getHero(s.units[rotator].cardId!).name} from ${ZONE_LABEL[s.units[rotator].zone]}.`
-        : `Move up to ${ROTATIONS_PER_ROUND} heroes (${ROTATIONS_PER_ROUND - me.rotationsUsed} left) along Top · Dire Jungle · Mid · Radiant Jungle · Bot. ${first ? 'Day: you move first.' : 'Night: Dire moved first.'} Each hero moves once. Heroes in a lane with no allied towers can walk lane to lane.`
+        : `Move up to ${ROTATIONS_PER_ROUND} heroes (${ROTATIONS_PER_ROUND - me.rotationsUsed} left) along Top · Dire Jungle · Mid · Radiant Jungle · Bot. You move, then Dire. Each hero moves once. Heroes in a lane with no allied towers can walk lane to lane.`
       cta = me.rotationsUsed > 0 ? 'Done rotating' : 'Skip rotation'
       break
     }

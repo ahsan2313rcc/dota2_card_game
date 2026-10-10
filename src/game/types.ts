@@ -21,12 +21,14 @@ export type UltTarget =
   | 'zone'
   | 'adjacentZone'
 
-/** Data-driven kit. Tags are passive hooks. `ult` lines run when the Ultimate resolves. */
+/** Data-driven kit. Tags are passive hooks. `ult` lines run when an active ability resolves. */
 export interface HeroScript {
   tags: string[]
   ult: string[]
-  /** Tinker: the XP cost stays 1. */
-  fixedCost?: boolean
+  /** Passive heroes are always on. Active heroes pay the printed XP cost. */
+  kind?: 'passive' | 'active'
+  /** Printed XP cost. Passives are 0. */
+  xpCost?: number
 }
 
 /** Shared passive rules. The starter heroes use bespoke ids; the rest of the roster picks one of these. */
@@ -184,6 +186,10 @@ export interface RoundStatus {
   doubleHeal: boolean
   /** Heal 1 at the end of the round */
   healEnd: boolean
+  /** This unit took damage that got through during the round. */
+  tookDamage: boolean
+  /** Evade every physical damage instance this round. */
+  evadeAll: boolean
   /** Basic attacks apply Slow and Curse */
   skadi: boolean
   /** Basic attacks instantly kill enemy heroes */
@@ -249,6 +255,14 @@ export interface Unit {
   buybackUsed?: boolean
   /** A Shield from an Ultimate, an item, a rune, or XP. A passive Shield leaves this unset and ends at Cleanup. */
   persistentShield?: boolean
+  /** Doom: these debuffs are reapplied after Cleanup for the rest of the game. */
+  foreverMute?: boolean
+  foreverSilence?: boolean
+  foreverCurse?: boolean
+  /** Refresher Shard: this deployment's ability costs 0 XP. */
+  costZero?: boolean
+  /** Arcane rune: subtract this much XP from the printed cost, to a minimum of 0. */
+  arcaneDiscount?: number
   status: RoundStatus
 }
 
@@ -292,6 +306,8 @@ export interface UltDeclaration {
   target?: string
   /** Paid with the Arcane rune instead of XP */
   free?: boolean
+  /** Refresher: a second declaration, already paid for by the orb. */
+  echo?: boolean
   /** XP spent on this declaration. Refunded in full if the cast fizzles or is cancelled. */
   cost: number
 }
@@ -368,11 +384,15 @@ export const CAMPS: CampId[] = ['radiantJungle', 'direJungle']
 export const ZONES: ZoneId[] = [...LANES, ...CAMPS]
 export const PLAYERS: PlayerId[] = ['radiant', 'dire']
 
-/** Counting cards must be back to this by the end of the turn. Runes and tower cards never count. */
+/** Counting cards must be back to this by the end of the turn. Runes, tower cards and boss rewards never count. */
 export const HAND_LIMIT = 7
+/** Counting cards you may hold while drawing. The end of the turn still discards down to HAND_LIMIT. */
+export const DRAW_CAP = 10
 
-/** Spent during the Ultimate step to put one Shield on an allied hero. */
+/** Kept so older calls compile. Version 3 does not sell Shields for XP. */
 export const SHIELD_XP_COST = 3
+/** Gold the attacker is paid when a tower falls. The defender still takes the hidden card. */
+export const TOWER_GOLD = { t1: 3, t2: 5 } as const
 export const BOARD_LIMIT = 5
 export const PLACE_PER_ROUND = 3
 /** Heroes each side may move during Rotation. */

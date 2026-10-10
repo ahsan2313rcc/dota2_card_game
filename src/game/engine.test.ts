@@ -107,7 +107,7 @@ describe('setup and core rules', () => {
     s = placeHero(s, 'radiant', 'es', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
-    s.players.radiant.xp = 1
+    s.players.radiant.xp = 2
     s = declareUlt(s, heroesOnBoard(s, 'radiant')[0].uid)
     s = resolveRound(endItems(s))
     expect(heroesOnBoard(s, 'dire')[0].hp).toBe(1)
@@ -166,26 +166,33 @@ describe('setup and core rules', () => {
     expect(lineup(s, 'radiant', 'top')).toHaveLength(1)
   })
 
-  it('counter loop: AGI basic attack instantly kills a healthy STR hero', () => {
+  it('a basic attack no longer instakills the attribute it used to counter', () => {
     let s = setup(1, [hero('a', 'juggernaut')], [hero('b', 'sven')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = fight(s)
-    expect(heroesOnBoard(s, 'dire')).toHaveLength(0)
-    expect(logHas(s, 'AGI counters STR')).toBe(true)
+    expect(heroesOnBoard(s, 'dire')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant')).toHaveLength(1)
+    expect(logHas(s, 'counters')).toBe(false)
   })
 
-  it('stun skips the Ultimate: Ravage (STR) lands before Laguna Blade (INT)', () => {
+  it('abilities declared together resolve last-in, first-out', () => {
     let s = setup(3, [hero('a', 'tidehunter')], [hero('b', 'lina')])
     s = placeHero(s, 'radiant', 'a', 'top')
     s = placeHero(s, 'dire', 'b', 'top')
     s = endItems(reveal(s))
     const tide = heroesOnBoard(s, 'radiant')[0]
     const lina = heroesOnBoard(s, 'dire')[0]
+    s.players.radiant.xp = 2
+    s.players.dire.xp = 2
     s = declareUlt(s, tide.uid)
     s = declareUlt(s, lina.uid, tide.uid)
     s = resolveRound(s)
-    expect(logHas(s, 'Laguna Blade fizzles')).toBe(true)
+    const laguna = s.log.findIndex((l) => l.text.includes('Laguna Blade'))
+    const ravage = s.log.findIndex((l) => l.text.includes('casts Ravage'))
+    expect(laguna).toBeGreaterThan(-1)
+    expect(ravage).toBeGreaterThan(laguna)
+    expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(1)
     expect(logHas(s, 'Dire Lina is Stunned and cannot attack')).toBe(true)
   })
 
@@ -260,7 +267,7 @@ describe('items, runes and statuses', () => {
     expect(logHas(s, 'Crystal Maiden deals 1 to Dire Sven')).toBe(true)
   })
 
-  it('Haste rune: a hasted STR hero strikes before the AGI hero that counters it', () => {
+  it('Haste rune: a hasted Strength hero strikes before Agility', () => {
     let s = setup(37, [hero('a', 'axe'), item('i', 'rune_haste')], [hero('b', 'juggernaut')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
@@ -268,19 +275,19 @@ describe('items, runes and statuses', () => {
     s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'radiant')[0].uid)
     s = resolveRound(endItems(s))
     const axeHit = s.log.findIndex((l) => l.text.startsWith('Axe deals 1 to Dire Juggernaut'))
-    const juggHit = s.log.findIndex((l) => l.text.startsWith('AGI counters STR'))
+    const juggHit = s.log.findIndex((l) => l.text.includes('Juggernaut deals 1 to Radiant Axe'))
     expect(axeHit).toBeGreaterThan(-1)
     expect(juggHit).toBeGreaterThan(axeHit)
   })
 
-  it('an ultimate can be cast again, and each cast costs one more XP', () => {
+  it('an active ability keeps its printed XP cost', () => {
     let s = setup(3, [hero('a', 'tidehunter')], [hero('b', 'axe')])
     s = placeHero(s, 'radiant', 'a', 'top')
     s = placeHero(s, 'dire', 'b', 'top')
     s = endItems(reveal(s))
     const tide = heroesOnBoard(s, 'radiant')[0].uid
-    expect(ultCost(s.units[tide])).toBe(1)
-    s.players.radiant.xp = 1
+    expect(ultCost(s.units[tide])).toBe(2)
+    s.players.radiant.xp = 2
     s = declareUlt(s, tide)
     expect(s.players.radiant.xp).toBe(0)
     s = resolveRound(s)
@@ -299,44 +306,46 @@ describe('items, runes and statuses', () => {
     s.players.radiant.gold = 3
     s.players.radiant.hand.push(item('r', 'refresher'))
     s = playItem(s, 'radiant', 'r', tide)
-    expect(s.units[tide].ultCasts).toBe(1)
     expect(s.units[tide].status.echoUlt).toBe(true)
     expect(ultCost(s.units[tide])).toBe(2)
   })
 
-  it('Arcane rune: the next Ultimate costs 0 XP', () => {
+  it('Arcane rune reduces one hero\'s ability cost by 1 XP', () => {
     let s = setup(41, [hero('a', 'axe'), item('i', 'rune_arcane')], [hero('b', 'sven')])
     s = placeHero(s, 'radiant', 'a', 'mid')
     s = placeHero(s, 'dire', 'b', 'mid')
     s = reveal(s)
-    s = endItems(playItem(s, 'radiant', 'i'))
+    const axe = heroesOnBoard(s, 'radiant')[0].uid
+    s = endItems(playItem(s, 'radiant', 'i', axe))
     const xp = s.players.radiant.xp
-    s = declareUlt(s, heroesOnBoard(s, 'radiant')[0].uid)
+    expect(ultCost(s.units[axe], s)).toBe(0)
+    s = declareUlt(s, axe)
     expect(s.players.radiant.xp).toBe(xp)
-    expect(s.players.radiant.arcane).toBe(false)
   })
 })
 
 describe('jungle, Roshan and Tormentor', () => {
-  it('clearing a neutral camp grants 1 XP, 1 Gold and a rune card', () => {
-    let s = setup(19, [hero('a', 'juggernaut')])
+  it('clearing a neutral camp grants 1 Gold and a rune card', () => {
+    let s = setup(19, [hero('a', 'juggernaut'), hero('c', 'sven')])
     const golem = forceCamp(s, 'radiantJungle', 'neutral', 'golem')
     golem.hp = 1
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
     const { xp, gold } = s.players.radiant
     s = fight(s)
     expect(campNeutral(s, 'radiantJungle')).toBeUndefined()
     expect(s.players.radiant.hand.some((c) => c.cardId.startsWith('rune_'))).toBe(true)
-    expect(s.players.radiant.xp).toBe(xp + 1)
+    expect(s.players.radiant.xp).toBe(xp)
     expect(s.players.radiant.gold).toBe(gold + 1)
   })
 
   it('a rune from a neutral kill is kept even when the hand is already full', () => {
-    let s = setup(19, [hero('a', 'juggernaut')])
+    let s = setup(19, [hero('a', 'juggernaut'), hero('c', 'sven')])
     s.players.radiant.hand.push(...Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve')))
     const golem = forceCamp(s, 'radiantJungle', 'neutral', 'golem')
     golem.hp = 1
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
     expect(handCount(s.players.radiant)).toBe(HAND_LIMIT)
     s = fight(s)
     expect(s.players.radiant.hand.some((c) => c.cardId.startsWith('rune_'))).toBe(true)
@@ -368,7 +377,7 @@ describe('jungle, Roshan and Tormentor', () => {
   })
 
   it('Tormentor: its Shield soaks the first hit, and Reflection returns the damage', () => {
-    let s = setup(43, [hero('a', 'tidehunter')])
+    let s = setup(43, [hero('a', 'sven')])
     forceCamp(s, 'radiantJungle', 'tormentor')
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
     s = fight(s)
@@ -377,14 +386,15 @@ describe('jungle, Roshan and Tormentor', () => {
   })
 
   it('Tormentor: an uncontested kill pays the Refresher Shard even if the hero dies to Reflection', () => {
-    let s = setup(47, [hero('a', 'tidehunter')])
+    let s = setup(47, [hero('a', 'queen_of_pain')])
     const torm = forceCamp(s, 'radiantJungle', 'tormentor')
     torm.hp = 1
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
     s = endItems(reveal(s))
-    const tide = heroesOnBoard(s, 'radiant')[0]
-    tide.hp = 1
-    s = declareUlt(s, tide.uid)
+    const qop = heroesOnBoard(s, 'radiant')[0]
+    qop.hp = 1
+    s.players.radiant.xp = 2
+    s = declareUlt(s, qop.uid)
     s = resolveRound(s)
     expect(heroesOnBoard(s, 'radiant')).toHaveLength(0)
     expect(s.players.radiant.hand.some((c) => c.cardId === 'refresher_shard')).toBe(true)
@@ -404,22 +414,23 @@ describe('jungle, Roshan and Tormentor', () => {
 })
 
 describe('comeback rules and rotation', () => {
-  it('losing a tower gives its hidden card and no Gold', () => {
+  it('destroying a tower pays the attacker and gives the hidden card to the defender', () => {
     let s = setup(59, [hero('a', 'sven')])
     s.players.dire.structures.towers.top.t1 = 1
     s.players.dire.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve'))
-    const gold = s.players.dire.gold
+    const attackerGold = s.players.radiant.gold
+    const defenderGold = s.players.dire.gold
     const hidden = s.players.dire.towerCards.top.t1
     s = placeHero(s, 'radiant', 'a', 'top')
     s = fight(s)
     expect(s.players.dire.structures.towers.top.t1).toBe(0)
-    expect(s.players.dire.gold).toBe(gold)
+    expect(s.players.radiant.gold).toBe(attackerGold + 3)
+    expect(s.players.dire.gold).toBe(defenderGold)
     expect(s.players.dire.hand.some((c) => c.cardId === hidden)).toBe(true)
     expect(handCount(s.players.dire)).toBe(HAND_LIMIT)
-    expect(logHas(s, '+1 Gold and the tower')).toBe(false)
   })
 
-  it('Ancient Apparition, Dark Seer, and Crystal Maiden ultimates deal magical damage', () => {
+  it('magical abilities still cut through Ethereal', () => {
     const slainBy = (cardId: string, aim: 'lane' | 'unit' | 'none') => {
       let s = setup(73, [hero('a', cardId)], [hero('b', 'sven')])
       s = placeHero(s, 'radiant', 'a', 'mid')
@@ -427,16 +438,15 @@ describe('comeback rules and rotation', () => {
       s = endItems(reveal(s))
       const foe = heroesOnBoard(s, 'dire')[0]
       foe.status.ethereal = true
-      s.players.radiant.xp = 1
+      s.players.radiant.xp = 2
       const target = aim === 'lane' ? 'mid' : aim === 'unit' ? foe.uid : undefined
       s = declareUlt(s, heroesOnBoard(s, 'radiant')[0].uid, target)
       s = resolveRound(s)
       return heroesOnBoard(s, 'dire')
     }
-    // Ethereal blocks physical damage and adds 1 to magical damage, so a 2-health hero dies only to MDMG.
     expect(slainBy('ancient_apparition', 'lane')).toHaveLength(0)
-    expect(slainBy('dark_seer', 'none')).toHaveLength(0)
-    expect(slainBy('crystal_maiden', 'unit')).toHaveLength(0)
+    expect(slainBy('queen_of_pain', 'none')).toHaveLength(0)
+    expect(slainBy('lina', 'unit')).toHaveLength(0)
   })
 
   it('Glyph: towers take no damage and do not fire', () => {
@@ -612,52 +622,24 @@ describe('gold and xp sinks', () => {
     expect(s.unitDiscard).toContainEqual({ cardId: 'creep', buybackUsed: false })
   })
 
-  it('3 XP buys one Shield, it does not stack, and it survives Cleanup until it blocks a hit', () => {
-    let s = setup(17, [hero('a', 'sven')], [hero('b', 'sven')])
-    s = placeHero(s, 'radiant', 'a', 'mid')
-    s = placeHero(s, 'dire', 'b', 'mid')
-    s = endItems(reveal(s))
-    const uid = heroesOnBoard(s, 'radiant')[0].uid
-    s.players.radiant.xp = 3
-    s = buyShield(s, 'radiant', uid)
-    expect(s.players.radiant.xp).toBe(0)
-    expect(s.units[uid].status.shield).toBe(1)
-    expect(s.units[uid].persistentShield).toBe(true)
-    s.players.radiant.xp = 3
-    const blocked = buyShield(s, 'radiant', uid)
-    expect(blocked).toBe(s)
-    expect(s.players.radiant.xp).toBe(3)
-    s = endRotation(resolveRound(s))
-    expect(s.units[uid].hp).toBe(2)
-    expect(s.units[uid].status.shield).toBe(0)
-    expect(s.units[uid].persistentShield).toBeFalsy()
-    expect(logHas(s, 'Shield blocks')).toBe(true)
-  })
-
-  it('a Shield that is not hit lasts through Cleanup, and a passive Shield does not', () => {
-    let s = setup(19, [hero('a', 'sven'), hero('l', 'lich')])
+  it('Shields are not bought with XP, and a Shield ends at cleanup', () => {
+    let s = setup(17, [hero('a', 'sven'), item('i', 'rune_shield')])
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
-    s = placeHero(s, 'radiant', 'l', 'bot')
     const camp = s.camps.radiantJungle
     if (camp) {
       delete s.units[camp]
       s.camps.radiantJungle = null
     }
-    s = endItems(reveal(s))
-    const sven = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')!
-    heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'lich')!.status.disarmed = true
+    s = reveal(s)
+    const uid = heroesOnBoard(s, 'radiant')[0].uid
     s.players.radiant.xp = 3
-    s = buyShield(s, 'radiant', sven.uid)
-    s = resolveRound(s)
-    const mid = heroesOnBoard(s, 'radiant')
-    expect(mid.find((u) => u.cardId === 'lich')?.status.shield).toBe(1)
-    expect(mid.find((u) => u.cardId === 'lich')?.persistentShield).toBeFalsy()
-    s = endRotation(s)
-    const after = heroesOnBoard(s, 'radiant')
-    expect(after.find((u) => u.cardId === 'sven')?.status.shield).toBe(1)
-    expect(after.find((u) => u.cardId === 'sven')?.persistentShield).toBe(true)
-    expect(after.find((u) => u.cardId === 'lich')?.status.shield).toBe(0)
-    expect(after.find((u) => u.cardId === 'lich')?.persistentShield).toBeFalsy()
+    const refused = buyShield(s, 'radiant', uid)
+    expect(refused).toBe(s)
+    expect(s.players.radiant.xp).toBe(3)
+    s = playItem(s, 'radiant', 'i', uid)
+    expect(s.units[uid].status.shield).toBe(1)
+    s = endRotation(resolveRound(endItems(s)))
+    expect(s.units[uid].status.shield).toBe(0)
   })
 })
 

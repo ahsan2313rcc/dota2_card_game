@@ -11,6 +11,7 @@ npm install
 npm run dev        # http://localhost:5741
 npm test           # engine tests, including simulated AI-vs-AI games
 npm run sim        # balance report: AI-vs-AI games per comeback rule set (GAMES=1000 by default)
+python3 -m sim     # Python viability sim, version 3 economy (python3 -m sim --games 200)
 npm run build      # type-check + production build
 npm run lint
 ```
@@ -44,13 +45,13 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 
 ## Implemented rules
 
-- **Round steps:** Upkeep, Draw (1 Gold for the top card of the mixed hero-and-creep deck, or 1 Gold for an item; draw as often as you can pay, then discard back to 7 at the end of the turn; or Buyback), Assign (up to 3 heroes per round, 5 on the board), Reveal, Item, Ult (1 XP the first time a hero casts, then 2, then 3; or 3 XP for one Shield), Resolution, Rotation, Cleanup, Income.
+- **Version 3.** Version 2.0 is the git tag `v2.0`.
+- **Round steps:** Upkeep (+1 Gold, +1 XP, and +1 Gold once every enemy lane tower is down), Draw (1 Gold, up to 10 counting cards, discard to 7 at end of turn; or Buyback), Assign, Reveal, Items (instant), Abilities (printed XP cost), Resolution (last declared ability first), Rotation, Cleanup, Income.
 - **Starting hand:** 5 cards dealt from the top of the shared deck.
-- **Combat:** Ultimates resolve STR → INT → UNI → AGI. Basic attacks resolve AGI → UNI → INT → STR, then creeps. Slowed units attack after everyone else, in the same order. Towers fire last.
-- **Counter loop:** AGI → STR → INT → AGI. A basic attack on the attribute it counters kills instantly. UNI sits outside the loop.
-- **Tiebreakers:** Safe lane, Mid, Off lane, then jungle. If still tied, Day (odd rounds) favors Radiant and Night (even rounds) favors Dire.
+- **Combat:** Basic attacks resolve Haste, then AGI → UNI → INT → STR, then creeps. Slowed units attack last. A true tie means both attacks happen together. There is no day/night cycle and no attribute instakill.
+- **Abilities:** Each of the 127 heroes has one ability, passive or active. Active abilities cost their printed 1, 2 or 3 XP.
 - **Structures:** T1 takes 3 hits and deals 1 damage. T2 takes 5 hits and deals 2 damage. The Ancient takes 10 hits and deals 0. A tower fires only if it was damaged this round, and it hits a creep in the attacking line if one is there, otherwise Position 1. Razing both towers in a lane gives +1 passive Gold per round.
-- **Economy:** +1 Gold and +1 XP passive. +1 Gold per enemy hero kill. +1 XP for each lane that holds a living hero. Extra Gold draws past the hand of 7, and those cards are discarded at the end of the turn. Extra XP buys a Shield for 3 during the Ultimate step.
+- **Economy:** +1 Gold and +1 XP at upkeep. +1 Gold and +1 XP per enemy hero kill. +1 XP for each lane that holds a living hero. A neutral kill pays 1 Gold and a rune. Destroying a tower pays the attacker 3 or 5 Gold.
 - **Comeback rules:** Slain heroes from both sides go into one shared discard. Buyback returns any of the last 10 heroes in that pile, from either side, for 4 Gold (5 if you have more towers standing than the enemy), once per hero. Losing a tower gives the face-down tower card under it and no Gold (Glyph, Lotus or Twin Gate, one of each per tier, swappable within a tier in round 1); tower cards don't count toward the hand limit. Fountain: a side's heroes in a lane where it has no towers heal 1 at the start of the round. Costs live in `BUYBACK_COST` and each rule can be toggled via `Settings.rules` for simulations.
 - **One shared unit deck:** both players draw from the same pile. 127 heroes, 25 lane creeps and 8 siege creeps are shuffled together (160). Five cards are dealt to each side from the top. Dead creeps go to the creep discard. Dead heroes go to the shared hero discard. Both piles shuffle back into the deck when it runs out.
 - **Shared item deck:** 60 shop cards. Playing one costs 1, 2, or 3 Gold. **Shared rune deck:** 20 cards, two copies of each of 10 runes, still free.

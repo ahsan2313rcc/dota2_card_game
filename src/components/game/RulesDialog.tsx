@@ -3,31 +3,23 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 
 const STATUSES: Array<[string, string]> = [
-  ['Stun', 'Skips both the Ultimate and the basic attack.'],
-  ['Silence', 'Skips the Ultimate.'],
-  ['Break', 'Turns the passive off.'],
-  ['Disarm', 'Skips the basic attack.'],
-  ['Slow', 'Basic attack moves to the end of Phase 2 (slowed units still follow attribute order and tiebreakers).'],
-  ['Evade', 'Dodges the next incoming basic attack.'],
-  ['Blind', 'Own basic attacks miss, unless the unit has Accuracy.'],
-  ['Accuracy', 'Attacks cannot be evaded and ignore Blind.'],
-  ['Pierce', 'Attacks ignore Shields and damage negation.'],
-  ['Root', 'Cannot change lane or position (blocks drags like Meat Hook).'],
-  ['Banish', 'Untargetable and invulnerable.'],
-  ['Immunity', 'Blocks magical damage and debuffs. Self-damage still lands.'],
-  ['Ethereal', 'Blocks physical attack and tower damage. Magical damage against it is increased by 1.'],
-  ['Shield', 'Blocks one instance of physical damage, then breaks. Pierce ignores it. Only one Shield at a time. A Shield from an Ultimate, an item, a rune, or 3 XP lasts until it blocks a hit. A Shield from a passive ends at Cleanup.'],
+  ['Stun', 'Cannot cast, attack, or move.'],
+  ['Silence', 'Cannot cast an ability.'],
+  ['Disarm', 'Cannot attack.'],
+  ['Slow', 'Attacks last.'],
+  ['Haste', 'Attacks first, ahead of the attribute order.'],
+  ['Evade', 'Dodges the next incoming attack.'],
+  ['Immune', 'Blocks magical damage and debuffs.'],
+  ['Ethereal', 'Blocks attack damage and takes +1 magical damage.'],
+  ['Shield', 'Blocks one attack. Shields reset at the end of the turn unless a card says otherwise.'],
   ['Invulnerable', 'Blocks all damage.'],
+  ['Banish', 'Untargetable and invulnerable.'],
+  ['Invisible', 'Untargetable until Revealed.'],
   ['Mute', 'Cannot use items.'],
   ['Curse', 'Cannot heal.'],
-  ['Taunt', 'Must attack the taunting unit.'],
-  ['Fear', 'Cannot cast, attack, or move. The passive still runs.'],
-  ['Invisible', 'Untargetable. Reveal removes it.'],
-  ['Reveal', 'Removes the untargetable part of Invisible and Banish.'],
-  ['Amplify', 'Attack damage +1.'],
-  ['Enfeeble', 'Attack damage −1.'],
+  ['Taunt', 'Must attack the taunting unit and cannot cast or use items.'],
+  ['Amplify', 'Attack +1.'],
   ['Hex', 'Becomes a 1 HP decoy with no attack.'],
-  ['Haste', 'Attacks before everyone else in Phase 2.'],
 ]
 
 export function RulesDialog() {
@@ -44,17 +36,17 @@ export function RulesDialog() {
         </DialogHeader>
         <div className="space-y-3 text-sm leading-relaxed text-zinc-300">
           <Section title="Goal">
-            Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1 damage) and a Tier 2 tower
-            (5 hits, deals 2 damage). Units only reach the Ancient through a lane whose two towers are down. Razing both
-            towers in a lane gives +1 passive Gold per round. Fountain: at the start of each round, a side's heroes in a
-            lane where that side has no towers left heal 1.
+            Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1, worth 3 Gold) and a Tier 2
+            tower (5 hits, deals 2, worth 5 Gold). The attacker is paid. The defender still takes the hidden card. Clearing
+            every enemy lane tower adds +1 Gold to upkeep. The Radiant Ancient heals allies in Bot. The Dire Ancient heals
+            allies in Top. Fountain still heals 1 in a lane that has no towers left.
           </Section>
           <Section title="Round">
             <ol className="list-decimal space-y-0.5 pl-5">
               <li>Upkeep: +1 Gold, +1 XP (plus bonuses), fountain heal. Empty jungle camps draw from the jungle deck.</li>
               <li>
                 Draw: both sides spend 1 Gold to take the top card of the one shared deck, or 1 Gold for an item from the
-                shared item deck. You may draw past 7. At the end of the turn, discard counting cards until 7 remain.
+                shared item deck. You may draw up to 10 counting cards. At the end of the turn, discard counting cards until 7 remain.
                 Runes and tower cards do not count and are not discarded for this. The hero deck is 160 cards shuffled
                 together: all 127 heroes, 25 lane creeps and 8 siege creeps. You start with 5 cards from that deck. The
                 item deck is 60 shop cards. Playing one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two
@@ -70,52 +62,46 @@ export function RulesDialog() {
               <li>Reveal: both sides flip.</li>
               <li>Item: play items, runes and tower cards. Shop items cost their printed Gold and are single use. Runes and tower cards are free. All resolve immediately.</li>
               <li>
-                Ult: a hero can cast every round. The first cast of that deployment costs 1 XP, the next 2, then 3, and so
-                on. Dying and being played again starts the cost back at 1. Tinker stays at 1. During this step you may
-                also spend 3 XP to give one allied hero a Shield. Shields do not stack. Refresher Orb casts the chosen
-                Ultimate a second time on the same target. Refresher Shard resets the cost to 1. An Arcane rune makes the
-                next cast free, and the cost still climbs.
+                Abilities: each hero has one printed ability. Passives are always on. Active abilities cost their printed XP
+                (1, 2 or 3) every time. Keeper of the Light reduces an ally's cost by 1, to a minimum of 1. An Arcane rune
+                reduces one hero's cost by 1. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the
+                ability be declared a second time, and that cast can pick a new target. Items, runes, tower cards and boss
+                rewards resolve the moment they are paid for.
               </li>
-              <li>Resolution: Ultimates (STR → INT → UNI → AGI), basic attacks (AGI → UNI → INT → STR → creeps, Slowed last), then tower aggro.</li>
+              <li>Resolution: abilities declared together resolve last-in, first-out. Basic attacks go Haste, then AGI → UNI → INT → STR, then creeps, with Slow last. A true tie means both attacks happen together. Then towers fire.</li>
               <li>
                 Rotation: each side may move up to 2 heroes, one step each, along Top · Dire Jungle · Mid · Radiant Jungle ·
-                Bot (Day: Radiant first, Night: Dire first). Rooted or stunned heroes stay. From a lane with no allied towers
-                a hero may walk lane to lane (Top · Mid · Bot).
+                Bot. You move, then Dire. Rooted or stunned heroes stay. From a lane with no allied towers a hero may walk
+                lane to lane.
               </li>
               <li>
-                Cleanup: wounds persist. A slain hero joins the shared discard. Illusions vanish and round effects end. A
-                Shield stays if it came from an Ultimate, an item, a rune, or 3 XP, until it blocks a hit. A Shield from a
-                passive ends here.
+                Cleanup: wounds persist. Statuses end, including Shield, unless a card says the effect lasts (Doom, Wraith
+                King, Necrophos). A slain hero joins the shared discard. Illusions vanish.
               </li>
-              <li>Income: +1 Gold per enemy hero killed, +1 XP per lane holding a living hero.</li>
+              <li>Income: +1 Gold and +1 XP per enemy hero killed, plus +1 XP per lane holding a living hero.</li>
             </ol>
           </Section>
           <Section title="Combat">
-            Heroes take 2 hits: Healthy → Wounded (tilted) → slain. Basic attacks hit enemy Position 1; with no defenders left
-            the attacker hits the lane's next structure. A basic attack against the attribute it counters (AGI → STR → INT →
-            AGI) kills instantly — neutrals have attributes too. In Phase 3, every standing tower that took damage this round
-            deals its damage (T1: 1, T2: 2) to a creep in the attacking line if one is there, otherwise to Position 1.
+            Heroes take 2 hits: Healthy → Wounded → slain. Attributes do not instakill. They only order basic attacks:
+            Agility, then Universal, then Intelligence, then Strength. The lane order breaks ties inside a bracket: safe lane,
+            mid, off lane, own jungle, enemy jungle. If that is still a tie, both units attack at the same time. There is no
+            day and night cycle. In Phase 3, every standing tower that took damage this round deals its damage (T1: 1, T2: 2)
+            to a creep in the attacking line if one is there, otherwise to Position 1.
             Physical damage is attacks and towers. Magical damage is ultimates, passives and items. Immunity blocks magical
             damage and debuffs. Ethereal blocks physical attack damage and takes 1 extra magical damage.
           </Section>
           <Section title="Jungle, Roshan & Tormentor">
-            Two jungles hold one camp each, drawn from a 15-card jungle deck: Golem (STR), Thunderhide (AGI), Ice Shaman (INT,
-            Slow) and Dragon (UNI, Blind) ×3, one Roshan and two Tormentors. The side that arrived first holds the camp and
-            chooses whether to hit the neutral or the contester; the contester must attack the holder (ties go to the
-            jungle's owner). A neutral kill gives 1 XP, 1 Gold and a rune card. Roshan (UNI, 3 hits) hits every enemy in the
-            camp, Roars while at full health, and never appears before round 4; he drops 3 XP and flips into the Aegis.
-            The Tormentor (UNI, 2 hits plus a Shield that regenerates every round) never attacks, but its Reflection passive
-            (Break turns it off) returns all damage to the attacker and the same amount to the other side's front line;
-            Shields block reflected damage. It flips into a Refresher Shard. Boss rewards go to the killer even if every
-            attacker dies; if contested they go to the sole survivor, otherwise to the jungle's owner.
+            Two jungles hold one camp each, drawn from a 15-card jungle deck: Stone Golem, Thunderhide, Ice Shaman and Black
+            Dragon, three each, plus one Roshan and two Tormentors. A normal neutral kill pays 1 Gold and a rune card. Roshan
+            evades the first damage each turn and, when contested, Disarms and deals 1 damage to every enemy in the camp. He
+            never appears before round 4 and flips into the Aegis. The Tormentor gains a Shield each turn and reflects damage
+            to the attacker and to each contesting Position 1. It flips into a Refresher Shard.
           </Section>
           <Section title="Runes & tower cards">
-            Twenty rune cards (two each): Bounty (+1 Gold), Regeneration, Double Damage, Shield, Arcane (next Ultimate is
-            free), Illusion (1 HP decoy in front of a hero), Invisibility, Haste, Wisdom (+1 XP) and Water (cleanse). A rune
-            does not count toward the hand limit, so a full hand still keeps it. Under each side's T1 and T2 towers lie
-            Glyph (your towers take no damage this round), Lotus (heal all your heroes) and Twin Gate (teleport all your
-            heroes to one lane), shuffled; you may swap them within a tier in round 1. When a tower falls its owner gains
-            that card, which does not count toward the hand limit. The fall pays no Gold.
+            Twenty rune cards (two each): Bounty (+1 Gold), Amplify (+1 attack), Haste, Invisibility, Illusion, Shield,
+            Arcane (−1 XP on one allied hero), Wisdom (+1 XP), Regeneration and Water (cleanse). A rune does not count
+            toward the hand limit. Under each side's towers lie Glyph, Lotus and Twin Gate. When a tower falls the attacker
+            gains 3 Gold (Tier 1) or 5 Gold (Tier 2), and the defender takes the hidden card.
           </Section>
           <Section title="Status effects">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
@@ -128,8 +114,9 @@ export function RulesDialog() {
             </dl>
           </Section>
           <Section title="Tiebreakers">
-            Safe lane, then Mid, Off lane, own jungle and enemy jungle (Radiant safe = Bottom, Dire safe = Top). Still
-            tied? Odd rounds are Day (Radiant first), even rounds are Night (Dire first).
+            Safe lane, then Mid, Off lane, own jungle and enemy jungle (Radiant safe = Bottom, Dire safe = Top). If that is
+            still a tie, both basic attacks happen at the same time. Abilities do not use this order: the last one declared
+            resolves first.
           </Section>
           <Section title="Not in the prototype yet">Map cards, hot-seat or online multiplayer.</Section>
         </div>

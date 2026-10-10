@@ -51,12 +51,18 @@ function HeroFace({ id, buybackUsed }: { id: string; buybackUsed?: boolean }) {
         {buybackUsed && <span className="text-zinc-500">· buyback spent</span>}
       </div>
       <div className="flex flex-1 flex-col gap-1 overflow-hidden px-2 py-1.5 text-[10px] leading-snug">
-        <p className="text-zinc-300">
-          <span className="font-semibold text-zinc-100">PSV {h.passive.name}:</span> {h.passive.text}
-        </p>
-        <p className="text-zinc-300">
-          <span className="font-semibold text-amber-300">ULT {h.ult.name}:</span> {h.ult.text}
-        </p>
+        {h.script?.kind === 'active' ? (
+          <p className="text-zinc-300">
+            <span className="font-semibold text-amber-300">
+              {h.ult.name} · {h.script.xpCost} XP:
+            </span>{' '}
+            {h.ult.text}
+          </p>
+        ) : (
+          <p className="text-zinc-300">
+            <span className="font-semibold text-zinc-100">Passive · {h.passive.name}:</span> {h.passive.text}
+          </p>
+        )}
       </div>
     </>
   )

@@ -1,6 +1,6 @@
 # Dota: The Ancient's Duel
 
-Rules of the current prototype. Card text on a hero, item, rune, or neutral is the specific effect. This document is the shared rulebook those cards sit on.
+Version 3. Card text on a hero, item, rune, or neutral is the specific effect. This document is the shared rulebook those cards sit on. Version 2.0 is the git tag `v2.0`.
 
 You play Radiant. Dire is played by the opponent. Both sides take each step of the round.
 
@@ -40,7 +40,7 @@ Before the first decision, round 1 upkeep has already happened, so each side sta
 
 ## Hand, board, and placement
 
-The hand limit is 7 counting cards. Runes and tower cards do not use a slot. Shop cards, heroes, creeps, the Aegis, and the Refresher Shard do. You may draw past 7. At the end of the turn, before the next round starts, discard counting cards until 7 remain. You choose which ones. Runes and tower cards are not discarded for this. A pitched hero or creep goes to the unit discard. It was not slain, so it cannot be bought back.
+The hand holds up to 10 counting cards while you draw, and must be discarded down to 7 at the end of the turn. Runes, tower cards, and boss rewards do not use a slot and are not discarded for this. You choose which counting cards to pitch. A pitched hero or creep goes to the unit discard. It was not slain, so it cannot be bought back.
 
 You may place up to 3 heroes per round, and have up to 5 heroes on the board. Creeps do not count toward either limit. During Assign you may return a unit you placed this round to your hand, and you may reorder a lineup. Rooted units cannot be reordered.
 
@@ -53,14 +53,14 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
 4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
 5. **Items.** Play shop cards, runes, tower cards, and boss rewards. They resolve immediately.
-6. **Ultimates.** Declare casts. They resolve in the next step.
-7. **Resolution.** Ultimates, then basic attacks, then towers.
-8. **Rotation.** Each side may move up to 2 heroes.
-9. **Cleanup.** End-of-round effects, poison, deaths, and status reset. A Shield that did not come from a passive stays until it blocks a hit.
-10. **Income.** Kill Gold and lane XP.
+6. **Abilities.** Declare active abilities. Passives are already on. Items, runes, tower cards and boss rewards already resolved when they were paid for.
+7. **Resolution.** Declared abilities resolve last-in, first-out. Then basic attacks, then towers.
+8. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
+9. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
+10. **Income.** Hero-kill Gold and XP, and lane XP.
 11. **Report.** Then the next round begins at Upkeep.
 
-Odd rounds are Day and Radiant has priority. Even rounds are Night and Dire has priority. Dawnbreaker's ultimate forces Day for the rest of that round. Night Stalker's and Luna's ultimates force Night. The forced clock ends at the next Upkeep. Priority breaks ties: safe lane, then mid, then off lane, then own jungle, then enemy jungle, then the favored side, then the unit closer to Position 1.
+There is no day and night cycle. Basic attacks go Haste, then Agility, Universal, Intelligence, Strength, then creeps. Slow attacks last. Inside a bracket the order is safe lane, mid, off lane, own jungle, enemy jungle, then the unit closer to Position 1. If that is still a tie, both units attack at the same time. Abilities do not use the attribute order.
 
 ## Economy
 
@@ -70,11 +70,10 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 
 | Source | Amount | When |
 | --- | --- | --- |
-| Upkeep | 1 | Start of every round |
-| Opened lane | +1 per lane where you destroyed both enemy towers | Every later upkeep. Permanent. |
-| Enemy hero killed by your unit | 1 per hero | Income, after Cleanup. Creeps do not pay this. Tower kills do not pay this. |
-| Neutral camp cleared | 1, plus a rune | Immediately |
-| Your tower falls | that tower's hidden card, and no Gold | Immediately |
+| Upkeep | 1, plus 1 more after every enemy lane tower is down | Start of every round |
+| Enemy hero killed by your unit | 1 per hero, and 1 XP | Income, after Cleanup. Creeps do not pay this. Tower kills do not pay this. |
+| Neutral camp cleared | 1, plus a rune. No XP. | Immediately |
+| Enemy tower destroyed | 3 for Tier 1, 5 for Tier 2, paid to the attacker. The defender takes the hidden card. | Immediately |
 | Bounty Rune | 1 | When played |
 | Bounty Hunter's attacks, Alchemist's creep deaths, and similar card text | as printed | When the card says |
 
@@ -82,13 +81,13 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 
 | Sink | Cost |
 | --- | --- |
-| Draw the top card of the unit deck, or draw a shop card | 1 each. Repeat until you stop, run out of Gold, or empty that deck. The hand may pass 7. Discard back to 7 at the end of the turn. |
+| Draw the top card of the unit deck, or draw a shop card | 1 each, until you stop, run out of Gold, hit 10 counting cards, or empty that deck. Discard back to 7 at the end of the turn. |
 | Play a shop card | 1, 2, or 3, printed on the card. Single use. |
 | Buyback | 4, or 5 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero can belong to either side, as long as it is among the last 10 in the shared discard. |
 
 Runes, tower cards, the Aegis, and the Refresher Shard cost no Gold.
 
-There is no Gold cap. Drawing past 7 is where extra Gold goes. At the report, discard down to 7 counting cards.
+There is no Gold cap. Drawing up to 10 counting cards is where extra Gold goes. At the report, discard down to 7.
 
 ### XP in
 
@@ -97,29 +96,26 @@ There is no Gold cap. Drawing past 7 is where extra Gold goes. At the report, di
 | Upkeep | 1 | Start of every round |
 | Crystal Maiden on your board | +1 more at upkeep for each one | Upkeep |
 | Lane held | 1 per lane that contains a living hero of yours | Income. Jungle heroes do not count. A lane with only creeps does not count. |
-| Neutral camp cleared | 1 | Immediately |
-| Roshan | 3 to the side that claims him | When the reward is paid |
+| Enemy hero killed by your unit | 1 per hero | Income, with the Gold |
 | Wisdom Rune, Clarity, and card text | as printed | When played or when the card says |
 
 Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
 
 ### XP out
 
-Ultimates, and a Shield.
+Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3, every time it is cast. Shields are not bought with XP.
 
-During the Ultimate step, spend 3 XP to give one allied hero a Shield. Shields do not stack. A second purchase on a hero who already has one does nothing.
+If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune reduces one allied hero's cost by 1 XP, to a minimum of 0. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the ability be declared a second time in the same step, and that cast can choose a new target. If it is not declared again, the same cast happens twice.
 
-The first cast of a deployment costs 1 XP, the next 2, then 3, and so on. Dying and being played again starts that hero back at 1. Tinker's cost stays 1. If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune makes the next declared cast free, and the cost still climbs afterward. Refresher Shard sets that hero's cost back to 1. Refresher Orb casts the chosen ultimate a second time on the same target and does not raise the cost again.
+A cast that fizzles refunds its XP. A cast fizzles when the caster is stunned, silenced, feared, banished, or dead, or the target is gone.
 
-A cast that fizzles refunds its XP, or restores the Arcane Rune if that paid for it. A cast fizzles when the caster is stunned, silenced, feared, banished, or dead, or the target is gone.
-
-There is no XP cap. A Shield bought with XP, and lane XP, are where a banked pool goes once ultimates have become expensive.
+There is no XP cap.
 
 ## Buyback, towers, and the fountain
 
 Every slain hero, from either side, goes into one shared discard. The most recent death is at the top. Buyback, during the Draw step, can take any hero from the last 10 in that pile, whether it was yours or the enemy's. It costs 4 Gold, or 5 if you have more towers standing than the enemy. The card comes to your hand. A hero can be bought back only once. A card that says it cannot be bought back stays in the pile and cannot be chosen. Older than the last 10, it waits there until the unit deck runs out and the pile is shuffled back in. Copies are removed and do not enter the discard. Creeps go to their own discard, not this pile.
 
-When your tower falls, you gain that tower's face-down card and no Gold. The card does not use a hand slot.
+When your tower falls, you gain that tower's face-down card. The attacker gains 3 Gold for a Tier 1 tower and 5 Gold for a Tier 2 tower. The card does not use a hand slot.
 
 At the start of the round, each of your heroes heals 1 if they are in a lane where you have no towers left. Heroes in the jungle do not get this heal. Other heals, such as a Salve or Lotus Pool, restore a hero to Healthy unless the hero is Cursed.
 

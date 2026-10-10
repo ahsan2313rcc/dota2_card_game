@@ -14,7 +14,7 @@ export const ITEMS: ItemCard[] = [
   { id: 'salve', name: 'Healing Salve', kind: 'Shop', text: 'Heal an allied hero.', target: 'allyWoundedHero', cost: 1, copies: 4 },
   { id: 'clarity', name: 'Clarity', kind: 'Shop', text: 'Gain +1 XP.', target: 'none', cost: 1, copies: 3 },
   { id: 'gloves', name: 'Gloves of Haste', kind: 'Shop', text: 'An allied hero gains Haste.', target: 'allyHero', cost: 1, copies: 3 },
-  { id: 'vanguard', name: 'Vanguard', kind: 'Shop', text: 'Gain 1 Shield. It lasts until it blocks a hit.', target: 'allyHero', cost: 2, copies: 2 },
+  { id: 'vanguard', name: 'Vanguard', kind: 'Shop', text: 'Gain 1 Shield this turn.', target: 'allyHero', cost: 2, copies: 2 },
   { id: 'blade_mail', name: 'Blade Mail', kind: 'Shop', text: 'Reflect 1 physical damage back to the attacker.', target: 'allyHero', cost: 2, copies: 2 },
   { id: 'ghost', name: 'Ghost Scepter', kind: 'Shop', text: 'An allied hero becomes Ethereal.', target: 'allyHero', cost: 2, copies: 2 },
   { id: 'force_staff', name: 'Force Staff', kind: 'Shop', text: 'Reposition an enemy hero to the back of their line.', target: 'enemyHero', cost: 2, copies: 2 },
@@ -28,7 +28,7 @@ export const ITEMS: ItemCard[] = [
   { id: 'greaves', name: 'Guardian Greaves', kind: 'Shop', text: 'Heal all allied heroes in lanes.', target: 'none', cost: 3, copies: 1 },
   { id: 'assault', name: 'Assault Cuirass', kind: 'Shop', text: 'Haste all allied heroes in lanes.', target: 'none', cost: 3, copies: 1 },
   { id: 'shivas', name: "Shiva's Guard", kind: 'Shop', text: 'Slow all enemy heroes in a lane.', target: 'lane', cost: 3, copies: 1 },
-  { id: 'refresher', name: 'Refresher Orb', kind: 'Shop', text: 'That hero\'s Ultimate is cast twice. Both casts use the chosen target.', target: 'allyHero', cost: 3, copies: 1 },
+  { id: 'refresher', name: 'Refresher Orb', kind: 'Shop', text: 'That hero\'s ability is cast twice. The second cast can choose a new target.', target: 'allyHero', cost: 3, copies: 1 },
   { id: 'satanic', name: 'Satanic', kind: 'Shop', text: 'An allied hero cannot die, and their basic attacks heal them.', target: 'allyHero', cost: 3, copies: 1 },
   { id: 'bloodthorn', name: 'Bloodthorn', kind: 'Shop', text: 'Silence an enemy hero. They take +1 physical damage from attacks.', target: 'enemyHero', cost: 3, copies: 1 },
   { id: 'sheepstick', name: 'Scythe of Vyse', kind: 'Shop', text: 'Hex an enemy hero into a 1 HP decoy.', target: 'enemyHero', cost: 3, copies: 1 },
@@ -41,16 +41,16 @@ export const ITEMS: ItemCard[] = [
   { id: 'mkb', name: 'Monkey King Bar', kind: 'Shop', text: 'Accuracy, and basic attacks deal +1 magical damage.', target: 'allyHero', cost: 3, copies: 1 },
   { id: 'rune_gold', name: 'Bounty Rune', kind: 'Rune', text: 'Gain 1 Gold.', target: 'none' },
   { id: 'rune_regen', name: 'Regeneration Rune', kind: 'Rune', text: 'Heal an allied hero from Wounded to Healthy.', target: 'allyWoundedHero' },
-  { id: 'rune_dd', name: 'Double Damage Rune', kind: 'Rune', text: '+1 basic attack damage this round.', target: 'allyHero' },
-  { id: 'rune_shield', name: 'Shield Rune', kind: 'Rune', text: 'Gain 1 Shield. It lasts until it blocks a hit.', target: 'allyHero' },
-  { id: 'rune_arcane', name: 'Arcane Rune', kind: 'Rune', text: 'Your next Ultimate costs 0 XP.', target: 'none' },
+  { id: 'rune_dd', name: 'Amplify Rune', kind: 'Rune', text: 'An allied hero gains +1 attack.', target: 'allyHero' },
+  { id: 'rune_shield', name: 'Shield Rune', kind: 'Rune', text: 'Gain 1 Shield this turn.', target: 'allyHero' },
+  { id: 'rune_arcane', name: 'Arcane Rune', kind: 'Rune', text: 'Reduce an allied hero\'s ability cost by 1 XP.', target: 'allyHero' },
   { id: 'rune_illusion', name: 'Illusion Rune', kind: 'Rune', text: 'Place a 1 HP decoy (0 attack) in front of an allied hero. It vanishes at Cleanup.', target: 'allyHero' },
   { id: 'rune_invis', name: 'Invisibility Rune', kind: 'Rune', text: 'An allied hero is untargetable by enemies this round. It can still attack.', target: 'allyHero' },
   { id: 'rune_haste', name: 'Haste Rune', kind: 'Rune', text: 'An allied hero attacks first in Phase 2, regardless of priority or Slow.', target: 'allyHero' },
   { id: 'rune_wisdom', name: 'Wisdom Rune', kind: 'Rune', text: 'Gain 1 XP.', target: 'none' },
   { id: 'rune_water', name: 'Water Rune', kind: 'Rune', text: 'Remove all debuffs from an allied hero.', target: 'allyHero' },
-  { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'If this hero is slain this round, it revives Healthy. Flips back to Roshan once used.', target: 'allyHero' },
-  { id: 'refresher_shard', name: 'Refresher Shard', kind: 'Special', text: "Reset an allied hero's Ultimate cost back to 1 XP. Flips back to a Tormentor once used.", target: 'allyHero' },
+  { id: 'aegis', name: 'Aegis of the Immortal', kind: 'Special', text: 'The hero revives immediately the next time it dies. Flips back to Roshan once used.', target: 'allyHero' },
+  { id: 'refresher_shard', name: 'Refresher Shard', kind: 'Special', text: "That hero's ability costs 0 XP. Flips back to a Tormentor once used.", target: 'allyHero' },
   { id: 'glyph', name: 'Glyph of Fortification', kind: 'Tower', text: 'Your towers take no damage this round (so they do not fire either).', target: 'none' },
   { id: 'lotus', name: 'Lotus Pool', kind: 'Tower', text: 'Heal all your heroes to Healthy.', target: 'none' },
   { id: 'gate', name: 'Twin Gate', kind: 'Tower', text: 'Teleport all your heroes on the board (except Rooted ones) to a lane of your choice.', target: 'lane' },
@@ -67,10 +67,10 @@ export const REGULAR_CREEPS = 25
 export const SIEGE_CREEPS = 8
 
 export const NEUTRALS: NeutralCard[] = [
-  { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Each hit is capped at 1 damage. Immune to Ultimate damage. Attacks Position 1.' },
-  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Haste. Thunder Clap: 1 damage to every contesting enemy hero, and they act last.' },
-  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Curses units in this jungle. Freezing Blast: 1 damage and Silence to each Position 1.' },
-  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Accuracy. Fire Pit: 1 damage to every contesting unit.' },
+  { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Immune. Gains 1 Shield. Attacks Position 1.' },
+  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hasted. When contested, deal 1 magical damage to every enemy in the camp.' },
+  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Silence every enemy in the camp. When contested, deal 1 magical damage to both Position 1 units.' },
+  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Curse every enemy in the camp. When contested, deal 1 damage to every enemy there.' },
 ]
 export const NEUTRAL_COPIES = 3
 export const TORMENTOR_COPIES = 2
@@ -78,13 +78,13 @@ export const TORMENTOR_COPIES = 2
 export const ROSHAN = {
   name: 'Roshan',
   attribute: 'UNI' as const,
-  text: 'Ignores the first damage each turn. Hits every enemy in his camp for 1. Roar: Disarm and 1 damage to each contesting unit. Bounty: 3 XP and the Aegis. Never appears before round 4.',
+  text: 'Evades the first damage each turn. When contested, Disarm and deal 1 damage to every enemy in the camp. Bounty: the Aegis. Never appears before round 4.',
 }
 
 export const TORMENTOR = {
   name: 'Tormentor',
   attribute: 'UNI' as const,
-  text: 'Never attacks. Gains 1 Shield each turn. Reflection returns the damage to every attacker and the same amount to the other side\'s Position 1. Bounty: a Refresher Shard.',
+  text: 'Never attacks. Gains 1 Shield each turn. Reflection returns the damage to every attacker and the same amount to each contesting Position 1. Bounty: a Refresher Shard.',
 }
 
 const ICON_SLUG: Record<string, string> = {

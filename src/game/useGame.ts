@@ -11,7 +11,6 @@ import {
   endDraw,
   endItems,
   endRotation,
-  favoredPlayer,
   moveInLineup,
   newGame,
   nextRound,
@@ -105,7 +104,7 @@ function reducer(s: GameState, a: Action): GameState {
       // When the AI has priority it rotates first, so the human sees its move before answering.
       const r = resolveRound(aiUlts(s, AI))
       if (r.phase === 'gameover') return discardToHandLimit(r, AI)
-      return r.phase === 'rotate' && favoredPlayer(r.round, r.cycle) === AI ? takeRotations(r, AI) : r
+      return r
     }
     case 'rotate': {
       const r = rotateHero(s, HUMAN, a.uid, a.zone)

@@ -1,4 +1,4 @@
-import { ATTRIBUTE_COUNTERS, ROSHAN, TORMENTOR, getHero, getNeutral } from '@/game/cards'
+import { ROSHAN, TORMENTOR, getHero, getNeutral } from '@/game/cards'
 import { PLAYER_LABEL, ZONE_LABEL, attributeOf, ultCost } from '@/game/engine'
 import type { GameState, Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
@@ -104,7 +104,6 @@ export function Inspector({ unit, state }: { unit?: Unit; state?: GameState }) {
   const h = getHero(unit.cardId!)
   const shown = attributeOf(unit) ?? h.attribute
   const a = ATTR_STYLE[shown]
-  const counters = shown === 'UNI' ? undefined : ATTRIBUTE_COUNTERS[shown]
   return (
     <div className="space-y-2 text-xs">
       <div className="flex items-center gap-2">
@@ -116,20 +115,22 @@ export function Inspector({ unit, state }: { unit?: Unit; state?: GameState }) {
           </div>
           <div className="text-zinc-400">
             <span className={side.text}>{PLAYER_LABEL[unit.owner]}</span> · {ZONE_LABEL[unit.zone]} · {h.range} · {unit.hp}/
-            {unit.maxHp} hp{counters && <> · counters {counters}</>}
+            {unit.maxHp} hp
           </div>
         </div>
       </div>
-      <p className={cn('text-zinc-300', unit.status.broken && 'line-through opacity-60')}>
-        <span className="font-semibold text-zinc-100">PSV {h.passive.name}:</span> {h.passive.text}
-      </p>
-      <p className="text-zinc-300">
-        <span className="font-semibold text-amber-300">ULT {h.ult.name}:</span> {h.ult.text}{' '}
-        <span className="text-zinc-500">
-          ({unit.ultCasts > 0 ? `cast ${unit.ultCasts}×, next ` : 'next '}
-          {ultCost(unit, state)} XP)
-        </span>
-      </p>
+      {h.script?.kind === 'active' ? (
+        <p className="text-zinc-300">
+          <span className="font-semibold text-amber-300">
+            {h.ult.name} · {ultCost(unit, state)} XP:
+          </span>{' '}
+          {h.ult.text}
+        </p>
+      ) : (
+        <p className={cn('text-zinc-300', unit.status.broken && 'line-through opacity-60')}>
+          <span className="font-semibold text-zinc-100">Passive · {h.passive.name}:</span> {h.passive.text}
+        </p>
+      )}
       <StatusChips u={unit} />
     </div>
   )

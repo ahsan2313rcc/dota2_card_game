@@ -132,11 +132,48 @@ const BUFF_VERBS = new Set([
   'doubleheal',
 ])
 
+/** 2 gold + 2 XP + a rune. A Tier 1 chip sits under this. A Tier 2 garrison sits over it. */
+const NEUTRAL_KILL = 5
+
 /** Full tier 1 scores 1. A fallen tier 1 scores 5 plus missing tier 2 health. Both down scores 8. */
 function towerPressure(t1: number, t2: number): number {
   if (t1 <= 0 && t2 <= 0) return 8
   if (t1 <= 0) return 5 + (TOWER_HP.t2 - t2)
   return TOWER_HP.t1 - t1 + 1
+}
+
+/** Bodies a camp still wants. A regular camp and a Tormentor clear with three. Roshan wants two. */
+function campCap(neutral: Unit): number {
+  return neutral.kind === 'roshan' ? 2 : 3
+}
+
+/**
+ * Minimum heroes on this lane while enemies are hitting it.
+ * Ancient: one more than the attackers, up to the whole board.
+ * Tier 2: the same number. Tier 1: one fewer, but at least one if they can destroy it this round.
+ */
+function garrison(t1: number, t2: number, foes: number): number {
+  if (foes <= 0) return 0
+  if (t1 <= 0 && t2 <= 0) return Math.min(BOARD_LIMIT, foes + 1)
+  if (t1 <= 0) return foes
+  const matching = Math.max(0, foes - 1)
+  return t1 <= foes ? Math.max(matching, 1) : matching
+}
+
+/**
+ * Value of one more defender, and 0 once the garrison is full.
+ * Tier 2: 2 + 2 per remaining health + 3. A full tower is 15, and a hero already soaking cuts 4.
+ * Tier 1: 8 when the tower would fall, otherwise 4, under a camp.
+ * Ancient: 50 plus the attackers, so the quota is filled before any push.
+ */
+function defendValue(t1: number, t2: number, foes: number, mine: number): number {
+  if (mine >= garrison(t1, t2, foes)) return 0
+  if (t1 <= 0 && t2 <= 0) return 50 + foes
+  if (t1 <= 0) {
+    const raw = 2 + 2 * Math.max(t2, 0) + 3
+    return mine > 0 ? raw - 4 : raw
+  }
+  return mine === 0 && foes >= t1 ? 8 : 4
 }
 
 /** How badly we want to walk onto this tower. A healthy tier 1 is not a reason to leave a fight. */
@@ -197,17 +234,12 @@ function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr?: Attribute): n
   const enemyTw = s.players[other(p)].structures.towers[lane]
   const ownTw = s.players[p].structures.towers[lane]
   const foes = enemyHeroes(s, p, lane)
-  const mine = lineup(s, p, lane).length
-  const ownDamaged = (ownTw.t1 > 0 && ownTw.t1 < TOWER_HP.t1) || (ownTw.t2 > 0 && ownTw.t2 < TOWER_HP.t2)
-  const ownOpen = ownTw.t1 <= 0 && ownTw.t2 <= 0
-  const enemyOpen = enemyTw.t1 <= 0 && enemyTw.t2 <= 0
-  let attack = towerPressure(enemyTw.t1, enemyTw.t2) * 2 + foes.length * 2 - mine * 3
-  if (enemyOpen) attack += 28
-  let defense = 0
-  if (ownOpen && foes.length > 0) defense = 36 + foes.length * 4
-  else if (ownDamaged) defense = 16 + foes.length * 4
-  defense -= mine * 3
+  const mine = heroesIn(s, p, lane)
+  const bodies = lineup(s, p, lane).length
+  let attack = towerPressure(enemyTw.t1, enemyTw.t2) * 2 + foes.length * 2 - bodies * 3
+  if (enemyTw.t1 <= 0 && enemyTw.t2 <= 0) attack += 28
   if (attr) attack += counterScore(attr, foes)
+  const defense = defendValue(ownTw.t1, ownTw.t2, foes.length, mine)
   return Math.max(attack, defense)
 }
 
@@ -217,25 +249,19 @@ function pickLane(s: GameState, p: PlayerId, attr?: Attribute): LaneId {
   )[0]
 }
 
-/** Farm home jungle only after two heroes are already in lanes and no tower is under attack. */
+function heroesIn(s: GameState, p: PlayerId, zone: ZoneId): number {
+  return unitsIn(s, p, zone).filter((u) => u.kind === 'hero').length
+}
+
+/** A camp is 5 once two heroes are already in lanes. Garrison scores decide whether the camp wins. */
 function jungleValue(s: GameState, p: PlayerId): number {
   const home = homeJungle(p)
   const neutral = campNeutral(s, home)
   if (!neutral) return -999
-  const mustDefend = LANES.some((lane) => {
-    const tw = s.players[p].structures.towers[lane]
-    const damaged = (tw.t1 > 0 && tw.t1 < TOWER_HP.t1) || (tw.t2 > 0 && tw.t2 < TOWER_HP.t2)
-    const open = tw.t1 <= 0 && tw.t2 <= 0
-    return damaged || (open && enemyHeroes(s, p, lane).length > 0)
-  })
-  if (mustDefend) return -999
-  const laneHeroes = LANES.reduce((sum, lane) => sum + unitsIn(s, p, lane).filter((u) => u.kind === 'hero').length, 0)
+  const laneHeroes = LANES.reduce((sum, lane) => sum + heroesIn(s, p, lane), 0)
   if (laneHeroes < 2) return -999
-  const mine = lineup(s, p, home).length
-  if (neutral.kind === 'roshan' && mine < 2) return 10
-  if (neutral.kind === 'tormentor' && mine < 3) return 9
-  if (neutral.kind === 'neutral' && mine === 0) return 8
-  return -999
+  if (heroesIn(s, p, home) >= campCap(neutral)) return -999
+  return NEUTRAL_KILL
 }
 
 function bestZone(s: GameState, p: PlayerId, attr?: Attribute): ZoneId {
@@ -454,6 +480,10 @@ function stayValue(s: GameState, p: PlayerId, u: Unit): number {
   let stay = lineup(s, other(p), u.zone).length * 2
   if (campNeutral(s, u.zone)) stay += 3
   if (!isLane(u.zone)) return stay
+  const ownTw = s.players[p].structures.towers[u.zone]
+  const foes = enemyHeroes(s, p, u.zone).length
+  const mine = heroesIn(s, p, u.zone)
+  stay += defendValue(ownTw.t1, ownTw.t2, foes, Math.max(0, mine - 1))
   stay += exposedBonus(towerPressure(s.players[other(p)].structures.towers[u.zone].t1, s.players[other(p)].structures.towers[u.zone].t2))
   if (soleDefender(s, p, u)) stay += 10
   return stay
@@ -465,14 +495,13 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId): number {
   let score = foes * 2 - friends
   if (!isLane(zone)) {
     const camp = campNeutral(s, zone)
-    if (camp && friends === 0) score += camp.kind === 'roshan' ? 6 : 4
+    if (camp && heroesIn(s, p, zone) < campCap(camp)) score += NEUTRAL_KILL
     return score
   }
   const enemyTw = s.players[other(p)].structures.towers[zone]
   const ownTw = s.players[p].structures.towers[zone]
   score += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
-  if (ownTw.t1 <= 0 && ownTw.t2 <= 0 && foes > 0) score += 16
-  else if ((ownTw.t1 < TOWER_HP.t1 || ownTw.t2 < TOWER_HP.t2) && (ownTw.t1 > 0 || ownTw.t2 > 0) && foes > 0) score += 12
+  score += defendValue(ownTw.t1, ownTw.t2, enemyHeroes(s, p, zone).length, heroesIn(s, p, zone))
   return score
 }
 

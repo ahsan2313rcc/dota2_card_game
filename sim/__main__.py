@@ -258,49 +258,56 @@ def best_lane(g: Game, p: str) -> str:
     return max(LANES, key=lambda lane: (lane_value(g, p, lane), -RANK[p][lane]))
 
 
+# 2 gold + 2 XP + a rune. A Tier 1 chip sits under this. A Tier 2 garrison sits over it.
+NEUTRAL_KILL = 5
+
+
+def garrison(t1: int, t2: int, foes: int) -> int:
+    """Ancient wants attackers + 1. Tier 2 matches them. Tier 1 wants one fewer."""
+    if foes <= 0:
+        return 0
+    if t1 <= 0 and t2 <= 0:
+        return min(5, foes + 1)
+    if t1 <= 0:
+        return foes
+    matching = max(0, foes - 1)
+    return max(matching, 1) if t1 <= foes else matching
+
+
+def defend_value(t1: int, t2: int, foes: int, mine: int) -> int:
+    """One more defender. 0 once the garrison is full. A soaker cuts the Tier 2 score by 4."""
+    if mine >= garrison(t1, t2, foes):
+        return 0
+    if t1 <= 0 and t2 <= 0:
+        return 50 + foes
+    if t1 <= 0:
+        raw = 2 + 2 * max(t2, 0) + 3
+        return raw - 4 if mine else raw
+    return 8 if mine == 0 and foes >= t1 else 4
+
+
 def lane_value(g: Game, p: str, lane: str) -> int:
-    """Defending a damaged tower or an exposed Ancient outranks hitting a healthy tower."""
+    """Attack the enemy building, or fill the garrison if that scores higher."""
     foe = g.sides[other(p)].towers[lane]
     own = g.sides[p].towers[lane]
     foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
     mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
-    own_damaged = (own["t1"] > 0 and own["t1"] < TOWER["t1"]) or (own["t2"] > 0 and own["t2"] < TOWER["t2"])
-    own_open = own["t1"] <= 0 and own["t2"] <= 0
-    enemy_open = foe["t1"] <= 0 and foe["t2"] <= 0
     attack = tower_pressure(foe["t1"], foe["t2"]) * 2 + foes * 2 - mine * 3
-    if enemy_open:
+    if foe["t1"] <= 0 and foe["t2"] <= 0:
         attack += 28
-    defense = 0
-    if own_open and foes > 0:
-        defense = 36 + foes * 4
-    elif own_damaged:
-        defense = 16 + foes * 4
-    defense -= mine * 3
-    return max(attack, defense)
+    return max(attack, defend_value(own["t1"], own["t2"], foes, mine))
 
 
 def jungle_value(g: Game, p: str) -> int:
-    """Home jungle only, and only once the lanes are staffed and no tower is in a fight."""
+    """A camp is worth 5 once two heroes are in lanes. The garrison scores decide if it wins."""
     camp = g.camps[p]
-    if camp is None or camp.hp <= 0:
-        return -999
-    for lane in LANES:
-        own = g.sides[p].towers[lane]
-        damaged = (own["t1"] > 0 and own["t1"] < TOWER["t1"]) or (own["t2"] > 0 and own["t2"] < TOWER["t2"])
-        opened = own["t1"] <= 0 and own["t2"] <= 0
-        foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
-        if damaged or (opened and foes > 0):
-            return -999
-    if lane_heroes(g, p) < 2:
+    if camp is None or camp.hp <= 0 or lane_heroes(g, p) < 2:
         return -999
     mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
-    if camp.kind == "roshan" and mine < 2:
-        return 10
-    if camp.kind == "tormentor" and mine < 3:
-        return 9
-    if camp.kind not in ("roshan", "tormentor") and mine == 0:
-        return 8
-    return -999
+    cap = 2 if camp.kind == "roshan" else 3
+    if mine >= cap:
+        return -999
+    return NEUTRAL_KILL
 
 
 def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:

@@ -775,6 +775,53 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'phantom_assassin')?.zone).toBe('mid')
   })
 
+  it('matches the heroes hitting a Tier 2 and does not pile a third one in', () => {
+    let s = setup(11, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    s = placeHero(s, 'radiant', 'r2', 'mid')
+    s.players.dire.structures.towers.mid.t1 = 0
+    s = aiAssign(s, 'dire')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
+  })
+
+  it('defends an open Ancient with every hero it can place against a larger attack', () => {
+    let s = setup(
+      12,
+      [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')],
+      [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')],
+    )
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = placeHero(s, 'radiant', 'r3', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.dire.structures.towers.bot.t2 = 0
+    s = aiAssign(s, 'dire')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(3)
+  })
+
+  it('farms a camp instead of answering one hero on a healthy Tier 1', () => {
+    let s = setup(13, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'dire', 'd1', 'top')
+    s = placeHero(s, 'dire', 'd2', 'bot')
+    s.players.dire.placedThisRound = 0
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('direJungle')
+  })
+
+  it('defends a Tier 2 instead of farming when an attacker is on it', () => {
+    let s = setup(14, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'dire', 'd1', 'top')
+    s = placeHero(s, 'dire', 'd2', 'bot')
+    s.players.dire.placedThisRound = 0
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    s.players.dire.structures.towers.mid.t1 = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('mid')
+  })
+
   it('will not Chronosphere a lane where its own heroes are stunned as well', () => {
     let s = setup(2, [hero('e1', 'axe')], [hero('fv', 'faceless_void'), hero('ally', 'sven')])
     s = placeHero(s, 'radiant', 'e1', 'mid')

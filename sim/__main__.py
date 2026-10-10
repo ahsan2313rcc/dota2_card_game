@@ -4,9 +4,10 @@
 
 The simulator uses the printed hero sheet in ``src/game/roster.ts`` and the version 3
 economy. It is a lane-level model: two heuristic sides, real ability costs, attack
-order, tower bounties, and hero-kill income. It does not play every item or the full
-status list. Use it to see whether games finish and whether gold and XP stay in a
-playable range.
+order, tower bounties, and hero-kill income. A thin board spends gold drawing heroes.
+A stocked board spends gold playing items. Each active ability can be cast once per
+round, or twice that round when a Refresher is played. The full status list is not
+simulated.
 """
 
 from __future__ import annotations
@@ -82,6 +83,9 @@ def load_heroes() -> list[Hero]:
     return heroes
 
 
+ENOUGH_HEROES = 3
+
+
 @dataclass
 class Unit:
     hero: Hero
@@ -89,7 +93,11 @@ class Unit:
     stunned: bool = False
     haste: bool = False
     slow: bool = False
-    cast: bool = False
+    # Casts this round. Reset at cleanup, so the same ability is available again next round.
+    casts: int = 0
+    # A Refresher played this round allows a second cast at no XP.
+    refresher: bool = False
+    amplify: int = 0
 
 
 @dataclass
@@ -119,9 +127,15 @@ class Game:
     round: int = 1
     winner: str | None = None
     towers_fallen: int = 0
+    played: dict[str, int] = field(default_factory=dict)
+    casts: dict[str, int] = field(default_factory=dict)
+    items: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.board = {p: {lane: [] for lane in LANES} for p in ("radiant", "dire")}
+        self.played = {p: 0 for p in ("radiant", "dire")}
+        self.casts = {p: 0 for p in ("radiant", "dire")}
+        self.items = {p: 0 for p in ("radiant", "dire")}
 
 
 def other(p: str) -> str:
@@ -139,11 +153,18 @@ def upkeep(g: Game) -> None:
         side.xp += 1
 
 
+def living(g: Game, p: str) -> list[tuple[str, Unit]]:
+    return [(lane, unit) for lane in LANES for unit in g.board[p][lane] if unit.hp > 0]
+
+
 def draw_and_deploy(g: Game) -> None:
+    """Spend gold. A thin board buys hero cards. A stocked board buys items and plays them."""
     for p, side in g.sides.items():
-        while side.gold > 1 and len(side.hand) < 7 and g.rng.random() < 0.65:
-            side.gold -= 1
-            side.hand.append(g.rng.choice(g.heroes))
+        on_board = len(living(g, p))
+        if on_board < ENOUGH_HEROES:
+            while side.gold >= 1 and len(side.hand) < 10:
+                side.gold -= 1
+                side.hand.append(g.rng.choice(g.heroes))
         placed = 0
         side.hand.sort(key=lambda h: (h.kind != "active", -h.damage, h.cost))
         while side.hand and placed < 3 and sum(len(g.board[p][lane]) for lane in LANES) < 5:
@@ -151,6 +172,24 @@ def draw_and_deploy(g: Game) -> None:
             lane = weakest_lane(g, p)
             g.board[p][lane].append(Unit(hero, haste=hero.amp and hero.kind == "passive"))
             placed += 1
+            g.played[p] += 1
+        # Items are played onto heroes already on the board, so the gold leaves the bank.
+        while len(living(g, p)) >= ENOUGH_HEROES and side.gold >= 1 and g.items[p] < len(living(g, p)):
+            heroes = living(g, p)
+            active = [pair for pair in heroes if pair[1].hero.kind == "active" and not pair[1].refresher]
+            if side.gold >= 3 and active:
+                _lane, unit = active[0]
+                side.gold -= 3
+                unit.refresher = True
+            elif side.gold >= 2:
+                _lane, unit = heroes[0]
+                side.gold -= 2
+                unit.amplify += 1
+            else:
+                _lane, unit = heroes[0]
+                side.gold -= 1
+                unit.haste = True
+            g.items[p] += 1
 
 
 def weakest_lane(g: Game, p: str) -> str:
@@ -165,28 +204,31 @@ def weakest_lane(g: Game, p: str) -> str:
 
 
 def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
+    """One cast per hero each round. A Refresher allows a second cast that same round, at 0 XP."""
     side = g.sides[p]
-    for lane in LANES:
-        for unit in g.board[p][lane]:
-            hero = unit.hero
-            if hero.kind != "active" or unit.stunned or unit.hp <= 0 or side.xp < hero.cost:
-                continue
-            if getattr(unit, "cast", False):
-                continue
-            if hero.damage == 0 and not hero.stun and not hero.amp:
-                continue
-            foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
-            if hero.damage and not foes and (g.sides[other(p)].towers[lane]["t1"] or g.sides[other(p)].towers[lane]["t2"]):
-                pass
-            elif hero.damage and not foes and not hero.stun:
-                continue
-            return lane, unit
-    return None
+    best: tuple[tuple[int, int, int], str, Unit] | None = None
+    for lane, unit in living(g, p):
+        hero = unit.hero
+        if hero.kind != "active" or unit.stunned:
+            continue
+        limit = 2 if unit.refresher else 1
+        if unit.casts >= limit:
+            continue
+        cost = 0 if unit.casts else hero.cost
+        if side.xp < cost:
+            continue
+        foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
+        score = (hero.damage + hero.stun + hero.amp, len(foes), -hero.cost)
+        if best is None or score > best[0]:
+            best = (score, lane, unit)
+    return None if best is None else (best[1], best[2])
 
 
 def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
-    unit.cast = True
-    g.sides[p].xp -= unit.hero.cost
+    cost = 0 if unit.casts else unit.hero.cost
+    unit.casts += 1
+    g.sides[p].xp -= cost
+    g.casts[p] += 1
     if unit.hero.amp:
         unit.haste = True
     foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
@@ -259,7 +301,7 @@ def resolve_batch(g: Game, batch: list[tuple[int, int, int, str, str, Unit]]) ->
         foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
         shots.append((p, lane, unit, foes[0] if foes else None))
     for p, lane, unit, foe in shots:
-        dmg = 1 + (1 if unit.hero.amp or unit.hero.cleave else 0)
+        dmg = 1 + unit.amplify + (1 if unit.hero.amp or unit.hero.cleave else 0)
         if foe:
             hurt(g, foe, dmg, p)
             if unit.hero.cleave and len(g.board[other(p)][lane]) > 1:
@@ -338,7 +380,9 @@ def cleanup(g: Game) -> None:
             for unit in g.board[p][lane]:
                 if unit.hp > 0:
                     unit.stunned = False
-                    unit.cast = False
+                    unit.casts = 0
+                    unit.refresher = False
+                    unit.amplify = 0
                     unit.haste = unit.hero.amp and unit.hero.kind == "passive"
                     unit.slow = False
                     alive.append(unit)
@@ -352,14 +396,20 @@ def cleanup(g: Game) -> None:
             side.hand.pop()
 
 
-def end_of_turn(g: Game) -> dict[str, tuple[int, int, int]]:
-    """Standing towers, gold, and XP for each side after cleanup."""
-    return {p: (standing(g.sides[p]), g.sides[p].gold, g.sides[p].xp) for p in ("radiant", "dire")}
+def end_of_turn(g: Game) -> dict[str, tuple[int, int, int, int, int, int]]:
+    """Towers, gold, XP, heroes played, abilities cast, and items played this round."""
+    return {
+        p: (standing(g.sides[p]), g.sides[p].gold, g.sides[p].xp, g.played[p], g.casts[p], g.items[p])
+        for p in ("radiant", "dire")
+    }
 
 
-def play(g: Game, limit: int) -> dict[int, dict[str, tuple[int, int, int]]]:
-    trace: dict[int, dict[str, tuple[int, int, int]]] = {}
+def play(g: Game, limit: int) -> dict[int, dict[str, tuple[int, int, int, int, int, int]]]:
+    trace: dict[int, dict[str, tuple[int, int, int, int, int, int]]] = {}
     while g.winner is None and g.round <= limit:
+        g.played = {p: 0 for p in ("radiant", "dire")}
+        g.casts = {p: 0 for p in ("radiant", "dire")}
+        g.items = {p: 0 for p in ("radiant", "dire")}
         upkeep(g)
         draw_and_deploy(g)
         combat(g)
@@ -377,9 +427,10 @@ def simulate(games: int, seed: int, limit: int) -> None:
     xp: list[int] = []
     towers: list[int] = []
     unfinished = 0
-    # round -> sums of (towers, gold, xp) per side, and how many games reached it
+    # round -> sums of (towers, gold, xp, heroes played, abilities, items) per side
     reached: Counter[int] = Counter()
     totals: dict[int, dict[str, list[int]]] = {}
+    lifetime = {"radiant": [0, 0, 0], "dire": [0, 0, 0]}
     # checkpoint -> (behind games, wins from behind, wins that happened after the checkpoint)
     marks = list(range(5, limit + 1, 5))
     behind: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
@@ -404,10 +455,12 @@ def simulate(games: int, seed: int, limit: int) -> None:
         towers.append(g.towers_fallen)
         for rnd, snap in trace.items():
             reached[rnd] += 1
-            bucket = totals.setdefault(rnd, {"radiant": [0, 0, 0], "dire": [0, 0, 0]})
+            bucket = totals.setdefault(rnd, {"radiant": [0, 0, 0, 0, 0, 0], "dire": [0, 0, 0, 0, 0, 0]})
             for p in ("radiant", "dire"):
                 for i, value in enumerate(snap[p]):
                     bucket[p][i] += value
+                    if i >= 3:
+                        lifetime[p][i - 3] += value
         for mark in marks:
             snap = trace.get(mark)
             if snap is None or g.winner is None:
@@ -431,14 +484,28 @@ def simulate(games: int, seed: int, limit: int) -> None:
     print(f"mean length {avg(lengths):.1f} rounds")
     print(f"mean gold left {avg(gold):.1f}  mean xp left {avg(xp):.1f}")
     print(f"mean towers destroyed {avg(towers):.1f}")
+    if games:
+        print(
+            "mean per game  "
+            f"radiant heroes {lifetime['radiant'][0] / games:.2f}  abilities {lifetime['radiant'][1] / games:.2f}  items {lifetime['radiant'][2] / games:.2f}  "
+            f"dire heroes {lifetime['dire'][0] / games:.2f}  abilities {lifetime['dire'][1] / games:.2f}  items {lifetime['dire'][2] / games:.2f}"
+        )
     print()
-    print("end of turn, average of games still going (towers standing / gold / xp)")
-    print(f"{'round':>5}  {'games':>5}  {'R towers':>8}  {'D towers':>8}  {'R gold':>7}  {'D gold':>7}  {'R xp':>7}  {'D xp':>7}")
+    print("end of turn, average of games still going")
+    print("heroes / abilities / items are how many were played that round, not a running total")
+    print(
+        f"{'round':>5}  {'games':>5}  {'R tow':>6}  {'D tow':>6}  {'R gold':>7}  {'D gold':>7}  {'R xp':>6}  {'D xp':>6}"
+        f"  {'R hero':>6}  {'D hero':>6}  {'R ult':>6}  {'D ult':>6}  {'R item':>6}  {'D item':>6}"
+    )
     for rnd in sorted(totals):
         n = reached[rnd]
-        rt, rg, rx = (totals[rnd]["radiant"][i] / n for i in range(3))
-        dt, dg, dx = (totals[rnd]["dire"][i] / n for i in range(3))
-        print(f"{rnd:5d}  {n:5d}  {rt:8.2f}  {dt:8.2f}  {rg:7.2f}  {dg:7.2f}  {rx:7.2f}  {dx:7.2f}")
+        cells = [totals[rnd][p][i] / n for p in ("radiant", "dire") for i in range(6)]
+        rt, rg, rx, rh, ru, ri = cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]
+        dt, dg, dx, dh, du, di = cells[6], cells[7], cells[8], cells[9], cells[10], cells[11]
+        print(
+            f"{rnd:5d}  {n:5d}  {rt:6.2f}  {dt:6.2f}  {rg:7.2f}  {dg:7.2f}  {rx:6.2f}  {dx:6.2f}"
+            f"  {rh:6.2f}  {dh:6.2f}  {ru:6.2f}  {du:6.2f}  {ri:6.2f}  {di:6.2f}"
+        )
     print()
     print("checkpoints: average gold and xp, and wins from behind on towers")
     print("Behind means fewer standing towers than the opponent at the end of that round.")

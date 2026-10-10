@@ -156,31 +156,22 @@ function heroCount(s: GameState, p: PlayerId): number {
   return inHand + heroesOnBoard(s, p).length
 }
 
-/** Gold kept for a shop item already in hand. An empty roster spends it all on draws. */
-function goldToHold(s: GameState, p: PlayerId): number {
-  if (heroCount(s, p) === 0) return 0
-  const pl = s.players[p]
-  const costs = pl.hand
-    .filter((c) => c.type === 'item')
-    .map((c) => getItem(c.cardId).cost ?? 0)
-    .filter((c) => c > 0)
-  if (!costs.length) return 0
-  const affordable = costs.filter((c) => c <= pl.gold)
-  return affordable.length ? Math.max(...affordable) : Math.min(...costs)
-}
+/** A board with this many heroes is ready to spend gold on items. Below that, gold buys hero cards. */
+const ENOUGH_HEROES = 3
 
 /**
- * Draw heroes and items before considering buyback. Buyback is only for a side that
- * cannot take another card from the deck and has no hero to play.
+ * Draw until the gold is gone. A thin board takes hero and creep cards from the shared deck.
+ * A stocked board takes item cards, which combat then plays one at a time.
+ * Buyback is only for a side that cannot draw and has no hero to play.
  */
 export function aiDraw(state: GameState, p: PlayerId): GameState {
   let s = state
   for (let guard = 0; guard < DRAW_CAP; guard++) {
     const pl = s.players[p]
-    if (pl.gold <= goldToHold(s, p)) break
-    const heroes = heroCount(s, p)
-    if (handCount(pl) >= (heroes < 2 ? DRAW_CAP : HAND_LIMIT)) break
-    const want = heroes < 3 ? 'unit' : 'item'
+    if (pl.gold < 1) break
+    const stocked = heroesOnBoard(s, p).length >= ENOUGH_HEROES
+    if (handCount(pl) >= (stocked ? HAND_LIMIT : DRAW_CAP)) break
+    const want = stocked ? 'item' : 'unit'
     const fallback = want === 'unit' ? 'item' : 'unit'
     const type = !drawBlockReason(s, p, want) ? want : !drawBlockReason(s, p, fallback) ? fallback : null
     if (!type) break

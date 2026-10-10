@@ -31,7 +31,7 @@ import {
   ultBlockReason,
   ultCost,
 } from './engine'
-import { BOARD_LIMIT, CAMPS, HAND_LIMIT, LANES, PLAYERS, STARTING_HEROES, ZONES, type CampId, type GameState, type HandCard } from './types'
+import { BOARD_LIMIT, CAMPS, DRAW_CAP, HAND_LIMIT, LANES, PLAYERS, STARTING_HEROES, ZONES, type CampId, type GameState, type HandCard } from './types'
 
 /** Fresh game in the assign step with chosen hands. */
 function setup(seed: number, radiant: HandCard[], dire: HandCard[] = []): GameState {
@@ -588,12 +588,48 @@ describe('comeback rules and rotation', () => {
 })
 
 describe('opponent decisions', () => {
-  it('holds gold for a shop item instead of drawing the purse empty', () => {
+  it('a thin board spends gold drawing heroes instead of sitting on it', () => {
     let s = newGame(undefined, 1)
     s.players.dire.gold = 3
     s.players.dire.hand = [hero('h', 'axe'), item('deso', 'desolator')]
     s = aiDraw(s, 'dire')
-    expect(s.players.dire.gold).toBeGreaterThanOrEqual(2)
+    expect(heroesOnBoard(s, 'dire')).toHaveLength(0)
+    expect(s.players.dire.gold).toBe(0)
+    expect(s.players.dire.hand.filter((c) => c.type === 'hero' || c.type === 'creep').length).toBeGreaterThan(1)
+  })
+
+  it('a stocked board spends gold drawing items to play', () => {
+    let s = setup(4, [], ['axe', 'sven', 'pudge'].map((id, i) => hero(String(i), id)))
+    s = placeHero(s, 'dire', '0', 'top')
+    s = placeHero(s, 'dire', '1', 'mid')
+    s = placeHero(s, 'dire', '2', 'bot')
+    s.phase = 'draw'
+    s.players.dire.gold = 4
+    s.players.dire.hand = []
+    s = aiDraw(s, 'dire')
+    expect(heroesOnBoard(s, 'dire')).toHaveLength(3)
+    expect(s.players.dire.hand.some((c) => c.type === 'item')).toBe(true)
+    expect(s.players.dire.gold).toBeLessThan(4)
+  })
+
+  it('the same ability can be cast again next round, and only a Refresher allows a second cast this turn', () => {
+    let s = setup(3, [hero('a', 'tidehunter')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'top')
+    s = reveal(s)
+    const tide = heroesOnBoard(s, 'radiant')[0].uid
+    s.players.radiant.xp = 2
+    s = declareUlt(s, tide)
+    expect(s.units[tide].ultCasts).toBe(1)
+    s = nextRound(endRotation(resolveRound(s)))
+    s = reveal(endDraw(s))
+    if (s.priority === 'dire') s = passResponse(s, 'dire')
+    s.players.radiant.xp = 2
+    s = declareUlt(s, tide)
+    expect(s.units[tide].ultCasts).toBe(2)
+    expect(s.ultDeclarations.filter((d) => d.uid === tide)).toHaveLength(1)
+    if (s.priority === 'dire') s = passResponse(s, 'dire')
+    expect(ultBlockReason(s, tide)).toBe('Already declared')
   })
 
   it('draws from the deck while a buyback is available', () => {
@@ -603,7 +639,7 @@ describe('opponent decisions', () => {
     s.heroDiscard = [{ cardId: 'sven', owner: 'radiant', buybackUsed: false }]
     s = aiDraw(s, 'dire')
     expect(s.log.some((l) => l.text.includes('buys back'))).toBe(false)
-    expect(handCount(s.players.dire)).toBe(HAND_LIMIT)
+    expect(handCount(s.players.dire)).toBe(DRAW_CAP)
     expect(s.players.dire.gold).toBeLessThan(10)
     expect(s.heroDiscard.some((h) => h.cardId === 'sven')).toBe(true)
   })

@@ -283,12 +283,12 @@ function canAttack(u: Unit) {
 /** A passive works only while the hero is alive and not Broken. */
 export function hasPassive(u: Unit | undefined, heroId: string): boolean {
   if (scripted(u)) return false
-  return !!u && !u.dead && u.cardId === heroId && u.kind === 'hero' && !u.status.broken
+  return !!u && !u.dead && u.cardId === heroId && u.kind === 'hero' && !u.status.broken && !u.status.silenced
 }
 
 function hasKind(u: Unit | undefined, kind: HeroCard['passiveKind']): boolean {
   if (scripted(u)) return false
-  return !!u && !u.dead && u.kind === 'hero' && !u.status.broken && !!u.cardId && getHero(u.cardId).passiveKind === kind
+  return !!u && !u.dead && u.kind === 'hero' && !u.status.broken && !u.status.silenced && !!u.cardId && getHero(u.cardId).passiveKind === kind
 }
 
 export function lineup(s: GameState, player: PlayerId, zone: ZoneId): string[] {
@@ -1206,6 +1206,19 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     pl.ward.push(lane)
   } else if (item.id === 'smoke' && lane) {
     pl.smoke.push(lane)
+  } else if (item.id === 'gem' && lane) {
+    const enemies = lineup(s, other(p), lane).map((id) => s.units[id]).filter((e) => e.kind === 'hero')
+    for (const e of enemies) {
+      e.status.revealed = true
+      e.status.invisible = false
+    }
+    log(
+      s,
+      enemies.length
+        ? `${enemies.map((e) => fullName(e)).join(' and ')} ${enemies.length === 1 ? 'is' : 'are'} Revealed by Gem of True Sight.`
+        : `Gem of True Sight finds no enemy heroes in the ${ZONE_LABEL[lane]}.`,
+      tone(p),
+    )
   } else if (item.id === 'dust' && lane) {
     for (const uid of targetableLineup(s, other(p), lane)) {
       const e = s.units[uid]
@@ -1576,7 +1589,7 @@ function dealDamage(
   opts: DamageOpts = {},
 ): number {
   const t = s.units[targetUid]
-  const reflecting = !!t && !t.dead && t.kind === 'tormentor' && !t.status.broken && kind !== 'reflect'
+  const reflecting = !!t && !t.dead && t.kind === 'tormentor' && !t.status.broken && !t.status.silenced && kind !== 'reflect'
   const shieldBefore = t?.status.shield ?? 0
   const dealt = applyDamage(s, src, targetUid, amount, kind, opts)
   if (reflecting && (dealt > 0 || t!.status.shield < shieldBefore)) tormentorReflect(s, t!, src, opts.sourceOwner, dealt || amount)
@@ -2044,7 +2057,7 @@ function refreshNeutralAuras(s: GameState) {
 }
 
 /** A neutral ultimate needs this many living units in the camp. The neutral itself does not count. */
-const NEUTRAL_ULT_MIN = 3
+const NEUTRAL_ULT_MIN = 2
 
 function campUnitCount(s: GameState, camp: ZoneId): number {
   return PLAYERS.reduce((n, p) => n + lineup(s, p, camp).length, 0)
@@ -2269,7 +2282,7 @@ function singleAttack(s: GameState, u: Unit) {
       continue
     }
     const dealt = dealDamage(s, u, tid, dmg, 'attack')
-    if (dealt > 0 && !u.status.broken) {
+    if (dealt > 0 && !u.status.broken && !u.status.silenced) {
       if (u.cardId === 'lina') u.fierySoul = true
       if ((u.cardId === 'anti_mage' || hasKind(u, 'silenceOnHit')) && t.kind === 'hero' && !t.dead)
         applyStatus(s, u.owner, t, 'silenced', getHero(u.cardId!).passive.name, false)

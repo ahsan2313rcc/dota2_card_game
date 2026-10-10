@@ -9,8 +9,9 @@ export const HEROES: HeroCard[] = ROSTER.filter((h) => !h.summon)
 export const ITEMS: ItemCard[] = [
   { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane', cost: 1, copies: 6 },
   { id: 'ward', name: 'Ward', kind: 'Shop', text: 'Enemy heroes that enter this lane are face-up at the next Reveal.', target: 'lane', cost: 1, copies: 3 },
-  { id: 'smoke', name: 'Smoke', kind: 'Shop', text: 'Allied heroes placed in this lane stay hidden at the next Reveal.', target: 'lane', cost: 1, copies: 3 },
-  { id: 'dust', name: 'Dust', kind: 'Shop', text: 'Mute every enemy hero in the lane.', target: 'lane', cost: 1, copies: 3 },
+  { id: 'smoke', name: 'Smoke', kind: 'Shop', text: 'Allied heroes placed in this lane stay hidden at the next Reveal.', target: 'lane', cost: 1, copies: 2 },
+  { id: 'dust', name: 'Dust', kind: 'Shop', text: 'Mute every enemy hero in the lane.', target: 'lane', cost: 1, copies: 2 },
+  { id: 'gem', name: 'Gem of True Sight', kind: 'Shop', text: 'Reveal every enemy hero in a lane and remove Invisible.', target: 'lane', cost: 1, copies: 2 },
   { id: 'salve', name: 'Healing Salve', kind: 'Shop', text: 'Heal an allied hero.', target: 'allyWoundedHero', cost: 1, copies: 4 },
   { id: 'clarity', name: 'Clarity', kind: 'Shop', text: 'Gain +1 XP.', target: 'none', cost: 1, copies: 3 },
   { id: 'gloves', name: 'Gloves of Haste', kind: 'Shop', text: 'An allied hero gains Haste.', target: 'allyHero', cost: 1, copies: 3 },
@@ -68,9 +69,9 @@ export const SIEGE_CREEPS = 8
 
 export const NEUTRALS: NeutralCard[] = [
   { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Immune. Gains 1 Shield. Attacks Position 1.' },
-  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hasted. Ultimate, only with 3 or more units in the camp: 1 magical damage to every enemy there.' },
-  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Silence every enemy in the camp. Ultimate, only with 3 or more units in the camp: 1 magical damage to both Position 1 units.' },
-  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Curse every enemy in the camp. Ultimate, only with 3 or more units in the camp: 1 damage to every enemy there.' },
+  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hasted. Ultimate, only with 2 or more units in the camp: 1 magical damage to every enemy there.' },
+  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Silence every enemy in the camp. Ultimate, only with 2 or more units in the camp: 1 magical damage to both Position 1 units.' },
+  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Curse every enemy in the camp. Ultimate, only with 2 or more units in the camp: 1 damage to every enemy there.' },
 ]
 export const NEUTRAL_COPIES = 3
 export const TORMENTOR_COPIES = 2
@@ -78,7 +79,7 @@ export const TORMENTOR_COPIES = 2
 export const ROSHAN = {
   name: 'Roshan',
   attribute: 'UNI' as const,
-  text: 'Evades the first damage each turn. Ultimate, only with 3 or more units in the camp: Disarm and deal 1 damage to every enemy there. Bounty: 3 Gold, 3 XP, a rune, and the Aegis. Never appears before round 4.',
+  text: 'Evades the first damage each turn. Ultimate, only with 2 or more units in the camp: Disarm and deal 1 damage to every enemy there. Bounty: 3 Gold, 3 XP, a rune, and the Aegis. Never appears before round 4.',
 }
 
 export const TORMENTOR = {

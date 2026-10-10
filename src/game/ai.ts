@@ -472,6 +472,15 @@ function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard): Gam
     }
     return playItem(s, p, iid)
   }
+  if (item.id === 'gem') {
+    const lane = LANES.find((l) =>
+      lineup(s, other(p), l).some((id) => {
+        const u = s.units[id]
+        return u.kind === 'hero' && u.status.invisible && !u.status.revealed
+      }),
+    )
+    return lane ? playItem(s, p, iid, undefined, lane) : s
+  }
   if (item.target === 'lane') {
     const lane = item.id === 'dust' || item.id === 'shivas' ? laneMostEnemies(s, p) : busiestContested(s, p)
     return lane && itemLanes(s, p, item.id).includes(lane) ? playItem(s, p, iid, undefined, lane) : s

@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 
 const STATUSES: Array<[string, string]> = [
   ['Stun', 'Cannot cast, attack, or move.'],
-  ['Silence', 'Cannot cast an ability.'],
+  ['Silence', 'Cannot cast an ability, and the passive is off.'],
   ['Disarm', 'Cannot attack.'],
   ['Slow', 'Attacks last.'],
   ['Haste', 'Attacks first, ahead of the attribute order.'],
@@ -50,7 +50,8 @@ export function RulesDialog() {
                 shared item deck. You may draw up to 10 counting cards. At the end of the turn, discard counting cards until 7 remain.
                 Runes and tower cards do not count and are not discarded for this. The hero deck is 160 cards shuffled
                 together: all 127 heroes, 25 lane creeps and 8 siege creeps. You start with 5 cards from that deck. The
-                item deck is 60 shop cards. Playing one costs 1, 2, or 3 Gold. The rune deck is 20 cards (10 runes, two
+                item deck is 60 shop cards. Playing one costs 1, 2, or 3 Gold. Gem of True Sight costs 1 Gold and reveals
+                every enemy hero in a lane. The rune deck is 20 cards (10 runes, two
                 copies). Runes are free and do not count toward the hand limit.
                 Dead heroes from both sides go into one shared discard. Buyback returns any hero from the last 10 in that
                 pile, whoever it belonged to, for 4 Gold, or 5 if you have more towers standing than the enemy. Each hero
@@ -102,7 +103,7 @@ export function RulesDialog() {
             Two jungles hold one camp each, drawn from a 15-card jungle deck: Stone Golem, Thunderhide, Ice Shaman and Black
             Dragon, three each, plus one Roshan and two Tormentors. A normal neutral kill pays 2 Gold, 2 XP, and a rune.
             Roshan pays 3 Gold, 3 XP, a rune, and the Aegis. He evades the first damage each turn. His Roar, and the other
-            neutral ultimates, resolve only when 3 or more units are in the camp: Roar Disarms and deals 1 damage to every
+            neutral ultimates, resolve only when 2 or more units are in the camp: Roar Disarms and deals 1 damage to every
             enemy there. A stunned hero or neutral does not cast, move, or attack. Roshan never appears before round 4. The Tormentor pays 2 Gold, 2 XP,
             a rune, and a Refresher Shard. It gains a Shield each turn and reflects damage to the attacker and to each
             contesting Position 1.

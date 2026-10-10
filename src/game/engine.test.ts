@@ -83,6 +83,9 @@ describe('setup and core rules', () => {
     expect(new Set(heroIds).size).toBe(HEROES.length)
     expect(s.unitDeck).toHaveLength(pile.length - STARTING_HEROES * 2)
     expect(s.itemDeck).toHaveLength(60)
+    expect(s.itemDeck.filter((id) => id === 'gem')).toHaveLength(2)
+    expect(s.itemDeck.filter((id) => id === 'dust')).toHaveLength(2)
+    expect(s.itemDeck.filter((id) => id === 'smoke')).toHaveLength(2)
     expect(s.runeDeck).toHaveLength(20)
     for (const p of PLAYERS) {
       expect(s.players[p].hand).toHaveLength(5)
@@ -465,6 +468,31 @@ describe('items, runes and statuses', () => {
     expect(heroesOnBoard(s, 'radiant')[0].status.bonusDamage).toBe(1)
   })
 
+  it('Silence turns off the passive, the same way Break does', () => {
+    let s = setup(13, [hero('a', 'crystal_maiden')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = reveal(s)
+    heroesOnBoard(s, 'dire')[0].status.silenced = true
+    s = resolveRound(s)
+    expect(logHas(s, 'Counter Helix')).toBe(false)
+  })
+
+  it('Gem of True Sight reveals every enemy hero in the lane', () => {
+    let s = setup(14, [hero('a', 'sven'), item('g', 'gem')], [hero('b', 'riki')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = reveal(s)
+    const riki = heroesOnBoard(s, 'dire')[0]
+    riki.status.invisible = true
+    s.players.radiant.gold = 1
+    s = playItem(s, 'radiant', 'g', undefined, 'mid')
+    expect(s.units[riki.uid].status.invisible).toBe(false)
+    expect(s.units[riki.uid].status.revealed).toBe(true)
+    expect(logHas(s, 'Revealed by Gem of True Sight')).toBe(true)
+    expect(s.players.radiant.gold).toBe(0)
+  })
+
   it('Break turns off passives (Axe stops hitting back)', () => {
     let s = setup(13, [hero('a', 'crystal_maiden')], [hero('b', 'axe')])
     s = placeHero(s, 'radiant', 'a', 'mid')
@@ -630,7 +658,7 @@ describe('jungle, Roshan and Tormentor', () => {
     expect(logHas(s, 'hand is full')).toBe(false)
   })
 
-  it('Roshan Roars only when 3 units are in the camp', () => {
+  it('Roshan Roars only when 2 units are in the camp', () => {
     let quiet = setup(23, [hero('a', 'sven')])
     forceCamp(quiet, 'direJungle', 'roshan')
     quiet = placeHero(quiet, 'radiant', 'a', 'radiantJungle')
@@ -640,11 +668,10 @@ describe('jungle, Roshan and Tormentor', () => {
     expect(logHas(quiet, 'Disarmed by Roar')).toBe(false)
     expect(campNeutral(quiet, 'direJungle')?.hp).toBe(3)
 
-    let s = setup(29, [hero('a', 'sven'), hero('b', 'axe'), hero('c', 'tidehunter')])
+    let s = setup(29, [hero('a', 'sven'), hero('b', 'axe')])
     forceCamp(s, 'direJungle', 'roshan')
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
     s = placeHero(s, 'radiant', 'b', 'radiantJungle')
-    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
     for (const u of heroesOnBoard(s, 'radiant')) station(s, 'radiant', u.uid, 'direJungle')
     s = fight(s)
     expect(logHas(s, 'Roshan Roars!')).toBe(true)

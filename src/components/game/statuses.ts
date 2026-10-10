@@ -10,7 +10,7 @@ export interface StatusMark {
 const MARKS: Array<{ key: keyof RoundStatus; short: string; title: string; kind: 'buff' | 'debuff' }> = [
   ['shield', 'Shield', 'Shield: blocks one physical hit', 'buff'],
   ['stunned', 'Stun', 'Stunned: no ultimate, attack, or move', 'debuff'],
-  ['silenced', 'Silence', 'Silenced: no Ultimate', 'debuff'],
+  ['silenced', 'Silence', 'Silenced: no ultimate, and the passive is off', 'debuff'],
   ['broken', 'Break', 'Broken: passive off', 'debuff'],
   ['disarmed', 'Disarm', 'Disarmed: no attack', 'debuff'],
   ['slowed', 'Slow', 'Slowed: attacks last', 'debuff'],

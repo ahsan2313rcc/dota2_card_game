@@ -60,7 +60,7 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 - **Items:** shop cards cost their printed Gold, are single use, and resolve immediately in the Item step. Runes, tower cards and the boss rewards (Aegis, Refresher Shard) stay free. Refresher Orb casts the chosen Ultimate a second time on the same target. Refresher Shard still resets that hero's Ultimate cost to 1 XP.
 - **Runes:** 20 cards (2 each of Bounty, Regeneration, Double Damage, Shield, Arcane, Illusion, Invisibility, Haste, Wisdom, Water), dropped by neutral, Tormentor, and Roshan kills. A rune does not count toward the hand limit.
 - **Jungle:** each jungle has one camp drawn from a 15-card jungle deck: 4 neutral types ×3 (2 HP, with an attribute), Roshan and 2 Tormentors. The side that arrived first holds the camp (ties go to the jungle's owner) and picks a target each round. A contesting hero must attack the holder. A neutral or Tormentor kill gives 2 Gold, 2 XP, and a rune. Roshan gives 3 Gold, 3 XP, a rune, and the Aegis. The Tormentor also gives a Refresher Shard.
-- **Roshan:** 3 HP, never before round 4 (reshuffled and redrawn). Hits every enemy in the camp. Roar, Thunder Clap, Freezing Blast, and Fire Pit resolve only when 3 or more units are in the camp. Dual card: the killer's side gets +3 XP and Roshan flips into the Aegis; it returns to the jungle deck once used.
+- **Roshan:** 3 HP, never before round 4 (reshuffled and redrawn). Hits every enemy in the camp. Roar, Thunder Clap, Freezing Blast, and Fire Pit resolve only when 2 or more units are in the camp. Dual card: the killer's side gets +3 XP and Roshan flips into the Aegis; it returns to the jungle deck once used.
 - **Tormentor:** UNI, 2 HP, never attacks, Shield 1 that regenerates every round. Reflection (passive, Break stops it) returns damage to the attacker and the same amount to the other side's front line. Flips into a Refresher Shard.
 - **Boss rewards:** go to the killing side even if every attacker died. If contested, they go to the sole surviving side, otherwise to the jungle's owner.
 - **Assign:** heroes go to a lane or your own jungle. Creeps go to lanes. The enemy jungle is reached by rotation, not by playing a card straight into it.
@@ -71,7 +71,7 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 | Status | Effect |
 | --- | --- |
 | Stun | Skips the ultimate, the move, and the basic attack. A stunned neutral is locked the same way |
-| Silence | Skips the Ultimate |
+| Silence | Skips the ultimate and turns the passive off |
 | Mute | Cannot be targeted by its own side's items |
 | Break | Passive is ignored |
 | Disarm | Skips the basic attack |

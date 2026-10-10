@@ -59,7 +59,7 @@ export function isZoneId(id?: string): id is ZoneId {
 }
 
 export function hasTag(u: Unit | undefined, tag: string): boolean {
-  return !!u && !u.dead && u.kind === 'hero' && !!u.cardId && !u.status.broken && (getHero(u.cardId).script?.tags.includes(tag) ?? false)
+  return !!u && !u.dead && u.kind === 'hero' && !!u.cardId && !u.status.broken && !u.status.silenced && (getHero(u.cardId).script?.tags.includes(tag) ?? false)
 }
 
 export function scripted(u: Unit | undefined): boolean {
@@ -763,7 +763,7 @@ export function onUltCast(api: KitApi, caster: Unit) {
   if (hasTag(caster, 'onUlt:haste')) applyVerb(api, caster, caster, 'haste', ult)
   if (hasTag(caster, 'onUlt:invis')) applyVerb(api, caster, caster, 'invisible', ult)
   for (const a of friends(api.s, caster, caster.zone)) {
-    if (a.uid === caster.uid || a.status.broken) continue
+    if (a.uid === caster.uid || a.status.broken || a.status.silenced) continue
     if (hasTag(a, 'onUlt:healLane')) for (const ally of heroes(friends(api.s, a, a.zone))) api.heal(ally, getHero(a.cardId!).passive.name)
     if (hasTag(a, 'onUlt:largo')) for (const e of foes(api.s, a, a.zone).slice(0, 1)) api.magic(a, e.uid, 1, getHero(a.cardId!).passive.name)
     if (hasTag(a, 'onUlt:ogre')) {
@@ -776,7 +776,7 @@ export function onUltCast(api: KitApi, caster: Unit) {
     if (hasTag(a, 'onUlt:omni')) api.heal(caster, getHero(a.cardId!).passive.name)
   }
   for (const e of foes(api.s, caster, caster.zone)) {
-    if (e.kind !== 'hero' || e.status.broken) continue
+    if (e.kind !== 'hero' || e.status.broken || e.status.silenced) continue
     if (hasTag(e, 'onUlt:rubick')) api.xp(e.owner as PlayerId, 1)
     if (hasTag(e, 'onUlt:pugna')) api.magic(e, caster.uid, 1, getHero(e.cardId!).passive.name)
     if (hasTag(e, 'onUlt:veno') && !e.passiveSpent) {
@@ -793,7 +793,7 @@ function pos1(s: GameState, u: Unit) {
 export function opening(api: KitApi) {
   const s = api.s
   for (const u of Object.values(s.units)) {
-    if (u.dead || u.kind !== 'hero' || u.status.broken || !u.cardId) continue
+    if (u.dead || u.kind !== 'hero' || u.status.broken || u.status.silenced || !u.cardId) continue
     const psv = getHero(u.cardId).passive.name
     if (hasTag(u, 'once:invis') && !u.passiveSpent) {
       u.passiveSpent = true
@@ -945,7 +945,7 @@ export function endStepDamage(api: KitApi) {
 }
 
 export function attackExtra(s: GameState, u: Unit, target: Unit | undefined, day: boolean): number {
-  if (!scripted(u) || u.status.broken) return 0
+  if (!scripted(u) || u.status.broken || u.status.silenced) return 0
   let n = 0
   if (hasTag(u, 'atk:curse') && target?.status.cursed) n++
   if (hasTag(u, 'atk:stun') && target?.status.stunned) n++
@@ -1111,7 +1111,7 @@ export function onDeath(api: KitApi, dead: Unit, src: Unit | null) {
 }
 
 export function onHit(api: KitApi, attacker: Unit, target: Unit, dealt: number) {
-  if (dealt <= 0 || attacker.status.broken) return
+  if (dealt <= 0 || attacker.status.broken || attacker.status.silenced) return
   const psv = attacker.cardId && attacker.kind === 'hero' ? getHero(attacker.cardId).passive.name : 'Attack'
   if (hasTag(attacker, 'onHit:disarm') && !target.dead) applyVerb(api, attacker, target, 'disarm', psv)
   if (hasTag(attacker, 'onHit:stun') && !target.dead) applyVerb(api, attacker, target, 'stun', psv)
@@ -1177,7 +1177,7 @@ export function noteHeal(api: KitApi, u: Unit) {
 }
 
 export function lethalSave(u: Unit): 'full' | 'wound' | null {
-  if (u.passiveSpent || u.status.broken || !scripted(u)) return null
+  if (u.passiveSpent || u.status.broken || u.status.silenced || !scripted(u)) return null
   if (hasTag(u, 'save:full')) return 'full'
   if (hasTag(u, 'save:wound')) return 'wound'
   return null

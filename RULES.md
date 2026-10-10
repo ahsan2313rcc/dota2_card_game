@@ -141,9 +141,9 @@ The side that arrived first holds the camp. A tie goes to the owner of that jung
 
 Clearing a normal neutral pays 2 Gold, 2 XP, and one rune card to the killer's side.
 
-A neutral ultimate (Thunder Clap, Freezing Blast, Fire Pit, or Roshan's Roar) resolves only when 3 or more units are in that camp. The neutral itself does not count. A stunned neutral does not cast it.
+A neutral ultimate (Thunder Clap, Freezing Blast, Fire Pit, or Roshan's Roar) resolves only when 2 or more units are in that camp. The neutral itself does not count. A stunned neutral does not cast it.
 
-**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. Roar, when the camp holds 3 or more units, Disarms them and deals 1 damage to each. His bounty is 3 Gold, 3 XP, a rune, and the Aegis.
+**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. Roar, when the camp holds 2 or more units, Disarms them and deals 1 damage to each. His bounty is 3 Gold, 3 XP, a rune, and the Aegis.
 
 **Tormentor** is Universal, 2 health, and never attacks. It gains 1 Shield at the start of resolution if it has none. Reflection returns the damage to the attacker and the same amount to the other side's Position 1 in that camp. A Shield blocks reflected damage. Break turns Reflection off. Its bounty is 2 Gold, 2 XP, a rune, and a Refresher Shard.
 
@@ -164,7 +164,7 @@ Round statuses end at Cleanup. Health, permanent attack bonuses, the ultimate-co
 | Status | Effect |
 | --- | --- |
 | Stun | Skips the ultimate, the move, and the basic attack. The same lock applies to a neutral. |
-| Silence | Skips the ultimate. |
+| Silence | Skips the ultimate and turns the passive off. |
 | Break | The passive is off. |
 | Disarm | Skips the basic attack. |
 | Slow | The basic attack waits until every unslowed unit has attacked. |
@@ -201,8 +201,9 @@ Shop cards cost Gold and are single use. Runes drop from normal neutral kills on
 | --- | --- | --- | --- |
 | Town Portal Scroll | 1 | 6 | Teleport an allied hero who is not Rooted to any lane. |
 | Ward | 1 | 3 | Enemy heroes who enter this lane are face-up at the next Reveal. |
-| Smoke | 1 | 3 | Allied heroes placed in this lane stay hidden at the next Reveal. |
-| Dust | 1 | 3 | Mute every enemy hero in the lane. |
+| Smoke | 1 | 2 | Allied heroes placed in this lane stay hidden at the next Reveal. |
+| Dust | 1 | 2 | Mute every enemy hero in the lane. |
+| Gem of True Sight | 1 | 2 | Reveal every enemy hero in a lane and remove Invisible. |
 | Healing Salve | 1 | 4 | Heal an allied hero to Healthy. |
 | Clarity | 1 | 3 | Gain 1 XP. |
 | Gloves of Haste | 1 | 3 | An allied hero gains Haste. |
@@ -277,10 +278,10 @@ An ultimate is aimed at the caster's own lane or zone unless the card names anot
 | Camp | Attribute | Health | Attack |
 | --- | --- | --- | --- |
 | Stone Golem | Strength | 2 | Position 1. Hits against it are capped at 1. Immune to magical ultimate damage. |
-| Thunderhide | Agility | 2 | Haste. Hits every enemy hero and applies Slow. Thunder Clap needs 3 units in the camp. |
-| Ice Shaman | Intelligence | 2 | Silences the camp. Hits each Position 1 and Silences them. Freezing Blast needs 3 units in the camp. |
-| Black Dragon | Universal | 2 | Accuracy. Hits every unit in the camp. Fire Pit needs 3 units in the camp. |
-| Roshan | Universal | 3 | Ignores the first damage each round. Hits every enemy. Roar needs 3 units in the camp. |
+| Thunderhide | Agility | 2 | Haste. Hits every enemy hero and applies Slow. Thunder Clap needs 2 units in the camp. |
+| Ice Shaman | Intelligence | 2 | Silences the camp. Hits each Position 1 and Silences them. Freezing Blast needs 2 units in the camp. |
+| Black Dragon | Universal | 2 | Accuracy. Hits every unit in the camp. Fire Pit needs 2 units in the camp. |
+| Roshan | Universal | 3 | Ignores the first damage each round. Hits every enemy. Roar needs 2 units in the camp. |
 | Tormentor | Universal | 2 | Does not attack. Shield and Reflection, as above. |
 
 ## What this prototype does not include

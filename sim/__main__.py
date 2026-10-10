@@ -712,8 +712,8 @@ def fight_jungle(g: Game) -> None:
         camp = g.camps[p]
         if not heroes or camp is None or camp.hp <= 0:
             continue
-        # Roar, Thunder Clap, Freezing Blast, and Fire Pit need 3 units in the camp.
-        if len(heroes) >= 3:
+        # Roar, Thunder Clap, Freezing Blast, and Fire Pit need 2 units in the camp.
+        if len(heroes) >= 2:
             if camp.kind == "roshan":
                 for hero in heroes:
                     hero.disarmed = True

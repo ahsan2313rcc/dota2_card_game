@@ -127,7 +127,7 @@ export function Inspector({ unit, state }: { unit?: Unit; state?: GameState }) {
           {h.ult.text}
         </p>
       ) : (
-        <p className={cn('text-zinc-300', unit.status.broken && 'line-through opacity-60')}>
+        <p className={cn('text-zinc-300', (unit.status.broken || unit.status.silenced) && 'line-through opacity-60')}>
           <span className="font-semibold text-zinc-100">Passive · {h.passive.name}:</span> {h.passive.text}
         </p>
       )}

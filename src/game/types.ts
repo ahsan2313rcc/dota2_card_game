@@ -344,9 +344,14 @@ export interface ComebackRules {
   fountain: boolean
 }
 
+/** Dire's personality in the playable game. Missing means balanced. */
+export type AiStyle = 'balanced' | 'lane' | 'jungler' | 'defender' | 'hunter'
+
 export interface Settings {
   /** Not exposed in the UI; lets simulations compare rule sets. Missing means all on. */
   rules?: ComebackRules
+  /** Who Dire plays as. A new game keeps the current choice. */
+  direStyle?: AiStyle
 }
 
 export interface GameState {

@@ -8,6 +8,7 @@ import { Minimap, type MapInteraction } from '@/components/game/Minimap'
 import { PhaseTracker } from '@/components/game/PhaseTracker'
 import { PlayerBar } from '@/components/game/PlayerBar'
 import { Roster } from '@/components/game/Roster'
+import { OpponentSelect, opponentLabel } from '@/components/game/OpponentSelect'
 import { RulesDialog } from '@/components/game/RulesDialog'
 import { TowerCards } from '@/components/game/TowerCards'
 import { Button } from '@/components/ui/button'
@@ -216,7 +217,8 @@ export default function App() {
             </span>
           </div>
           <PhaseTracker phase={s.phase} />
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <OpponentSelect value={s.settings.direStyle} onChange={(direStyle) => dispatch({ type: 'settings', settings: { direStyle } })} />
             <RulesDialog />
             <Button
               variant="outline"
@@ -235,7 +237,7 @@ export default function App() {
 
       <main className="mx-auto grid max-w-[1600px] gap-4 px-3 py-4 sm:px-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-3">
-          <PlayerBar s={s} player="dire" subtitle="AI opponent" />
+          <PlayerBar s={s} player="dire" subtitle={`AI · ${opponentLabel(s.settings.direStyle)}`} />
           <div className="overflow-x-auto">
             <Minimap s={s} ia={ia} viewer={HUMAN} />
           </div>

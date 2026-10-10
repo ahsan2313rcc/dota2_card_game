@@ -57,12 +57,14 @@ import {
   type PlayerId,
   type Unit,
   type ZoneId,
+  type AiStyle,
 } from './types'
+
+export type { AiStyle }
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
 /** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. */
-export type AiStyle = 'balanced' | 'lane' | 'jungler' | 'defender' | 'hunter'
 
 const HARMFUL = new Set([
   'stun',

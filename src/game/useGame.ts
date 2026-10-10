@@ -1,5 +1,5 @@
 import { useReducer } from 'react'
-import { aiAssign, aiDraw, aiOneResponse, playAiRound, takeRotations } from './ai'
+import { aiAssign, aiDraw, aiOneResponse, playAiRound, takeRotations, type AiStyle } from './ai'
 import {
   buyShield,
   buyback,
@@ -64,10 +64,14 @@ function respondAi(s: GameState): GameState {
   return s
 }
 
+function opponentStyle(s: GameState): AiStyle {
+  return s.settings.direStyle ?? 'balanced'
+}
+
 /** After Radiant is finished, Dire spends whatever rotations it has left. */
 function finishRotation(s: GameState): GameState {
   if (s.players[HUMAN].rotationsUsed < ROTATIONS_PER_ROUND) return s
-  return discardToHandLimit(endRotation(takeRotations(s, AI)), AI)
+  return discardToHandLimit(endRotation(takeRotations(s, AI, opponentStyle(s))), AI)
 }
 
 function reducer(s: GameState, a: Action): GameState {
@@ -96,7 +100,7 @@ function reducer(s: GameState, a: Action): GameState {
     case 'move':
       return moveInLineup(s, a.uid, a.dir)
     case 'endAssign':
-      return respondAi(reveal(aiAssign(s, AI)))
+      return respondAi(reveal(aiAssign(s, AI, opponentStyle(s))))
     case 'playItem':
       return respondAi(playItem(s, HUMAN, a.handIid, a.target, a.lane))
     case 'declareUlt':

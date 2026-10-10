@@ -119,6 +119,62 @@ describe('setup and core rules', () => {
     expect(logHas(s, 'Stunned and cannot attack')).toBe(true)
   })
 
+  it('an ultimate hits a tower only when the card says so', () => {
+    let gyro = setup(3, [hero('g', 'gyrocopter')])
+    gyro = placeHero(gyro, 'radiant', 'g', 'mid')
+    gyro = reveal(gyro)
+    gyro.players.radiant.xp = 2
+    gyro = declareUlt(gyro, heroesOnBoard(gyro, 'radiant')[0].uid)
+    expect(logHas(gyro, 'casts Call Down')).toBe(true)
+    expect(gyro.players.dire.structures.towers.mid.t1).toBe(3)
+    expect(gyro.players.dire.structures.ancient).toBe(10)
+
+    let lesh = setup(4, [hero('l', 'leshrac')])
+    lesh = placeHero(lesh, 'radiant', 'l', 'mid')
+    lesh = reveal(lesh)
+    lesh.players.radiant.xp = 2
+    lesh = declareUlt(lesh, heroesOnBoard(lesh, 'radiant')[0].uid)
+    expect(logHas(lesh, 'casts Pulse Nova')).toBe(true)
+    expect(logHas(lesh, 'blasts the Dire Mid tower')).toBe(true)
+    expect(lesh.players.dire.structures.towers.mid.t1).toBe(2)
+    expect(lesh.players.dire.structures.ancient).toBe(10)
+
+    let razor = setup(5, [hero('r', 'razor')], [hero('a', 'axe')])
+    razor = placeHero(razor, 'radiant', 'r', 'mid')
+    razor = placeHero(razor, 'dire', 'a', 'mid')
+    razor = reveal(razor)
+    const axe = heroesOnBoard(razor, 'dire')[0]
+    axe.hp = 1
+    razor.players.radiant.xp = 2
+    razor = declareUlt(razor, heroesOnBoard(razor, 'radiant')[0].uid)
+    expect(razor.players.dire.structures.towers.mid.t1).toBe(3)
+    expect(razor.units[axe.uid].dead).toBe(true)
+
+    let storm = setup(6, [hero('r2', 'razor')])
+    storm = placeHero(storm, 'radiant', 'r2', 'top')
+    storm = reveal(storm)
+    storm.players.radiant.xp = 2
+    storm = declareUlt(storm, heroesOnBoard(storm, 'radiant')[0].uid)
+    expect(logHas(storm, 'casts Eye of the Storm')).toBe(true)
+    expect(storm.players.dire.structures.towers.top.t1).toBe(2)
+    expect(storm.players.dire.structures.ancient).toBe(10)
+
+    let open = setup(7, [hero('g2', 'gyrocopter'), hero('l2', 'leshrac')])
+    open = placeHero(open, 'radiant', 'g2', 'mid')
+    open = placeHero(open, 'radiant', 'l2', 'mid')
+    open = reveal(open)
+    open.players.dire.structures.towers.mid.t1 = 0
+    open.players.dire.structures.towers.mid.t2 = 0
+    open.players.radiant.xp = 4
+    const casters = heroesOnBoard(open, 'radiant')
+    open = declareUlt(open, casters.find((u) => u.cardId === 'gyrocopter')!.uid)
+    open = passResponse(open, 'dire')
+    open = declareUlt(open, casters.find((u) => u.cardId === 'leshrac')!.uid)
+    expect(logHas(open, 'casts Call Down')).toBe(true)
+    expect(logHas(open, 'casts Pulse Nova')).toBe(true)
+    expect(open.players.dire.structures.ancient).toBe(10)
+  })
+
   it('limits hero placements to 3 per round', () => {
     let s = setup(7, ['axe', 'sven', 'pudge', 'tidehunter', 'wraith_king'].map((id, i) => hero(String(i), id)))
     for (const c of [...s.players.radiant.hand]) s = placeHero(s, 'radiant', c.iid, 'mid')

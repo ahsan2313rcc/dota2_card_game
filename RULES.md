@@ -121,7 +121,7 @@ At the end of the turn, your Ancient fully heals your own heroes in every lane w
 
 A hero has 2 health: Healthy, then Wounded, then slain. Health persists from round to round. Lane creeps and siege creeps have 1 health. Creeps stay on the board until killed.
 
-A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card bonuses, minus Enfeeble, to a minimum of 0. It hits enemy Position 1. With no enemy left in the zone, a unit in a lane hits the next structure there. Siege creeps deal 2 to structures. Divine Rapier makes a hero's basic attacks kill enemy heroes.
+A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card bonuses, minus Enfeeble, to a minimum of 0. It hits enemy Position 1. With no enemy left in the zone, a unit in a lane hits the next structure there. Siege creeps deal 2 to structures. Divine Rapier makes a hero's basic attacks kill enemy heroes. An ultimate hits the units named on its card. It damages a tower when the card names that tower, and that damage stops at the tower.
 
 **Attribute counter.** Agility counters Strength, Strength counters Intelligence, Intelligence counters Agility. Universal is outside the loop. A basic attack against the countered attribute is lethal: it deals the target's current health. Neutrals have attributes and can be countered. The lethal hit is only a basic attack. Magical damage, tower damage, and physical damage from an ultimate do not counter. After the lethal amount is chosen, a Stone Golem still takes at most 1 from that hit.
 

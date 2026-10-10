@@ -51,6 +51,10 @@ class Hero:
     stun: bool
     amp: bool
     cleave: bool
+    # Extra tower damage printed on the card. 0 means the ultimate never hits a building.
+    tower: int = 0
+    # Eye of the Storm: a wounded lane enemy, otherwise the standing tower.
+    razor: bool = False
 
 
 def load_heroes() -> list[Hero]:
@@ -64,8 +68,18 @@ def load_heroes() -> list[Hero]:
         damage = 0
         if any(token in ult for token in ("mdmg laneE 2", "pdmg target 2", "mdmg target 2")):
             damage = 2
-        elif any(token in ult for token in ("mdmg", "pdmg", "slam", "timber", "sky", "hood", "luna", "snap", "razor", "slash", "duel")):
+        elif any(token in ult for token in ("mdmg", "pdmg", "slam", "timber", "sky", "hood", "luna", "snap", "slash", "duel")):
             damage = 1
+        tower = 0
+        razor = False
+        for part in ult.split("|"):
+            bits = part.split()
+            if not bits:
+                continue
+            if bits[0] == "tower":
+                tower = int(bits[1]) if len(bits) > 1 and bits[1].isdigit() else 1
+            elif bits[0] == "razor":
+                razor = True
         heroes.append(
             Hero(
                 id=m.group("id"),
@@ -77,6 +91,8 @@ def load_heroes() -> list[Hero]:
                 stun="stun" in ult,
                 amp="amplify" in ult or "aura:amp" in tags or "aura:thirst" in tags,
                 cleave="targets:all" in tags or "targets:cleave" in tags,
+                tower=tower,
+                razor=razor,
             )
         )
     if len(heroes) != 127:
@@ -410,10 +426,32 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
         if side.xp < cost:
             continue
         foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
-        score = (hero.damage + hero.stun + hero.amp, len(foes), -hero.cost)
+        tw = g.sides[other(p)].towers[lane]
+        standing = tw["t1"] > 0 or tw["t2"] > 0
+        power = cast_power(hero, foes, standing)
+        if power <= 0:
+            continue
+        score = (power, len(foes), -hero.cost)
         if best is None or score > best[0]:
             best = (score, lane, unit)
     return None if best is None else (best[1], best[2])
+
+
+def cast_power(hero: Hero, foes: list[Unit], standing: bool) -> int:
+    """How much this ultimate does right now. Generic damage needs a unit. A tower hit needs a standing tower."""
+    wounded = any(unit.hp < 2 for unit in foes)
+    power = 0
+    if foes and hero.damage:
+        power += hero.damage
+    if foes and hero.stun:
+        power += 1
+    if hero.amp:
+        power += 1
+    if hero.razor and (wounded or standing):
+        power += 1
+    elif hero.tower and standing:
+        power += hero.tower
+    return power
 
 
 def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
@@ -427,12 +465,17 @@ def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
     if unit.hero.stun:
         for foe in foes:
             foe.stunned = True
-    if unit.hero.damage:
-        if foes:
-            for foe in foes:
-                hurt(g, foe, unit.hero.damage, p)
+    if unit.hero.damage and foes:
+        for foe in foes:
+            hurt(g, foe, unit.hero.damage, p)
+    if unit.hero.razor:
+        wounded = next((foe for foe in foes if foe.hp < 2), None)
+        if wounded:
+            hurt(g, wounded, 1, p)
         else:
-            hit_structure(g, other(p), lane, unit.hero.damage, p)
+            hit_structure(g, other(p), lane, 1, p, ancient=False)
+    elif unit.hero.tower:
+        hit_structure(g, other(p), lane, unit.hero.tower, p, ancient=False)
 
 
 def legal_shield(g: Game, p: str) -> Unit | None:
@@ -624,6 +667,8 @@ def apply_rune(g: Game, p: str) -> None:
             hero.hero.stun,
             hero.hero.amp,
             hero.hero.cleave,
+            hero.hero.tower,
+            hero.hero.razor,
         )
 
 
@@ -717,7 +762,7 @@ def combat(g: Game) -> None:
         cast(g)
 
 
-def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str) -> None:
+def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str, *, ancient: bool = True) -> None:
     side = g.sides[defender]
     tw = side.towers[lane]
     if tw["t1"] > 0 or tw["t2"] > 0:
@@ -732,7 +777,7 @@ def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str) ->
         if tw["t2"] == 0:
             g.sides[attacker].gold += TOWER_GOLD["t2"]
             g.towers_fallen += 1
-    else:
+    elif ancient:
         side.ancient = max(0, side.ancient - dmg)
         if side.ancient == 0 and g.winner is None:
             g.winner = attacker

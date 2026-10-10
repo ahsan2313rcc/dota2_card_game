@@ -1081,6 +1081,94 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('mid')
   })
 
+  it('a hunter cuts a three-hero Tier 2 with two and pushes with the third', () => {
+    let s = setup(
+      40,
+      [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')],
+      [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')],
+    )
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = placeHero(s, 'radiant', 'r3', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+  })
+
+  it('a hunter leaves a two-hero stack and pushes an empty lane', () => {
+    let s = setup(47, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
+  })
+
+  it('a hunter ignores a Tier 1 chip and stacks the open Tier 2', () => {
+    let s = setup(41, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
+  })
+
+  it('a hunter sends the spare heroes to the other open tower', () => {
+    let s = setup(42, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge'), hero('d4', 'axe'), hero('d5', 'sven')])
+    s = placeHero(s, 'dire', 'd1', 'top')
+    s = placeHero(s, 'dire', 'd2', 'top')
+    s = placeHero(s, 'dire', 'd3', 'top')
+    s.players.dire.placedThisRound = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s.players.radiant.structures.towers.mid.t1 = 0
+    s = aiAssign(s, 'dire', 'hunter')
+    const fresh = heroesOnBoard(s, 'dire').filter((u) => u.cardId === 'axe' || u.cardId === 'sven')
+    expect(fresh).toHaveLength(2)
+    expect(fresh.every((u) => u.zone === 'mid')).toBe(true)
+  })
+
+  it('a hunter answers an open Ancient with every hero while a Tier 2 is open', () => {
+    let s = setup(43, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s.players.radiant.structures.towers.bot.t1 = 0
+    s.players.radiant.structures.towers.bot.t2 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'bot')).toBe(true)
+  })
+
+  it('a hunter pushes an open Tier 2 from round 3 and does not farm', () => {
+    let s = setup(44, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s.round = 3
+    s.players.radiant.structures.towers.top.t1 = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
+  })
+
+  it('a spare hunter stays on the exposed Tier 2 instead of farming', () => {
+    let s = setup(45, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge'), hero('d4', 'axe')])
+    s.round = 3
+    s = placeHero(s, 'dire', 'd1', 'top')
+    s = placeHero(s, 'dire', 'd2', 'top')
+    s = placeHero(s, 'dire', 'd3', 'top')
+    s.players.dire.placedThisRound = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'axe')?.zone).toBe('top')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+  })
+
+  it('a hunter pushes from round 3 instead of farming the camp', () => {
+    let s = setup(46, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s.round = 3
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'hunter')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
+  })
+
   it('a jungler on an empty lane stays to push instead of invading', () => {
     let s = setup(20, [hero('a', 'sven'), hero('b', 'axe'), hero('c', 'pudge')])
     s = placeHero(s, 'radiant', 'a', 'top')

@@ -101,7 +101,7 @@ def load_heroes() -> list[Hero]:
 
 
 ENOUGH_HEROES = 5
-STYLES = ("balanced", "lane", "jungler", "defender")
+STYLES = ("balanced", "lane", "jungler", "defender", "hunter")
 
 
 @dataclass
@@ -293,11 +293,11 @@ NEUTRAL_KILL = 5
 
 
 def garrison(t1: int, t2: int, foes: int, style: str) -> int:
-    """Jungler holds the Ancient with all 5. A Tier 2 takes one sacrificial hero from lane, attackers minus one from a jungler, and attackers plus one from a defender."""
+    """Jungler and hunter hold the Ancient with all 5. Hunter meets a 3-stack Tier 2 with two heroes and a pair with one."""
     if foes <= 0:
         return 0
     if t1 <= 0 and t2 <= 0:
-        if style == "jungler":
+        if style in ("jungler", "hunter"):
             return 5
         if style == "lane":
             return max(0, foes - 1)
@@ -307,10 +307,10 @@ def garrison(t1: int, t2: int, foes: int, style: str) -> int:
             return 1
         if style == "defender":
             return min(5, foes + 1)
-        if style == "jungler":
+        if style in ("jungler", "hunter"):
             return min(5, max(0, foes - 1))
         return foes
-    if style == "jungler":
+    if style in ("jungler", "hunter"):
         return 0
     if style == "lane":
         return 1 if t1 <= foes else 0
@@ -325,9 +325,9 @@ def defend_value(t1: int, t2: int, foes: int, mine: int, style: str) -> int:
     if mine >= garrison(t1, t2, foes, style):
         return 0
     if t1 <= 0 and t2 <= 0:
-        return 70 if style == "jungler" else 50 + foes
+        return 70 if style in ("jungler", "hunter") else 50 + foes
     if t1 <= 0:
-        if style in ("lane", "jungler", "defender"):
+        if style in ("lane", "jungler", "defender", "hunter"):
             return 40
         raw = 2 + 2 * max(t2, 0) + 3
         return raw - 4 if mine else raw
@@ -356,6 +356,9 @@ def lane_value(g: Game, p: str, lane: str) -> int:
     mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
     ancient_open = foe["t1"] <= 0 and foe["t2"] <= 0
     if style == "jungler":
+        attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
+    elif style == "hunter":
+        # Same thin-lane stack as a jungler. The bodies a jungler would park in the camp stay on the map.
         attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
     else:
         crowd = max(0, mine - 2) if style == "lane" else mine * 3
@@ -388,6 +391,8 @@ def jungle_value(g: Game, p: str) -> int:
         if mine >= cap:
             return -999
         return 19 if camp.kind in ("roshan", "tormentor") else 18
+    if style == "hunter":
+        return -999
     if lane_heroes(g, p) < 2:
         return -999
     cap = 2 if camp.kind == "roshan" else 3

@@ -5,7 +5,8 @@
 The simulator uses the printed hero sheet in ``src/game/roster.ts`` and the version 3
 economy. It is a lane-level model: two heuristic sides, real ability costs, attack
 order, tower bounties, and hero-kill income. A thin board spends gold drawing heroes.
-A stocked board spends gold playing items. Each active ability can be cast once per
+A stocked board spends gold playing items. Each side can send a hero to its home jungle
+once the lanes are covered. Each active ability can be cast once per
 round, or twice that round when a Refresher is played. The full status list is not
 simulated.
 """
@@ -89,8 +90,10 @@ ENOUGH_HEROES = 3
 @dataclass
 class Unit:
     hero: Hero
+    owner: str = ""
     hp: int = 2
     stunned: bool = False
+    disarmed: bool = False
     haste: bool = False
     slow: bool = False
     # Casts this round. Reset at cleanup, so the same ability is available again next round.
@@ -98,8 +101,9 @@ class Unit:
     # A Refresher played this round allows a second cast at no XP.
     refresher: bool = False
     amplify: int = 0
-    # One Shield. It stays through cleanup and pops on the next physical hit.
+    # One Shield. A bought Shield stays through cleanup. A rune Shield does not.
     shield: int = 0
+    persist_shield: bool = False
 
 
 @dataclass
@@ -121,6 +125,14 @@ def standing(side: Side) -> int:
 
 
 @dataclass
+class Camp:
+    kind: str
+    hp: int
+    shield: int = 0
+    evade: int = 0
+
+
+@dataclass
 class Game:
     rng: random.Random
     heroes: list[Hero]
@@ -133,13 +145,32 @@ class Game:
     casts: dict[str, int] = field(default_factory=dict)
     items: dict[str, int] = field(default_factory=dict)
     shields: dict[str, int] = field(default_factory=dict)
+    neutrals: dict[str, int] = field(default_factory=dict)
+    buybacks: dict[str, int] = field(default_factory=dict)
+    neutral_kills: dict[str, int] = field(default_factory=dict)
+    jungle_sent: dict[str, int] = field(default_factory=dict)
+    aegis: dict[str, int] = field(default_factory=dict)
+    jungle: dict[str, list[Unit]] = field(default_factory=dict)
+    camps: dict[str, "Camp | None"] = field(default_factory=dict)
+    neutral_deck: list[str] = field(default_factory=list)
+    neutral_discard: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.board = {p: {lane: [] for lane in LANES} for p in ("radiant", "dire")}
+        self.jungle = {p: [] for p in ("radiant", "dire")}
+        self.camps = {p: None for p in ("radiant", "dire")}
         self.played = {p: 0 for p in ("radiant", "dire")}
         self.casts = {p: 0 for p in ("radiant", "dire")}
         self.items = {p: 0 for p in ("radiant", "dire")}
         self.shields = {p: 0 for p in ("radiant", "dire")}
+        self.neutrals = {p: 0 for p in ("radiant", "dire")}
+        self.buybacks = {p: 0 for p in ("radiant", "dire")}
+        self.neutral_kills = {p: 0 for p in ("radiant", "dire")}
+        self.jungle_sent = {p: 0 for p in ("radiant", "dire")}
+        self.aegis = {p: 0 for p in ("radiant", "dire")}
+        deck = ["golem", "thunderhide", "ice_shaman", "dragon"] * 3 + ["roshan", "tormentor", "tormentor"]
+        self.rng.shuffle(deck)
+        self.neutral_deck = deck
 
 
 def other(p: str) -> str:
@@ -158,7 +189,17 @@ def upkeep(g: Game) -> None:
 
 
 def living(g: Game, p: str) -> list[tuple[str, Unit]]:
-    return [(lane, unit) for lane in LANES for unit in g.board[p][lane] if unit.hp > 0]
+    rows = [(lane, unit) for lane in LANES for unit in g.board[p][lane] if unit.hp > 0]
+    rows += [("jungle", unit) for unit in g.jungle[p] if unit.hp > 0]
+    return rows
+
+
+def lane_heroes(g: Game, p: str) -> int:
+    return sum(1 for lane in LANES for unit in g.board[p][lane] if unit.hp > 0)
+
+
+def board_size(g: Game, p: str) -> int:
+    return lane_heroes(g, p) + sum(1 for unit in g.jungle[p] if unit.hp > 0)
 
 
 def draw_and_deploy(g: Game) -> None:
@@ -171,10 +212,14 @@ def draw_and_deploy(g: Game) -> None:
                 side.hand.append(g.rng.choice(g.heroes))
         placed = 0
         side.hand.sort(key=lambda h: (h.kind != "active", -h.damage, h.cost))
-        while side.hand and placed < 3 and sum(len(g.board[p][lane]) for lane in LANES) < 5:
+        while side.hand and placed < 3 and board_size(g, p) < 5:
             hero = side.hand.pop(0)
-            lane = weakest_lane(g, p)
-            g.board[p][lane].append(Unit(hero, haste=hero.amp and hero.kind == "passive"))
+            unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
+            if jungle_value(g, p) > max(lane_value(g, p, lane) for lane in LANES):
+                g.jungle[p].append(unit)
+                g.jungle_sent[p] += 1
+            else:
+                g.board[p][weakest_lane(g, p)].append(unit)
             placed += 1
             g.played[p] += 1
         # Items are played onto heroes already on the board, so the gold leaves the bank.
@@ -196,6 +241,52 @@ def draw_and_deploy(g: Game) -> None:
             g.items[p] += 1
 
 
+def tower_pressure(t1: int, t2: int) -> int:
+    if t1 <= 0 and t2 <= 0:
+        return 8
+    if t1 <= 0:
+        return 5 + (TOWER["t2"] - t2)
+    return TOWER["t1"] - t1 + 1
+
+
+def lane_value(g: Game, p: str, lane: str) -> int:
+    foe = g.sides[other(p)].towers[lane]
+    own = g.sides[p].towers[lane]
+    foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
+    mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
+    score = tower_pressure(foe["t1"], foe["t2"]) * 2 + foes * 2 - mine * 3
+    wounded = own["t1"] < TOWER["t1"] or own["t2"] < TOWER["t2"]
+    standing_tw = own["t1"] > 0 or own["t2"] > 0
+    if wounded and foes > 0 and standing_tw:
+        score += 8 + foes * 2
+    if not standing_tw and foes > 0:
+        score += 10
+    return score
+
+
+def jungle_value(g: Game, p: str) -> int:
+    """Home jungle only, and only once the lanes are staffed and no tower is in a fight."""
+    camp = g.camps[p]
+    if camp is None or camp.hp <= 0:
+        return -999
+    for lane in LANES:
+        own = g.sides[p].towers[lane]
+        wounded = own["t1"] < TOWER["t1"] or own["t2"] < TOWER["t2"]
+        foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
+        if wounded and foes > 0:
+            return -999
+    if lane_heroes(g, p) < 2:
+        return -999
+    mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
+    if camp.kind == "roshan" and mine < 2:
+        return 7
+    if camp.kind == "tormentor" and mine < 3:
+        return 6
+    if camp.kind not in ("roshan", "tormentor") and mine == 0:
+        return 4
+    return -999
+
+
 def weakest_lane(g: Game, p: str) -> str:
     foe = g.sides[other(p)]
 
@@ -212,6 +303,8 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
     side = g.sides[p]
     best: tuple[tuple[int, int, int], str, Unit] | None = None
     for lane, unit in living(g, p):
+        if lane == "jungle":
+            continue
         hero = unit.hero
         if hero.kind != "active" or unit.stunned:
             continue
@@ -257,6 +350,9 @@ def legal_shield(g: Game, p: str) -> Unit | None:
 
     def threat(unit: Unit) -> tuple[int, int]:
         lane = next(lane for lane, candidate in living(g, p) if candidate is unit)
+        if lane == "jungle":
+            camp = g.camps[p]
+            return ((1 if camp is not None and camp.hp > 0 else 0), -unit.hp)
         foes = sum(1 for foe in g.board[other(p)][lane] if foe.hp > 0)
         return (foes, -unit.hp)
 
@@ -266,6 +362,7 @@ def legal_shield(g: Game, p: str) -> Unit | None:
 def buy_shield(g: Game, p: str, unit: Unit) -> None:
     g.sides[p].xp -= 3
     unit.shield = 1
+    unit.persist_shield = True
     g.shields[p] += 1
 
 
@@ -292,10 +389,17 @@ def cast(g: Game) -> None:
 
 
 def hurt(g: Game, unit: Unit, amount: int, killer: str) -> None:
-    if unit.hp <= 0:
+    if unit.hp <= 0 or amount <= 0:
         return
     unit.hp -= amount
-    if unit.hp <= 0:
+    if unit.hp > 0:
+        return
+    owner = unit.owner
+    if owner in g.aegis and g.aegis[owner] > 0:
+        g.aegis[owner] -= 1
+        unit.hp = 2
+        return
+    if killer in g.sides:
         g.sides[killer].kills += 1
 
 
@@ -352,10 +456,146 @@ def resolve_batch(g: Game, batch: list[tuple[int, int, int, str, str, Unit]]) ->
             hit_structure(g, other(p), lane, dmg, p)
 
 
+def draw_neutral(g: Game) -> str | None:
+    skipped: list[str] = []
+    kind: str | None = None
+    while True:
+        if not g.neutral_deck:
+            if not g.neutral_discard:
+                break
+            g.neutral_deck = g.neutral_discard
+            g.neutral_discard = []
+            g.rng.shuffle(g.neutral_deck)
+        nxt = g.neutral_deck.pop()
+        if nxt == "roshan" and g.round < 4:
+            skipped.append(nxt)
+            continue
+        kind = nxt
+        break
+    g.neutral_deck.extend(skipped)
+    if skipped:
+        g.rng.shuffle(g.neutral_deck)
+    return kind
+
+
+def spawn_camps(g: Game) -> None:
+    for p in ("radiant", "dire"):
+        camp = g.camps[p]
+        if camp is not None and camp.hp > 0:
+            if camp.kind in ("golem", "tormentor"):
+                camp.shield = 1
+            if camp.kind == "roshan":
+                camp.evade = 1
+            continue
+        kind = draw_neutral(g)
+        if kind is None:
+            g.camps[p] = None
+            continue
+        g.camps[p] = Camp(
+            kind,
+            3 if kind == "roshan" else 2,
+            shield=1 if kind in ("golem", "tormentor") else 0,
+            evade=1 if kind == "roshan" else 0,
+        )
+
+
+RUNES = ("gold", "regen", "dd", "shield", "arcane", "illusion", "invis", "haste", "wisdom", "water")
+
+
+def apply_rune(g: Game, p: str) -> None:
+    """A camp clear draws one rune and plays it on a lane hero before the swings."""
+    rune = g.rng.choice(RUNES)
+    hero = next((unit for lane, unit in living(g, p) if lane != "jungle"), None)
+    if rune == "gold":
+        g.sides[p].gold += 1
+    elif rune == "wisdom":
+        g.sides[p].xp += 1
+    elif rune == "regen" and hero is not None:
+        hero.hp = 2
+    elif rune == "dd" and hero is not None:
+        hero.amplify += 1
+    elif rune == "shield" and hero is not None and hero.shield <= 0:
+        hero.shield = 1
+    elif rune == "haste" and hero is not None:
+        hero.haste = True
+    elif rune == "arcane" and hero is not None and hero.casts == 0:
+        hero.hero = Hero(
+            hero.hero.id,
+            hero.hero.name,
+            hero.hero.attr,
+            hero.hero.kind,
+            max(0, hero.hero.cost - 1),
+            hero.hero.damage,
+            hero.hero.stun,
+            hero.hero.amp,
+            hero.hero.cleave,
+        )
+
+
+def claim_camp(g: Game, p: str, camp: Camp) -> None:
+    g.neutrals[p] += 1
+    g.neutral_kills[p] += 1
+    g.neutral_discard.append(camp.kind)
+    if camp.kind == "roshan":
+        g.sides[p].xp += 3
+        g.aegis[p] += 1
+    elif camp.kind == "tormentor":
+        active = [unit for _lane, unit in living(g, p) if unit.hero.kind == "active" and not unit.refresher]
+        if active:
+            g.rng.choice(active).refresher = True
+    else:
+        g.sides[p].gold += 1
+        apply_rune(g, p)
+    g.camps[p] = None
+
+
+def fight_jungle(g: Game) -> None:
+    """One home-camp swing. The hero hits the camp; the camp hits back. Shields block one physical hit."""
+    for p in ("radiant", "dire"):
+        heroes = [unit for unit in g.jungle[p] if unit.hp > 0]
+        camp = g.camps[p]
+        if not heroes or camp is None or camp.hp <= 0:
+            continue
+        if camp.kind == "roshan":
+            for hero in heroes:
+                hero.disarmed = True
+                hurt(g, hero, 1, "neutral")
+        elif camp.kind in ("thunderhide", "dragon"):
+            for hero in heroes:
+                hurt(g, hero, 1, "neutral")
+        elif camp.kind == "ice_shaman":
+            hurt(g, heroes[0], 1, "neutral")
+        for hero in heroes:
+            if hero.hp <= 0 or hero.disarmed or camp.hp <= 0:
+                continue
+            if camp.kind == "roshan" and camp.evade > 0:
+                camp.evade = 0
+                continue
+            if camp.shield > 0:
+                camp.shield = 0
+                continue
+            dealt = 1 + hero.amplify
+            camp.hp -= dealt
+            if camp.kind == "tormentor":
+                hurt(g, hero, dealt, "neutral")
+        if camp.hp <= 0:
+            claim_camp(g, p, camp)
+            continue
+        if camp.kind == "tormentor":
+            continue
+        targets = heroes if camp.kind in ("dragon", "roshan", "thunderhide") else heroes[:1]
+        for hero in targets:
+            if hero.hp > 0:
+                physical(g, hero, 1, "neutral")
+
+
 def combat(g: Game) -> None:
     """Interrupt window, then one swing, then another window, repeating through the towers."""
     before = {(p, lane): (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) for p in g.sides for lane in LANES}
     cast(g)
+    fight_jungle(g)
+    if g.winner is not None:
+        return
     acted: set[int] = set()
     while g.winner is None:
         batch = next_batch(g, acted)
@@ -415,18 +655,25 @@ def towers_fire(g: Game, damaged: set[tuple[str, str]]) -> None:
 
 def cleanup(g: Game) -> None:
     for p in ("radiant", "dire"):
-        for lane in LANES:
+        for lane in (*LANES, "jungle"):
             alive = []
-            for unit in g.board[p][lane]:
+            pile = g.jungle[p] if lane == "jungle" else g.board[p][lane]
+            for unit in pile:
                 if unit.hp > 0:
                     unit.stunned = False
+                    unit.disarmed = False
                     unit.casts = 0
                     unit.refresher = False
                     unit.amplify = 0
                     unit.haste = unit.hero.amp and unit.hero.kind == "passive"
                     unit.slow = False
+                    if not unit.persist_shield:
+                        unit.shield = 0
                     alive.append(unit)
-            g.board[p][lane] = alive
+            if lane == "jungle":
+                g.jungle[p] = alive
+            else:
+                g.board[p][lane] = alive
         lanes_held = sum(1 for lane in LANES if g.board[p][lane])
         side = g.sides[p]
         side.gold += side.kills
@@ -436,8 +683,11 @@ def cleanup(g: Game) -> None:
             side.hand.pop()
 
 
-def end_of_turn(g: Game) -> dict[str, tuple[int, int, int, int, int, int, int]]:
-    """Towers, gold, XP, heroes played, abilities cast, items played, and Shields bought this round."""
+Snap = tuple[int, int, int, int, int, int, int, int, int]
+
+
+def end_of_turn(g: Game) -> dict[str, Snap]:
+    """Towers, gold, XP, heroes, abilities, items, neutrals killed, Shields, and buybacks this round."""
     return {
         p: (
             standing(g.sides[p]),
@@ -446,19 +696,24 @@ def end_of_turn(g: Game) -> dict[str, tuple[int, int, int, int, int, int, int]]:
             g.played[p],
             g.casts[p],
             g.items[p],
+            g.neutrals[p],
             g.shields[p],
+            g.buybacks[p],
         )
         for p in ("radiant", "dire")
     }
 
 
-def play(g: Game, limit: int) -> dict[int, dict[str, tuple[int, int, int, int, int, int, int]]]:
-    trace: dict[int, dict[str, tuple[int, int, int, int, int, int, int]]] = {}
+def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
+    trace: dict[int, dict[str, Snap]] = {}
     while g.winner is None and g.round <= limit:
         g.played = {p: 0 for p in ("radiant", "dire")}
         g.casts = {p: 0 for p in ("radiant", "dire")}
         g.items = {p: 0 for p in ("radiant", "dire")}
         g.shields = {p: 0 for p in ("radiant", "dire")}
+        g.neutrals = {p: 0 for p in ("radiant", "dire")}
+        g.buybacks = {p: 0 for p in ("radiant", "dire")}
+        spawn_camps(g)
         upkeep(g)
         draw_and_deploy(g)
         combat(g)
@@ -466,6 +721,10 @@ def play(g: Game, limit: int) -> dict[int, dict[str, tuple[int, int, int, int, i
         trace[g.round] = end_of_turn(g)
         g.round += 1
     return trace
+
+
+def rd(a: float, b: float) -> str:
+    return f"{a:.2f}/{b:.2f}"
 
 
 def simulate(games: int, seed: int, limit: int) -> None:
@@ -476,15 +735,18 @@ def simulate(games: int, seed: int, limit: int) -> None:
     xp: list[int] = []
     towers: list[int] = []
     unfinished = 0
-    # round -> sums of (towers, gold, xp, heroes, abilities, items, shields) per side
+    neutral_games = 0
+    jungle_sent: list[dict[str, int]] = []
+    # round -> sums of (towers, gold, xp, heroes, abilities, items, neutrals, shields, buybacks)
     reached: Counter[int] = Counter()
     totals: dict[int, dict[str, list[int]]] = {}
-    lifetime = {"radiant": [0, 0, 0, 0], "dire": [0, 0, 0, 0]}
-    # checkpoint -> (behind games, wins from behind, wins that happened after the checkpoint)
-    marks = list(range(5, limit + 1, 5))
+    lifetime = {"radiant": [0, 0, 0, 0, 0, 0], "dire": [0, 0, 0, 0, 0, 0]}
+    marks = [2, 4, 6, 8, 10]
+    ahead: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
+    held: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     behind: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     comeback: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
-    later: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
+    even: Counter[int] = Counter()
     for n in range(games):
         rng = random.Random(seed + n)
         g = Game(rng=rng, heroes=heroes, sides={"radiant": Side(), "dire": Side()}, board={})
@@ -498,13 +760,16 @@ def simulate(games: int, seed: int, limit: int) -> None:
         else:
             unfinished += 1
             lengths.append(limit)
+        if g.neutral_kills["radiant"] or g.neutral_kills["dire"]:
+            neutral_games += 1
+        jungle_sent.append(dict(g.jungle_sent))
         for side in g.sides.values():
             gold.append(side.gold)
             xp.append(side.xp)
         towers.append(g.towers_fallen)
         for rnd, snap in trace.items():
             reached[rnd] += 1
-            bucket = totals.setdefault(rnd, {"radiant": [0] * 7, "dire": [0] * 7})
+            bucket = totals.setdefault(rnd, {"radiant": [0] * 9, "dire": [0] * 9})
             for p in ("radiant", "dire"):
                 for i, value in enumerate(snap[p]):
                     bucket[p][i] += value
@@ -514,13 +779,18 @@ def simulate(games: int, seed: int, limit: int) -> None:
             snap = trace.get(mark)
             if snap is None or g.winner is None:
                 continue
+            rt, dt = snap["radiant"][0], snap["dire"][0]
+            if rt == dt:
+                even[mark] += 1
             for p in ("radiant", "dire"):
-                if snap[p][0] < snap[other(p)][0]:
+                if snap[p][0] > snap[other(p)][0]:
+                    ahead[mark][p] += 1
+                    if g.winner == p:
+                        held[mark][p] += 1
+                elif snap[p][0] < snap[other(p)][0]:
                     behind[mark][p] += 1
                     if g.winner == p:
                         comeback[mark][p] += 1
-                        if length > mark:
-                            later[mark][p] += 1
 
     def avg(xs: list[int]) -> float:
         return sum(xs) / len(xs) if xs else 0
@@ -534,46 +804,45 @@ def simulate(games: int, seed: int, limit: int) -> None:
     print(f"mean gold left {avg(gold):.1f}  mean xp left {avg(xp):.1f}")
     print(f"mean towers destroyed {avg(towers):.1f}")
     if games:
-        print(
-            "mean per game  "
-            f"radiant heroes {lifetime['radiant'][0] / games:.2f}  abilities {lifetime['radiant'][1] / games:.2f}  items {lifetime['radiant'][2] / games:.2f}  shields {lifetime['radiant'][3] / games:.2f}  "
-            f"dire heroes {lifetime['dire'][0] / games:.2f}  abilities {lifetime['dire'][1] / games:.2f}  items {lifetime['dire'][2] / games:.2f}  shields {lifetime['dire'][3] / games:.2f}"
-        )
+        names = ("heroes", "abilities", "items", "neutrals", "shields", "buybacks")
+        parts = []
+        for p in ("radiant", "dire"):
+            bits = "  ".join(f"{name} {lifetime[p][i] / games:.2f}" for i, name in enumerate(names))
+            parts.append(f"{p} {bits}")
+        print("mean per game  " + "  |  ".join(parts))
+        print(f"games with a neutral kill {neutral_games} ({neutral_games / games:.1%})")
+        sent_r = sum(g_sent["radiant"] for g_sent in jungle_sent) / games
+        sent_d = sum(g_sent["dire"] for g_sent in jungle_sent) / games
+        print(f"mean heroes sent to the home jungle  radiant {sent_r:.2f}  dire {sent_d:.2f}")
     print()
-    print("end of turn, average of games still going")
-    print("heroes / abilities / items are how many were played that round, not a running total")
-    print(
-        f"{'round':>5}  {'games':>5}  {'R tow':>6}  {'D tow':>6}  {'R gold':>7}  {'D gold':>7}  {'R xp':>6}  {'D xp':>6}"
-        f"  {'R hero':>6}  {'D hero':>6}  {'R ult':>6}  {'D ult':>6}  {'R item':>6}  {'D item':>6}  {'R shld':>6}  {'D shld':>6}"
-    )
+    print("end of turn, games still going. Each cell is Radiant/Dire.")
+    print("Hero, Ability, Item, Neutral, Shield, and Buyback are counts for that round.")
+    labels = ("Tower", "Gold", "XP", "Hero", "Ability", "Item", "Neutral", "Shield", "Buyback")
+    print(f"{'rnd':>3} {'games':>5}  " + "  ".join(f"{label:>9}" for label in labels))
     for rnd in sorted(totals):
         n = reached[rnd]
-        radiant = [totals[rnd]["radiant"][i] / n for i in range(7)]
-        dire = [totals[rnd]["dire"][i] / n for i in range(7)]
-        print(
-            f"{rnd:5d}  {n:5d}  {radiant[0]:6.2f}  {dire[0]:6.2f}  {radiant[1]:7.2f}  {dire[1]:7.2f}  {radiant[2]:6.2f}  {dire[2]:6.2f}"
-            f"  {radiant[3]:6.2f}  {dire[3]:6.2f}  {radiant[4]:6.2f}  {dire[4]:6.2f}  {radiant[5]:6.2f}  {dire[5]:6.2f}"
-            f"  {radiant[6]:6.2f}  {dire[6]:6.2f}"
-        )
+        cells = [rd(totals[rnd]["radiant"][i] / n, totals[rnd]["dire"][i] / n) for i in range(9)]
+        print(f"{rnd:3d} {n:5d}  " + "  ".join(f"{cell:>9}" for cell in cells))
     print()
-    print("checkpoints: average gold and xp, and wins from behind on towers")
-    print("Behind means fewer standing towers than the opponent at the end of that round.")
+    print("Advantage is more standing towers. Lead held is how often that side then wins.")
+    print("Comeback is fewer towers, and that side still wins. Even is a tower tie.")
+    print(f"{'rnd':>3} {'games':>5}  {'ahead R/D':>11}  {'lead held':>13}  {'even':>5}  {'comeback R':>14}  {'comeback D':>14}")
     for mark in marks:
         n = reached[mark]
         if n == 0:
+            print(f"{mark:3d} {0:5d}  no games still going")
             continue
-        rg, rx = totals[mark]["radiant"][1] / n, totals[mark]["radiant"][2] / n
-        dg, dx = totals[mark]["dire"][1] / n, totals[mark]["dire"][2] / n
-        print(f"after round {mark:>2}  games {n:4d}  radiant gold {rg:6.2f} xp {rx:6.2f}  dire gold {dg:6.2f} xp {dx:6.2f}")
-        for p in ("radiant", "dire"):
-            b = behind[mark][p]
-            c = comeback[mark][p]
-            late = later[mark][p]
-            rate = c / b if b else 0
-            print(f"  {p:8} behind {b:4d}  won anyway {c:4d} ({rate:5.1%})  of which the win came after round {mark}: {late}")
-    costs = Counter(h.cost for h in heroes if h.kind == "active")
-    print()
-    print(f"active abilities {sum(costs.values())}  costs {dict(sorted(costs.items()))}  passives {sum(h.kind == 'passive' for h in heroes)}")
+        ar, ad = ahead[mark]["radiant"], ahead[mark]["dire"]
+        hr = held[mark]["radiant"] / ar if ar else 0
+        hd = held[mark]["dire"] / ad if ad else 0
+        br, bd = behind[mark]["radiant"], behind[mark]["dire"]
+        cr, cd = comeback[mark]["radiant"], comeback[mark]["dire"]
+        rr = cr / br if br else 0
+        rd_ = cd / bd if bd else 0
+        print(
+            f"{mark:3d} {n:5d}  {ar:4d}/{ad:<4d}  {hr:5.1%}/{hd:<5.1%}  {even[mark]:5d}  "
+            f"{cr:4d}/{br:<4d} {rr:5.1%}  {cd:4d}/{bd:<4d} {rd_:5.1%}"
+        )
 
 
 def main() -> None:

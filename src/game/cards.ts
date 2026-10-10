@@ -78,13 +78,13 @@ export const TORMENTOR_COPIES = 2
 export const ROSHAN = {
   name: 'Roshan',
   attribute: 'UNI' as const,
-  text: 'Evades the first damage each turn. When contested, Disarm and deal 1 damage to every enemy in the camp. Bounty: the Aegis. Never appears before round 4.',
+  text: 'Evades the first damage each turn. When contested, Disarm and deal 1 damage to every enemy in the camp. Bounty: 3 Gold, 3 XP, a rune, and the Aegis. Never appears before round 4.',
 }
 
 export const TORMENTOR = {
   name: 'Tormentor',
   attribute: 'UNI' as const,
-  text: 'Never attacks. Gains 1 Shield each turn. Reflection returns the damage to every attacker and the same amount to each contesting Position 1. Bounty: a Refresher Shard.',
+  text: 'Never attacks. Gains 1 Shield each turn. Reflection returns the damage to every attacker and the same amount to each contesting Position 1. Bounty: 2 Gold, 2 XP, a rune, and a Refresher Shard.',
 }
 
 const ICON_SLUG: Record<string, string> = {

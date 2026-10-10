@@ -667,12 +667,6 @@ function startRound(s: GameState) {
         }
       }
     }
-    const ancientLane = p === 'radiant' ? 'bot' : 'top'
-    for (const uid of lineup(s, p, ancientLane)) {
-      const u = s.units[uid]
-      if (u.kind !== 'hero' || u.hp >= u.maxHp) continue
-      heal(s, u, p === 'radiant' ? 'Radiant Ancient' : 'Dire Ancient')
-    }
     const xpAura = heroesOnBoard(s, p).filter((u) => hasTag(u, 'xpAura')).length
     const opened = openedLanes(s, other(p))
     const gold = 1 + opened
@@ -1765,8 +1759,9 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
     s.neutralDiscard.push(t.cardId!)
     if (byPlayer) {
       const pl = s.players[byPlayer]
-      pl.gold += 1
-      log(s, `${PLAYER_LABEL[byPlayer]} clears the camp: +1 Gold and a rune.`, tone(byPlayer))
+      pl.gold += 2
+      pl.xp += 2
+      log(s, `${PLAYER_LABEL[byPlayer]} clears the camp: +2 Gold, +2 XP, and a rune.`, tone(byPlayer))
       const rune = takeRune(s)
       if (rune) giveCard(s, byPlayer, { type: 'item', cardId: rune }, `a rune card (${getItem(rune).name})`)
     }
@@ -2084,10 +2079,18 @@ function settleBossKills(s: GameState) {
       to = survivors.length === 1 ? survivors[0] : jungleOwner(k.camp)
     }
     const reward = BOSS_REWARD[k.kind]
+    const pl = s.players[to]
     if (k.kind === 'roshan') {
-      s.players[to].xp += 3
-      log(s, `${PLAYER_LABEL[to]} claims Roshan's bounty: +3 XP.`, tone(to))
+      pl.gold += 3
+      pl.xp += 3
+      log(s, `${PLAYER_LABEL[to]} claims Roshan: +3 Gold, +3 XP, a rune, and the Aegis.`, tone(to))
+    } else {
+      pl.gold += 2
+      pl.xp += 2
+      log(s, `${PLAYER_LABEL[to]} claims the Tormentor: +2 Gold, +2 XP, a rune, and a Refresher Shard.`, tone(to))
     }
+    const rune = takeRune(s)
+    if (rune) giveCard(s, to, { type: 'item', cardId: rune }, `a rune card (${getItem(rune).name})`)
     giveCard(s, to, { type: 'item', cardId: reward }, `the ${getItem(reward).name}`)
   }
   s.bossKills = []
@@ -2376,13 +2379,17 @@ function fireTowers(s: GameState) {
         const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
         const ids = targetableLineup(s, other(defender), lane)
         const creep = ids.find((id) => s.units[id].kind === 'creep' || s.units[id].kind === 'siege')
-        const front = creep ?? ids[0]
+        // Tier 1 hits the creep, or Position 1. Tier 2 hits every enemy for 1, unless a creep is in the line: then only that first creep.
+        const targets = tier === 't1' ? [creep ?? ids[0]].filter((id): id is string => !!id) : creep ? [creep] : ids
         fired = true
-        if (!front) {
+        if (!targets.length) {
           log(s, `${label} has no attacker left to fire at.`, 'info')
           continue
         }
-        dealDamage(s, null, front, TOWER_DAMAGE[tier], 'tower', { label })
+        for (const id of targets) {
+          if (s.units[id]?.dead) continue
+          dealDamage(s, null, id, TOWER_DAMAGE[tier], 'tower', { label })
+        }
       }
     }
   }
@@ -2578,6 +2585,16 @@ export function endRotation(state: GameState): GameState {
   s.resolvedUlts = []
 
   if (!s.winner) {
+    for (const p of PLAYERS) {
+      for (const lane of LANES) {
+        const tw = s.players[p].structures.towers[lane]
+        if (tw.t1 > 0 || tw.t2 > 0) continue
+        for (const uid of lineup(s, p, lane)) {
+          const u = s.units[uid]
+          if (u.kind === 'hero') heal(s, u, `${PLAYER_LABEL[p]} Ancient`)
+        }
+      }
+    }
     log(s, 'Income', 'phase')
     for (const p of PLAYERS) {
       const pl = s.players[p]

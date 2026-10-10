@@ -13,7 +13,7 @@ Each lane has two towers in front of that Ancient:
 | Structure | Health | Damage when it fires |
 | --- | --- | --- |
 | Tier 1 tower | 3 | 1 |
-| Tier 2 tower | 5 | 2 |
+| Tier 2 tower | 5 | 1 to each enemy, or 1 to the first creep if a creep is in the line |
 | Ancient | 10 | none |
 
 Units only strike the Ancient through a lane whose Tier 1 and Tier 2 are both down. They hit Tier 1 first, then Tier 2, then the Ancient.
@@ -115,7 +115,7 @@ Every slain hero, from either side, goes into one shared discard. The most recen
 
 When your tower falls, you gain that tower's face-down card. The attacker gains 3 Gold for a Tier 1 tower and 5 Gold for a Tier 2 tower. The card does not use a hand slot.
 
-At the start of the round, each of your heroes heals 1 if they are in a lane where you have no towers left. Heroes in the jungle do not get this heal. Other heals, such as a Salve or Lotus Pool, restore a hero to Healthy unless the hero is Cursed.
+At the start of the round, each of your heroes heals 1 if they are in a lane where you have no towers left. Heroes in the jungle do not get this heal. At the end of the turn, your Ancient fully heals allied heroes in every lane where you have no towers left. A lane that still has a tower gets neither heal. Other heals, such as a Salve or Lotus Pool, restore a hero to Healthy unless the hero is Cursed.
 
 ## Combat
 
@@ -127,7 +127,7 @@ A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card
 
 **Order.** Hastened units attack first. Then Agility, Universal, Intelligence, Strength, then units with no attribute (creeps). Slowed units attack after everyone else, in that same order, unless they also have Haste. Ultimates resolve earlier: Strength, Intelligence, Universal, Agility. Ties use the lane and day/night priority above.
 
-**Towers.** A tower fires only if it took damage this round and is still standing. Glyph prevents the damage, so a fortified tower does not fire. A firing tower prefers a lane creep or siege creep in the attacking lineup, otherwise Position 1. Tier 1 deals 1. Tier 2 deals 2.
+**Towers.** A tower fires only if it took damage this round and is still standing. Glyph prevents the damage, so a fortified tower does not fire. A Tier 1 tower prefers a lane creep or siege creep in the attacking lineup, otherwise Position 1, and deals 1. A Tier 2 tower deals 1 to every enemy in the lane. If a creep is in that line, the Tier 2 shot hits only the first creep.
 
 **Physical and magical.** Physical damage is basic attacks, towers, reflected damage, and ultimate or item damage printed as physical. Magical damage is ultimates, passives, and items that are not printed as physical. Immunity blocks magical damage and debuffs from enemies. Damage a card deals to itself still lands. Ethereal blocks physical damage and takes 1 extra magical damage. Invulnerable blocks all damage except self-damage. Banish is untargetable and invulnerable.
 
@@ -139,11 +139,11 @@ Each jungle holds one camp. A camp stays until it is killed. An empty camp refil
 
 The side that arrived first holds the camp. A tie goes to the owner of that jungle: Radiant Jungle to Radiant, Dire Jungle to Dire. The holder chooses, each round, whether its units attack the neutral or the enemy. A contesting unit must attack the holder.
 
-Clearing a normal neutral pays 1 XP, 1 Gold, and one rune card to the killer's side.
+Clearing a normal neutral pays 2 Gold, 2 XP, and one rune card to the killer's side.
 
-**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. While he is at full health he Roars at the start of ultimate resolution: Disarm and 1 damage to each contesting unit. His bounty is 3 XP and the Aegis.
+**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. While he is at full health he Roars at the start of ultimate resolution: Disarm and 1 damage to each contesting unit. His bounty is 3 Gold, 3 XP, a rune, and the Aegis.
 
-**Tormentor** is Universal, 2 health, and never attacks. It gains 1 Shield at the start of resolution if it has none. Reflection returns the damage to the attacker and the same amount to the other side's Position 1 in that camp. A Shield blocks reflected damage. Break turns Reflection off. Its bounty is a Refresher Shard.
+**Tormentor** is Universal, 2 health, and never attacks. It gains 1 Shield at the start of resolution if it has none. Reflection returns the damage to the attacker and the same amount to the other side's Position 1 in that camp. A Shield blocks reflected damage. Break turns Reflection off. Its bounty is 2 Gold, 2 XP, a rune, and a Refresher Shard.
 
 A boss reward goes to the side that fought it, even if every one of its heroes died. If both sides were present, it goes to the only side that still has a living hero in the camp. If both do, or neither does, it goes to the owner of that jungle.
 

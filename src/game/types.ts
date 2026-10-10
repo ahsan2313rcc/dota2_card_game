@@ -415,7 +415,8 @@ export const ROTATIONS_PER_ROUND = 2
 export const STARTING_HEROES = 5
 
 export const TOWER_HP = { t1: 3, t2: 5 } as const
-export const TOWER_DAMAGE = { t1: 1, t2: 2 } as const
+/** Tier 2 deals 1 to each enemy in the lane, unless a creep is there: then only the first creep is hit. */
+export const TOWER_DAMAGE = { t1: 1, t2: 1 } as const
 export const ANCIENT_HP = 10
 export const BUYBACK_COST = { behind: 4, even: 4, ahead: 5 } as const
 /** Buyback can reach only this many most recent heroes in the shared discard. */

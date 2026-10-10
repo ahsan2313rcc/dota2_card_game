@@ -203,6 +203,8 @@ function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr?: Attribute): n
   const ownStanding = ownTw.t1 > 0 || ownTw.t2 > 0
   if (ownWounded && foes.length > 0 && ownStanding) score += 8 + foes.length * 2
   if (!ownStanding && foes.length > 0) score += 10
+  // A live Tier 2 hits every hero in the lane. A healthy one is a worse assignment than a camp.
+  if (enemyTw.t1 <= 0 && enemyTw.t2 > 0) score -= 8
   if (attr) score += counterScore(attr, foes)
   return score
 }
@@ -227,9 +229,9 @@ function jungleValue(s: GameState, p: PlayerId): number {
   const laneHeroes = LANES.reduce((sum, lane) => sum + unitsIn(s, p, lane).filter((u) => u.kind === 'hero').length, 0)
   if (laneHeroes < 2) return -999
   const mine = lineup(s, p, home).length
-  if (neutral.kind === 'roshan' && mine < 2) return 7
-  if (neutral.kind === 'tormentor' && mine < 3) return 6
-  if (neutral.kind === 'neutral' && mine === 0) return 4
+  if (neutral.kind === 'roshan' && mine < 2) return 10
+  if (neutral.kind === 'tormentor' && mine < 3) return 9
+  if (neutral.kind === 'neutral' && mine === 0) return 8
   return -999
 }
 

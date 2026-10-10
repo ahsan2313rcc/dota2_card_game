@@ -261,6 +261,9 @@ def lane_value(g: Game, p: str, lane: str) -> int:
         score += 8 + foes * 2
     if not standing_tw and foes > 0:
         score += 10
+    # A live Tier 2 hits every hero. A healthy one is a worse assignment than a camp.
+    if foe["t1"] <= 0 and foe["t2"] > 0:
+        score -= 8
     return score
 
 
@@ -279,11 +282,11 @@ def jungle_value(g: Game, p: str) -> int:
         return -999
     mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
     if camp.kind == "roshan" and mine < 2:
-        return 7
+        return 10
     if camp.kind == "tormentor" and mine < 3:
-        return 6
+        return 9
     if camp.kind not in ("roshan", "tormentor") and mine == 0:
-        return 4
+        return 8
     return -999
 
 
@@ -537,15 +540,19 @@ def claim_camp(g: Game, p: str, camp: Camp) -> None:
     g.neutral_kills[p] += 1
     g.neutral_discard.append(camp.kind)
     if camp.kind == "roshan":
+        g.sides[p].gold += 3
         g.sides[p].xp += 3
         g.aegis[p] += 1
-    elif camp.kind == "tormentor":
-        active = [unit for _lane, unit in living(g, p) if unit.hero.kind == "active" and not unit.refresher]
-        if active:
-            g.rng.choice(active).refresher = True
-    else:
-        g.sides[p].gold += 1
         apply_rune(g, p)
+    else:
+        # A normal camp and a Tormentor both pay 2 Gold, 2 XP, and a rune. The Tormentor also leaves a Refresher.
+        g.sides[p].gold += 2
+        g.sides[p].xp += 2
+        apply_rune(g, p)
+        if camp.kind == "tormentor":
+            active = [unit for _lane, unit in living(g, p) if unit.hero.kind == "active" and not unit.refresher]
+            if active:
+                g.rng.choice(active).refresher = True
     g.camps[p] = None
 
 
@@ -642,15 +649,15 @@ def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str) ->
 def towers_fire(g: Game, damaged: set[tuple[str, str]]) -> None:
     for defender, lane in damaged:
         tw = g.sides[defender].towers[lane]
-        if tw["t1"] > 0:
-            dmg = 1
-        elif tw["t2"] > 0:
-            dmg = 2
-        else:
-            continue
         foes = [u for u in g.board[other(defender)][lane] if u.hp > 0]
-        if foes:
-            physical(g, foes[0], dmg, defender)
+        if not foes:
+            continue
+        if tw["t1"] > 0:
+            physical(g, foes[0], 1, defender)
+        elif tw["t2"] > 0:
+            # 1 to every enemy. This sim has no creep cards; a creep would soak the shot alone.
+            for foe in foes:
+                physical(g, foe, 1, defender)
 
 
 def cleanup(g: Game) -> None:
@@ -679,6 +686,13 @@ def cleanup(g: Game) -> None:
         side.gold += side.kills
         side.xp += side.kills + lanes_held
         side.kills = 0
+        for lane in LANES:
+            tw = side.towers[lane]
+            if tw["t1"] > 0 or tw["t2"] > 0:
+                continue
+            for unit in g.board[p][lane]:
+                if unit.hp > 0:
+                    unit.hp = 2
         while len(side.hand) > 7:
             side.hand.pop()
 

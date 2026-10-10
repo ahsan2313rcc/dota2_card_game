@@ -210,6 +210,45 @@ describe('setup and core rules', () => {
     expect(s.priority).toBe('radiant')
   })
 
+  it('a Tier 2 tower deals 1 to every attacker, and a creep soaks that shot alone', () => {
+    let s = setup(6, [hero('a', 'axe'), hero('b', 'sven')])
+    s.players.dire.structures.towers.mid.t1 = 0
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'radiant', 'b', 'mid')
+    s = fight(s)
+    const [axe, sven] = heroesOnBoard(s, 'radiant')
+    expect(axe.hp).toBe(1)
+    expect(sven.hp).toBe(1)
+    expect(s.log.filter((l) => l.text.includes('Tier 2 tower') && l.text.includes('deals 1'))).toHaveLength(2)
+
+    let soaked = setup(7, [hero('c', 'axe'), { iid: 'k', type: 'creep', cardId: 'creep' }])
+    soaked.players.dire.structures.towers.mid.t1 = 0
+    soaked = placeHero(soaked, 'radiant', 'c', 'mid')
+    soaked = placeCreep(soaked, 'radiant', 'k', 'mid')
+    soaked = fight(soaked)
+    expect(heroesOnBoard(soaked, 'radiant')[0].hp).toBe(2)
+    const shots = soaked.log.filter((l) => l.text.includes('Tier 2 tower') && (l.text.includes('deals') || l.text.includes('slays')))
+    expect(shots).toHaveLength(1)
+    expect(shots[0].text).toContain('Creep')
+  })
+
+  it('the Ancient fully heals allies at end of turn in a lane with no towers', () => {
+    let s = setup(8, [hero('a', 'axe'), hero('b', 'sven')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'radiant', 'b', 'bot')
+    s.phase = 'rotate'
+    s.players.radiant.structures.towers.mid.t1 = 0
+    s.players.radiant.structures.towers.mid.t2 = 0
+    const open = heroesOnBoard(s, 'radiant').find((u) => u.zone === 'mid')!
+    const covered = heroesOnBoard(s, 'radiant').find((u) => u.zone === 'bot')!
+    open.hp = 1
+    covered.hp = 1
+    s = endRotation(s)
+    expect(s.units[open.uid].hp).toBe(2)
+    expect(s.units[covered.uid].hp).toBe(1)
+    expect(logHas(s, 'heals to Healthy (Radiant Ancient)')).toBe(true)
+  })
+
   it('a damaged tower fires at the attacking side Position 1; undamaged towers stay silent', () => {
     let s = setup(5, [hero('a', 'axe'), { iid: 'c', type: 'creep', cardId: 'creep' }])
     s = placeHero(s, 'radiant', 'a', 'mid')
@@ -372,7 +411,7 @@ describe('items, runes and statuses', () => {
 })
 
 describe('jungle, Roshan and Tormentor', () => {
-  it('clearing a neutral camp grants 1 Gold and a rune card', () => {
+  it('clearing a neutral camp grants 2 Gold, 2 XP, and a rune card', () => {
     let s = setup(19, [hero('a', 'juggernaut'), hero('c', 'sven')])
     const golem = forceCamp(s, 'radiantJungle', 'neutral', 'golem')
     golem.hp = 1
@@ -382,8 +421,8 @@ describe('jungle, Roshan and Tormentor', () => {
     s = fight(s)
     expect(campNeutral(s, 'radiantJungle')).toBeUndefined()
     expect(s.players.radiant.hand.some((c) => c.cardId.startsWith('rune_'))).toBe(true)
-    expect(s.players.radiant.xp).toBe(xp)
-    expect(s.players.radiant.gold).toBe(gold + 1)
+    expect(s.players.radiant.xp).toBe(xp + 2)
+    expect(s.players.radiant.gold).toBe(gold + 2)
   })
 
   it('a rune from a neutral kill is kept even when the hand is already full', () => {
@@ -441,10 +480,33 @@ describe('jungle, Roshan and Tormentor', () => {
     const qop = heroesOnBoard(s, 'radiant')[0]
     qop.hp = 1
     s.players.radiant.xp = 2
+    const { gold, xp } = s.players.radiant
     s = declareUlt(s, qop.uid)
     s = resolveRound(s)
     expect(heroesOnBoard(s, 'radiant')).toHaveLength(0)
     expect(s.players.radiant.hand.some((c) => c.cardId === 'refresher_shard')).toBe(true)
+    expect(s.players.radiant.hand.some((c) => c.cardId.startsWith('rune_'))).toBe(true)
+    expect(s.players.radiant.gold).toBe(gold + 2)
+    expect(s.players.radiant.xp).toBe(xp)
+  })
+
+  it('Roshan pays 3 Gold, 3 XP, a rune, and the Aegis', () => {
+    let s = setup(48, [hero('a', 'queen_of_pain')])
+    const rosh = forceCamp(s, 'radiantJungle', 'roshan')
+    rosh.hp = 1
+    rosh.status.blurUsed = true
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = endItems(reveal(s))
+    const qop = heroesOnBoard(s, 'radiant')[0]
+    s.players.radiant.xp = 2
+    const gold = s.players.radiant.gold
+    s = declareUlt(s, qop.uid)
+    s = resolveRound(s)
+    expect(campNeutral(s, 'radiantJungle')).toBeUndefined()
+    expect(s.players.radiant.hand.some((c) => c.cardId === 'aegis')).toBe(true)
+    expect(s.players.radiant.hand.some((c) => c.cardId.startsWith('rune_'))).toBe(true)
+    expect(s.players.radiant.gold).toBe(gold + 3)
+    expect(s.players.radiant.xp).toBe(3)
   })
 
   it('Tormentor: when contested, the other side’s front takes the same reflected damage', () => {

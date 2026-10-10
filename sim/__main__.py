@@ -60,6 +60,24 @@ class Hero:
     silence_scope: str = ""
     # Doom's Silence stays on. Every other Silence clears at the end of the round.
     silence_lock: bool = False
+    # 1 XP, and the hit or Stun lands on the camp creep.
+    camp_spell: bool = False
+
+
+def is_camp_spell(ult: str, kind: str, cost: int) -> bool:
+    """1 XP, and the damage or Stun is aimed at the camp creep rather than the caster."""
+    if kind != "active" or cost != 1:
+        return False
+    chip = {"mdmg", "pdmg", "slam", "timber", "sky", "hood", "luna", "snap", "slash", "duel", "stun"}
+    hits = {"laneE", "epos1", "epos2", "ethird", ""}
+    for part in ult.split("|"):
+        bits = part.split()
+        if not bits:
+            continue
+        who = bits[1] if len(bits) > 1 else ""
+        if bits[0] in chip and who in hits:
+            return True
+    return False
 
 
 def load_heroes() -> list[Hero]:
@@ -108,6 +126,7 @@ def load_heroes() -> list[Hero]:
                 razor=razor,
                 silence_scope=scope,
                 silence_lock="lock" in ult and scope != "",
+                camp_spell=is_camp_spell(ult, m.group("kind"), int(m.group("cost"))),
             )
         )
     if len(heroes) != 127:
@@ -167,6 +186,7 @@ class Camp:
     hp: int
     shield: int = 0
     evade: int = 0
+    stunned: bool = False
 
 
 @dataclass
@@ -259,13 +279,14 @@ def draw_and_deploy(g: Game) -> None:
         placed = 0
         side.hand.sort(key=lambda h: (h.kind != "active", -h.damage, h.cost))
         while side.hand and placed < 3 and board_size(g, p) < 5:
-            hero = side.hand.pop(0)
-            unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
             lane = best_lane(g, p)
             lane_score = lane_value(g, p, lane)
             jungle_score = jungle_value(g, p)
             invade_score = invade_value(g, p)
-            if jungle_score > lane_score and jungle_score >= invade_score:
+            to_jungle = jungle_score > lane_score and jungle_score >= invade_score
+            hero = pull_hero(side.hand, to_jungle and g.style[p] == "jungler")
+            unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
+            if to_jungle:
                 g.jungle[p].append(unit)
                 g.jungle_sent[p] += 1
             elif invade_score > lane_score:
@@ -375,6 +396,8 @@ def lane_value(g: Game, p: str, lane: str) -> int:
     ancient_open = foe["t1"] <= 0 and foe["t2"] <= 0
     if style == "jungler":
         attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
+        if lane == "mid" and mid_door(g, p):
+            attack += 1
     elif style == "hunter":
         # Same thin-lane stack as a jungler. The bodies a jungler would park in the camp stay on the map.
         attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
@@ -388,13 +411,34 @@ def lane_value(g: Game, p: str, lane: str) -> int:
     return max(attack, defend_value(own["t1"], own["t2"], foes, mine, style))
 
 
-def jungler_cap(kind: str) -> int:
-    """A normal creep takes 2. Roshan and a Tormentor take 3."""
-    return 3 if kind in ("roshan", "tormentor") else 2
+def jungler_cap(_kind: str) -> int:
+    """One hero. A second body lets the camp ultimate fire."""
+    return 1
+
+
+def pull_hero(hand: list[Hero], spell: bool) -> Hero:
+    """The farmer is the 1 XP stun or damage spell, when the camp is where this hero is going."""
+    if spell:
+        for index, hero in enumerate(hand):
+            if hero.camp_spell:
+                return hand.pop(index)
+    return hand.pop(0)
+
+
+def mid_door(g: Game, p: str) -> bool:
+    """Mid stages the invade once the home camp already has its one farmer."""
+    if g.style[p] != "jungler" or g.round <= 2:
+        return False
+    enemy = g.camps[other(p)]
+    if enemy is None or enemy.hp <= 0 or any(unit.hp > 0 for unit in g.invade[p]):
+        return False
+    home = g.camps[p]
+    home_n = sum(1 for unit in g.jungle[p] if unit.hp > 0)
+    return home is None or home.hp <= 0 or home_n >= jungler_cap(home.kind)
 
 
 def jungle_value(g: Game, p: str) -> int:
-    """Balanced farms for 5. A jungler waits until round 3, then caps the camp."""
+    """Balanced farms for 5. A jungler waits until round 3, then sends one hero."""
     style = g.style[p]
     if style in ("lane", "defender"):
         return -999
@@ -419,20 +463,9 @@ def jungle_value(g: Game, p: str) -> int:
     return NEUTRAL_KILL
 
 
-def invade_value(g: Game, p: str) -> int:
-    """A jungler steps into the enemy camp once home is full, and only after round 2."""
-    if g.style[p] != "jungler" or g.round <= 2:
-        return -999
-    camp = g.camps[other(p)]
-    if camp is None or camp.hp <= 0:
-        return -999
-    home_camp = g.camps[p]
-    home_need = jungler_cap(home_camp.kind) if home_camp is not None and home_camp.hp > 0 else 0
-    home = sum(1 for unit in g.jungle[p] if unit.hp > 0)
-    mine = sum(1 for unit in g.invade[p] if unit.hp > 0)
-    if home < home_need or mine >= jungler_cap(camp.kind):
-        return -999
-    return 8
+def invade_value(_g: Game, _p: str) -> int:
+    """The enemy jungle is a rotation out of mid, not a deploy from hand."""
+    return -999
 
 
 def living_enemies(g: Game, p: str) -> list[Unit]:
@@ -478,14 +511,38 @@ def apply_silence(unit: Unit, lock: bool) -> None:
         unit.haste = False
 
 
+def camp_of(g: Game, p: str, lane: str) -> tuple[str, Camp] | None:
+    owner = p if lane == "jungle" else other(p)
+    camp = g.camps[owner]
+    if camp is None or camp.hp <= 0:
+        return None
+    return owner, camp
+
+
 def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
     """One cast per hero each round. A Refresher allows a second cast that same round, at 0 XP."""
     side = g.sides[p]
     best: tuple[tuple[int, int, int], str, Unit] | None = None
     for lane, unit in living(g, p):
-        if lane in ("jungle", "invade"):
-            continue
         hero = unit.hero
+        if lane in ("jungle", "invade"):
+            found = camp_of(g, p, lane)
+            if not hero.camp_spell or unit.stunned or unit.silenced or found is None:
+                continue
+            _owner, camp = found
+            if camp.stunned and hero.damage <= 0:
+                continue
+            limit = 2 if unit.refresher else 1
+            if unit.casts >= limit:
+                continue
+            cost = 0 if unit.casts else hero.cost
+            if side.xp < cost:
+                continue
+            power = hero.damage + (1 if hero.stun else 0)
+            score = (power, 1, -hero.cost)
+            if best is None or score > best[0]:
+                best = (score, lane, unit)
+            continue
         if hero.kind != "active" or unit.stunned or unit.silenced:
             continue
         limit = 2 if unit.refresher else 1
@@ -533,6 +590,19 @@ def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
     unit.casts += 1
     g.sides[p].xp -= cost
     g.casts[p] += 1
+    if lane in ("jungle", "invade"):
+        found = camp_of(g, p, lane)
+        if found is None:
+            return
+        owner, camp = found
+        if unit.hero.stun:
+            camp.stunned = True
+        if unit.hero.damage > 0 and camp.hp > 0:
+            # Magical damage ignores the camp Shield.
+            camp.hp -= unit.hero.damage
+            if camp.hp <= 0:
+                claim_camp(g, p, camp, owner)
+        return
     if unit.hero.amp:
         unit.haste = True
     foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
@@ -698,6 +768,7 @@ def spawn_camps(g: Game) -> None:
     for p in ("radiant", "dire"):
         camp = g.camps[p]
         if camp is not None and camp.hp > 0:
+            camp.stunned = False
             if camp.kind in ("golem", "tormentor"):
                 camp.shield = 1
             if camp.kind == "roshan":
@@ -738,7 +809,7 @@ def apply_rune(g: Game, p: str) -> None:
         hero.hero = replace(hero.hero, cost=max(0, hero.hero.cost - 1))
 
 
-def claim_camp(g: Game, p: str, camp: Camp) -> None:
+def claim_camp(g: Game, p: str, camp: Camp, owner: str | None = None) -> None:
     g.neutrals[p] += 1
     g.neutral_kills[p] += 1
     g.neutral_discard.append(camp.kind)
@@ -756,7 +827,7 @@ def claim_camp(g: Game, p: str, camp: Camp) -> None:
             active = [unit for _lane, unit in living(g, p) if unit.hero.kind == "active" and not unit.refresher]
             if active:
                 g.rng.choice(active).refresher = True
-    g.camps[p] = None
+    g.camps[owner or p] = None
 
 
 def fight_jungle(g: Game) -> None:
@@ -773,7 +844,8 @@ def fight_jungle(g: Game) -> None:
             for hero in heroes:
                 apply_silence(hero, False)
         # Roar, Thunder Clap, Freezing Blast, and Fire Pit need 2 units in the camp.
-        if len(heroes) >= 2:
+        # A Stun from the farmer's spell stops the ultimate and the swing back.
+        if len(heroes) >= 2 and not camp.stunned:
             if camp.kind == "roshan":
                 for hero in heroes:
                     hero.disarmed = True
@@ -799,14 +871,41 @@ def fight_jungle(g: Game) -> None:
         if camp.hp <= 0:
             owner_alive = sum(1 for unit in home if unit.hp > 0)
             invade_alive = sum(1 for unit in invaders if unit.hp > 0)
-            claim_camp(g, other(p) if invade_alive > owner_alive else p, camp)
+            killer = other(p) if invade_alive > owner_alive else p
+            claim_camp(g, killer, camp, p)
             continue
-        if camp.kind == "tormentor":
+        if camp.stunned or camp.kind == "tormentor":
             continue
         targets = heroes if camp.kind in ("dragon", "roshan", "thunderhide") else heroes[:1]
         for hero in targets:
             if hero.hp > 0:
                 physical(g, hero, 1, "neutral")
+
+
+def jungler_rotate(g: Game) -> None:
+    """One hero steps from mid into the enemy camp. An open Tier 2 or a garrison keeps them."""
+    if g.winner is not None:
+        return
+    for p in ("radiant", "dire"):
+        if not mid_door(g, p):
+            continue
+        heroes = [unit for unit in g.board[p]["mid"] if unit.hp > 0]
+        if not heroes:
+            continue
+        foe = g.sides[other(p)].towers["mid"]
+        own = g.sides[p].towers["mid"]
+        foes = sum(1 for unit in g.board[other(p)]["mid"] if unit.hp > 0)
+        mine = len(heroes)
+        ancient_open = foe["t1"] <= 0 and foe["t2"] <= 0
+        attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
+        defense = defend_value(own["t1"], own["t2"], foes, mine - 1, "jungler")
+        if max(attack, defense) >= 20:
+            continue
+        if defense > 0 and mine <= garrison(own["t1"], own["t2"], foes, "jungler"):
+            continue
+        hero = heroes[-1]
+        g.board[p]["mid"].remove(hero)
+        g.invade[p].append(hero)
 
 
 def combat(g: Game) -> None:
@@ -964,6 +1063,7 @@ def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
         upkeep(g)
         draw_and_deploy(g)
         combat(g)
+        jungler_rotate(g)
         cleanup(g)
         trace[g.round] = end_of_turn(g)
         g.round += 1

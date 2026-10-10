@@ -153,9 +153,30 @@ function campCap(neutral: Unit): number {
   return neutral.kind === 'roshan' ? 2 : 3
 }
 
-/** A jungler caps a normal camp at 2. Roshan and a Tormentor need 3. */
-function junglerCap(neutral: Unit): number {
-  return neutral.kind === 'roshan' || neutral.kind === 'tormentor' ? 3 : 2
+/** One hero. A second body lets the camp ultimate fire. */
+function junglerCap(_neutral: Unit): number {
+  return 1
+}
+
+/** A 1 XP stun or 1-damage hit aimed at the camp. The farmer casts it on the neutral. */
+function campSpell(cardId: string): boolean {
+  const script = getHero(cardId).script
+  if (!script || script.kind !== 'active' || script.xpCost !== 1) return false
+  const chip = new Set(['mdmg', 'pdmg', 'slam', 'timber', 'sky', 'hood', 'luna', 'snap', 'slash', 'duel', 'stun'])
+  const hits = new Set(['laneE', 'epos1', 'epos2', 'ethird', ''])
+  return script.ult.some((part) => {
+    const [verb, who = ''] = part.trim().split(/\s+/)
+    return chip.has(verb) && hits.has(who)
+  })
+}
+
+/** Mid is the door into the enemy jungle, once the home camp already has its farmer. */
+function midDoor(s: GameState, p: PlayerId, style: AiStyle): boolean {
+  if (style !== 'jungler' || !junglerFarming(s.round)) return false
+  const enemy = campNeutral(s, enemyJungle(p))
+  if (!enemy || heroesIn(s, p, enemyJungle(p)) >= junglerCap(enemy)) return false
+  const home = campNeutral(s, homeJungle(p))
+  return !home || heroesIn(s, p, homeJungle(p)) >= junglerCap(home)
 }
 
 /** Junglers play lanes for two rounds, then the camps open. */
@@ -280,6 +301,7 @@ function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr: Attribute | un
   let attack = 0
   if (style === 'jungler' || style === 'hunter') {
     attack = junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), foes.length, bodies, ancientOpen)
+    if (lane === 'mid' && midDoor(s, p, style)) attack += 1
   } else {
     const crowd = style === 'lane' ? Math.max(0, bodies - 2) : bodies * 3
     attack = towerPressure(enemyTw.t1, enemyTw.t2) * (style === 'lane' ? 3 : 2) + foes.length * 2 - crowd
@@ -303,7 +325,7 @@ function heroesIn(s: GameState, p: PlayerId, zone: ZoneId): number {
   return unitsIn(s, p, zone).filter((u) => u.kind === 'hero').length
 }
 
-/** A camp is 5 once two heroes are already in lanes. A jungler farms from round 3, two on a creep and three on a boss. */
+/** A camp is 5 once two heroes are already in lanes. A jungler farms from round 3, one hero on the camp. */
 function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
   if (style === 'lane' || style === 'defender' || style === 'hunter') return -999
   const home = homeJungle(p)
@@ -314,7 +336,7 @@ function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
     if (!junglerFarming(s.round)) return -999
     const cap = junglerCap(neutral)
     if (mine >= cap) return -999
-    // A boss beats a one-hero lane so the third hero still arrives. A creep ties that lane and stays in it.
+    // A boss beats a one-hero lane. A creep ties that lane and stays in it.
     return neutral.kind === 'roshan' || neutral.kind === 'tormentor' ? 19 : 18
   }
   const laneHeroes = LANES.reduce((sum, lane) => sum + heroesIn(s, p, lane), 0)
@@ -336,12 +358,15 @@ export function aiAssign(state: GameState, p: PlayerId, style: AiStyle = 'balanc
     if (heroes.length === 0) break
     let best = heroes[0]
     let bestScore = -Infinity
+    let bestSpell = 0
     for (const card of heroes) {
       const attr = getHero(card.cardId).attribute
       const zone = bestZone(s, p, attr, style)
       const score = isLane(zone) ? laneValue(s, p, zone, attr, style) : jungleValue(s, p, style)
-      if (score > bestScore) {
+      const spell = !isLane(zone) && campSpell(card.cardId) ? 1 : 0
+      if (score > bestScore || (score === bestScore && spell > bestSpell)) {
         bestScore = score
+        bestSpell = spell
         best = card
       }
     }
@@ -577,7 +602,7 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
   return stay
 }
 
-function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle): number {
+function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle, from?: ZoneId): number {
   const foes = lineup(s, other(p), zone).length
   const friends = lineup(s, p, zone).length
   let score = foes * 2 - friends
@@ -589,7 +614,8 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle): num
       const home = campNeutral(s, homeJungle(p))
       const homeReady = !home || heroesIn(s, p, homeJungle(p)) >= junglerCap(home)
       if (zone === homeJungle(p) && mine < junglerCap(camp)) score += 20
-      if (zone === enemyJungle(p) && mine < junglerCap(camp) && homeReady) score += 8
+      // The enemy camp is one step from mid. A healthy Tier 1 is 16, an open Tier 2 is 24.
+      if (zone === enemyJungle(p) && from === 'mid' && mine < junglerCap(camp) && homeReady) score += 20
       return score
     }
     // A hunter does not farm, so a camp is not a destination.
@@ -613,7 +639,7 @@ export function aiRotate(state: GameState, p: PlayerId, style: AiStyle = 'balanc
   for (const u of heroesOnBoard(state, p)) {
     const stay = stayValue(state, p, u, style)
     for (const zone of rotationTargets(state, u.uid)) {
-      const score = destValue(state, p, zone, style)
+      const score = destValue(state, p, zone, style, u.zone)
       const margin = score - stay
       if (score > stay && (!best || margin > best.margin)) best = { uid: u.uid, zone, margin }
     }

@@ -1043,21 +1043,31 @@ describe('opponent decisions', () => {
     }
   })
 
-  it('a jungler farms two heroes from round 3 and pushes with the third', () => {
+  it('a jungler farms one hero from round 3 and stages the rest in mid', () => {
     let s = setup(17, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 3
     forceCamp(s, 'direJungle', 'neutral')
     s = aiAssign(s, 'dire', 'jungler')
-    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(2)
-    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
   })
 
-  it('a jungler stacks three heroes on Roshan or a Tormentor', () => {
+  it('a jungler sends the 1 XP camp spell to the neutral', () => {
+    let s = setup(47, [], [hero('d1', 'axe'), hero('d2', 'sven'), hero('d3', 'chaos_knight')])
+    s.round = 3
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'jungler')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'chaos_knight')?.zone).toBe('direJungle')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
+  })
+
+  it('a jungler sends one hero to Roshan or a Tormentor', () => {
     let s = setup(30, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 4
     forceCamp(s, 'direJungle', 'tormentor')
     s = aiAssign(s, 'dire', 'jungler')
-    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'direJungle')).toBe(true)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
   })
 
   it('a jungler stacks a lane held by one hero', () => {
@@ -1068,17 +1078,17 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'mid')).toBe(true)
   })
 
-  it('a jungler stacks an empty lane once two heroes are already farming', () => {
+  it('a jungler stages in mid once one hero is already farming', () => {
     let s = setup(27, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge'), hero('d4', 'axe'), hero('d5', 'sven')])
     s.round = 3
     s = placeHero(s, 'dire', 'd1', 'direJungle')
-    s = placeHero(s, 'dire', 'd2', 'direJungle')
     s.players.dire.placedThisRound = 0
     forceCamp(s, 'direJungle', 'neutral')
     s = aiAssign(s, 'dire', 'jungler')
     const fresh = heroesOnBoard(s, 'dire').filter((u) => u.zone !== 'direJungle')
     expect(fresh).toHaveLength(3)
-    expect(fresh.every((u) => u.zone === 'top')).toBe(true)
+    expect(fresh.every((u) => u.zone === 'mid')).toBe(true)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
   })
 
   it('a jungler answers an open Ancient with every hero', () => {
@@ -1151,7 +1161,8 @@ describe('opponent decisions', () => {
     forceCamp(s, 'direJungle', 'neutral')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
-    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
   })
 
   it('a lane stack sacrifices one hero on its Tier 2 and pushes with the rest', () => {
@@ -1308,7 +1319,8 @@ describe('opponent decisions', () => {
     s.phase = 'rotate'
     s = aiRotate(s, 'radiant', 'jungler')
     expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('top')
-    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'mid')).toHaveLength(1)
   })
 
   it('a spare jungler rotates onto an exposed Tier 2', () => {
@@ -1325,7 +1337,7 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(2)
   })
 
-  it('two junglers stay on a camp while every enemy Tier 1 is up', () => {
+  it('a second jungler leaves the camp for mid', () => {
     let s = setup(29, [hero('a', 'sven'), hero('b', 'axe')])
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
     s = placeHero(s, 'radiant', 'b', 'radiantJungle')
@@ -1333,7 +1345,34 @@ describe('opponent decisions', () => {
     s.round = 3
     s.phase = 'rotate'
     s = aiRotate(s, 'radiant', 'jungler')
-    expect(heroesOnBoard(s, 'radiant').every((u) => u.zone === 'radiantJungle')).toBe(true)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'mid')).toHaveLength(1)
+  })
+
+  it('a jungler rotates from mid into the enemy jungle', () => {
+    let s = setup(48, [hero('a', 'sven'), hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'b', 'mid')
+    forceCamp(s, 'direJungle', 'neutral')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 3
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'jungler')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'axe')?.zone).toBe('direJungle')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('radiantJungle')
+  })
+
+  it('a jungler on the offlane does not step into the enemy jungle', () => {
+    let s = setup(49, [hero('a', 'sven'), hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'b', 'top')
+    forceCamp(s, 'direJungle', 'neutral')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 3
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'jungler')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'axe')?.zone).toBe('top')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('radiantJungle')
   })
 
   it('a jungler leaves the camp during the first two rounds', () => {

@@ -151,6 +151,16 @@ function campCap(neutral: Unit): number {
   return neutral.kind === 'roshan' ? 2 : 3
 }
 
+/** A jungler caps a normal camp at 2. Roshan and a Tormentor need 3. */
+function junglerCap(neutral: Unit): number {
+  return neutral.kind === 'roshan' || neutral.kind === 'tormentor' ? 3 : 2
+}
+
+/** Junglers play lanes for two rounds, then the camps open. */
+function junglerFarming(round: number): boolean {
+  return round > 2
+}
+
 /**
  * Minimum heroes on this lane while enemies are hitting it.
  * A jungler answers the Ancient with the whole board. A lane stack uses one fewer than the
@@ -291,14 +301,20 @@ function heroesIn(s: GameState, p: PlayerId, zone: ZoneId): number {
   return unitsIn(s, p, zone).filter((u) => u.kind === 'hero').length
 }
 
-/** A camp is 5 once two heroes are already in lanes. A jungler sends the first two at 18 and a third at 12. */
+/** A camp is 5 once two heroes are already in lanes. A jungler farms from round 3, two on a creep and three on a boss. */
 function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
   if (style === 'lane' || style === 'defender') return -999
   const home = homeJungle(p)
   const neutral = campNeutral(s, home)
   if (!neutral) return -999
   const mine = heroesIn(s, p, home)
-  if (style === 'jungler') return mine < 2 ? 18 : mine < 3 ? 12 : -999
+  if (style === 'jungler') {
+    if (!junglerFarming(s.round)) return -999
+    const cap = junglerCap(neutral)
+    if (mine >= cap) return -999
+    // A boss beats a one-hero lane so the third hero still arrives. A creep ties that lane and stays in it.
+    return neutral.kind === 'roshan' || neutral.kind === 'tormentor' ? 19 : 18
+  }
   const laneHeroes = LANES.reduce((sum, lane) => sum + heroesIn(s, p, lane), 0)
   if (laneHeroes < 2) return -999
   if (mine >= campCap(neutral)) return -999
@@ -521,8 +537,11 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
   let stay = lineup(s, other(p), u.zone).length * 2
   if (campNeutral(s, u.zone)) stay += 3
   if (!isLane(u.zone)) {
-    // Two farmers stay for a healthy Tier 1 (16) and still leave for an exposed Tier 2 (24).
-    if (style === 'jungler' && u.zone === homeJungle(p) && heroesIn(s, p, u.zone) < 3) stay += 18
+    // Farmers stay for a healthy Tier 1 (16) and still leave for an exposed Tier 2 (24).
+    const camp = campNeutral(s, u.zone)
+    if (style === 'jungler' && junglerFarming(s.round) && camp && u.zone === homeJungle(p) && heroesIn(s, p, u.zone) <= junglerCap(camp)) {
+      stay += 18
+    }
     return stay
   }
   const ownTw = s.players[p].structures.towers[u.zone]
@@ -547,8 +566,11 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle): num
     const camp = campNeutral(s, zone)
     const mine = heroesIn(s, p, zone)
     if (style === 'jungler') {
-      if (zone === homeJungle(p) && camp && mine < 3) score += 12
-      if (zone === enemyJungle(p) && camp && mine < 3 && heroesIn(s, p, homeJungle(p)) >= 2) score += 8
+      if (!junglerFarming(s.round) || !camp) return score
+      const home = campNeutral(s, homeJungle(p))
+      const homeReady = !home || heroesIn(s, p, homeJungle(p)) >= junglerCap(home)
+      if (zone === homeJungle(p) && mine < junglerCap(camp)) score += 20
+      if (zone === enemyJungle(p) && mine < junglerCap(camp) && homeReady) score += 8
       return score
     }
     if (style !== 'lane' && style !== 'defender' && camp && zone === homeJungle(p) && mine < campCap(camp)) score += NEUTRAL_KILL

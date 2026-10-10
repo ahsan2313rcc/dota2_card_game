@@ -348,8 +348,13 @@ def lane_value(g: Game, p: str, lane: str) -> int:
     return max(attack, defend_value(own["t1"], own["t2"], foes, mine, style))
 
 
+def jungler_cap(kind: str) -> int:
+    """A normal creep takes 2. Roshan and a Tormentor take 3."""
+    return 3 if kind in ("roshan", "tormentor") else 2
+
+
 def jungle_value(g: Game, p: str) -> int:
-    """Balanced farms for 5. A jungler sends the first two at 18 and a third at 12. Lane and defender stay out."""
+    """Balanced farms for 5. A jungler waits until round 3, then caps the camp."""
     style = g.style[p]
     if style in ("lane", "defender"):
         return -999
@@ -358,9 +363,12 @@ def jungle_value(g: Game, p: str) -> int:
         return -999
     mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
     if style == "jungler":
-        if mine < 2:
-            return 18
-        return 12 if mine < 3 else -999
+        if g.round <= 2:
+            return -999
+        cap = jungler_cap(camp.kind)
+        if mine >= cap:
+            return -999
+        return 19 if camp.kind in ("roshan", "tormentor") else 18
     if lane_heroes(g, p) < 2:
         return -999
     cap = 2 if camp.kind == "roshan" else 3
@@ -370,15 +378,17 @@ def jungle_value(g: Game, p: str) -> int:
 
 
 def invade_value(g: Game, p: str) -> int:
-    """A jungler steps into the enemy camp once two heroes are already clearing home."""
-    if g.style[p] != "jungler":
+    """A jungler steps into the enemy camp once home is full, and only after round 2."""
+    if g.style[p] != "jungler" or g.round <= 2:
         return -999
     camp = g.camps[other(p)]
     if camp is None or camp.hp <= 0:
         return -999
+    home_camp = g.camps[p]
+    home_need = jungler_cap(home_camp.kind) if home_camp is not None and home_camp.hp > 0 else 0
     home = sum(1 for unit in g.jungle[p] if unit.hp > 0)
     mine = sum(1 for unit in g.invade[p] if unit.hp > 0)
-    if home < 2 or mine >= 3:
+    if home < home_need or mine >= jungler_cap(camp.kind):
         return -999
     return 8
 
@@ -838,6 +848,7 @@ def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire:
     heroes = load_heroes()
     wins: Counter[str] = Counter()
     lengths: list[int] = []
+    win_lengths: dict[str, list[int]] = {"radiant": [], "dire": []}
     gold: list[int] = []
     xp: list[int] = []
     towers: list[int] = []
@@ -879,6 +890,7 @@ def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire:
         if g.winner:
             wins[g.winner] += 1
             lengths.append(length)
+            win_lengths[g.winner].append(length)
         else:
             unfinished += 1
             lengths.append(limit)
@@ -924,6 +936,9 @@ def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire:
     if games:
         print(f"radiant win rate {wins['radiant'] / games:.1%}")
     print(f"mean length {avg(lengths):.1f} rounds")
+    radiant_when = f"{avg(win_lengths['radiant']):.1f}" if win_lengths["radiant"] else "—"
+    dire_when = f"{avg(win_lengths['dire']):.1f}" if win_lengths["dire"] else "—"
+    print(f"mean rounds to win  radiant {radiant_when}  dire {dire_when}")
     print(f"mean gold left {avg(gold):.1f}  mean xp left {avg(xp):.1f}")
     print(f"mean towers destroyed {avg(towers):.1f}")
     if games:
@@ -1008,6 +1023,8 @@ def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire:
         "games": games,
         "unfinished": unfinished,
         "length": avg(lengths),
+        "win_rounds": (sum(win_lengths["radiant"]), sum(win_lengths["dire"])),
+        "win_n": (len(win_lengths["radiant"]), len(win_lengths["dire"])),
         "neutrals": (lifetime["radiant"][3] / games if games else 0, lifetime["dire"][3] / games if games else 0),
         "jungle": (
             sum(sent["radiant"] for sent in jungle_sent) / games if games else 0,
@@ -1099,10 +1116,26 @@ def tourney(games: int, seed: int, limit: int) -> None:
             by_seat[dire].append(1 - rate)
         print(f"{radiant:10}  " + "  ".join(cells))
     print()
-    print("Mean win rate of each style across both seats and every opponent.")
+    print("Mean win rate and average rounds to win. Rounds count only games that style won.")
+    print(f"{'':10}  {'win rate':>10}  {'rounds':>8}")
+    won_rounds = {name: [0.0, 0] for name in STYLES}
+    for row in rows:
+        r_sum, d_sum = row["win_rounds"]
+        r_n, d_n = row["win_n"]
+        assert isinstance(r_sum, (int, float)) and isinstance(d_sum, (int, float))
+        assert isinstance(r_n, int) and isinstance(d_n, int)
+        radiant_name = row["radiant"]
+        dire_name = row["dire"]
+        assert isinstance(radiant_name, str) and isinstance(dire_name, str)
+        won_rounds[radiant_name][0] += r_sum
+        won_rounds[radiant_name][1] += r_n
+        won_rounds[dire_name][0] += d_sum
+        won_rounds[dire_name][1] += d_n
     for name in sorted(STYLES, key=lambda style: sum(by_seat[style]) / len(by_seat[style]), reverse=True):
         rates = by_seat[name]
-        print(f"{name:10}  {sum(rates) / len(rates):.1%}")
+        total, count = won_rounds[name]
+        rounds = total / count if count else 0
+        print(f"{name:10}  {sum(rates) / len(rates):10.1%}  {rounds:8.1f}")
 
 
 def main() -> None:

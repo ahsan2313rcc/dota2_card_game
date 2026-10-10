@@ -275,10 +275,14 @@ NEUTRAL_KILL = 5
 
 
 def garrison(t1: int, t2: int, foes: int, style: str) -> int:
-    """Ancient is always answered. Lane and jungler skip Tier 1. Defender overfills."""
+    """Jungler holds the Ancient with all 5. Lane uses attackers minus one, and one hero for a dying Tier 1."""
     if foes <= 0:
         return 0
     if t1 <= 0 and t2 <= 0:
+        if style == "jungler":
+            return 5
+        if style == "lane":
+            return max(0, foes - 1)
         return min(5, foes + (2 if style == "defender" else 1))
     if t1 <= 0:
         if style == "lane":
@@ -288,8 +292,10 @@ def garrison(t1: int, t2: int, foes: int, style: str) -> int:
         if style == "jungler":
             return min(5, foes + (1 if t2 < TOWER["t2"] else 0))
         return foes
-    if style in ("jungler", "lane"):
+    if style == "jungler":
         return 0
+    if style == "lane":
+        return 1 if t1 <= foes else 0
     if style == "defender":
         return foes
     matching = max(0, foes - 1)
@@ -301,12 +307,25 @@ def defend_value(t1: int, t2: int, foes: int, mine: int, style: str) -> int:
     if mine >= garrison(t1, t2, foes, style):
         return 0
     if t1 <= 0 and t2 <= 0:
-        return 50 + foes
+        return 70 if style == "jungler" else 50 + foes
     if t1 <= 0:
         raw = 2 + 2 * max(t2, 0) + 3
         scored = raw - 4 if mine else raw
-        return max(scored, 14) if style == "jungler" else scored
+        return max(scored, 20) if style == "jungler" else scored
+    if style == "lane":
+        return 30
     return 8 if mine == 0 and foes >= t1 else 4
+
+
+def jungler_push(pressure: int, defenders: int, bodies: int, ancient_open: bool) -> int:
+    """Stack on a lane with 0 or 1 defender. Two defenders are left to the camp."""
+    if defenders >= 2:
+        return 0
+    crowd = max(0, bodies - 2)
+    score = pressure * 2 + defenders * 2 + 14 - crowd
+    if ancient_open:
+        score += 28
+    return score
 
 
 def lane_value(g: Game, p: str, lane: str) -> int:
@@ -316,17 +335,21 @@ def lane_value(g: Game, p: str, lane: str) -> int:
     own = g.sides[p].towers[lane]
     foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
     mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
-    crowd = max(0, mine - 2) if style == "lane" else mine * 3
-    attack = tower_pressure(foe["t1"], foe["t2"]) * (3 if style == "lane" else 2) + foes * 2 - crowd
-    if foe["t1"] <= 0 and foe["t2"] <= 0:
-        attack += 28
-    if style == "lane" and (foe["t1"] > 0 or foe["t2"] > 0):
-        attack += 12
+    ancient_open = foe["t1"] <= 0 and foe["t2"] <= 0
+    if style == "jungler":
+        attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
+    else:
+        crowd = max(0, mine - 2) if style == "lane" else mine * 3
+        attack = tower_pressure(foe["t1"], foe["t2"]) * (3 if style == "lane" else 2) + foes * 2 - crowd
+        if ancient_open:
+            attack += 28
+        if style == "lane" and (foe["t1"] > 0 or foe["t2"] > 0):
+            attack += 12
     return max(attack, defend_value(own["t1"], own["t2"], foes, mine, style))
 
 
 def jungle_value(g: Game, p: str) -> int:
-    """Balanced farms for 5. A jungler stacks three at 12. Lane and defender stay out."""
+    """Balanced farms for 5. A jungler sends the first two at 18 and a third at 12. Lane and defender stay out."""
     style = g.style[p]
     if style in ("lane", "defender"):
         return -999
@@ -335,6 +358,8 @@ def jungle_value(g: Game, p: str) -> int:
         return -999
     mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
     if style == "jungler":
+        if mine < 2:
+            return 18
         return 12 if mine < 3 else -999
     if lane_heroes(g, p) < 2:
         return -999

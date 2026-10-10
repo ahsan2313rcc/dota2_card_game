@@ -61,7 +61,7 @@ import {
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
-/** balanced keeps the current garrison. lane stacks on towers. jungler farms. defender holds lanes. */
+/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. */
 export type AiStyle = 'balanced' | 'lane' | 'jungler' | 'defender'
 
 const HARMFUL = new Set([
@@ -153,19 +153,24 @@ function campCap(neutral: Unit): number {
 
 /**
  * Minimum heroes on this lane while enemies are hitting it.
- * Ancient is always answered. A lane stack skips Tier 1. A jungler skips Tier 1 and holds Tier 2
- * with an extra body once that tower is hurt. A defender matches Tier 1 and overfills Tier 2.
+ * A jungler answers the Ancient with the whole board. A lane stack uses one fewer than the
+ * attackers on a Tier 2 or the Ancient, ignores a Tier 1 chip, and sends one hero if that Tier 1 would fall.
  */
 function garrison(t1: number, t2: number, foes: number, style: AiStyle): number {
   if (foes <= 0) return 0
-  if (t1 <= 0 && t2 <= 0) return Math.min(BOARD_LIMIT, foes + (style === 'defender' ? 2 : 1))
+  if (t1 <= 0 && t2 <= 0) {
+    if (style === 'jungler') return BOARD_LIMIT
+    if (style === 'lane') return Math.max(0, foes - 1)
+    return Math.min(BOARD_LIMIT, foes + (style === 'defender' ? 2 : 1))
+  }
   if (t1 <= 0) {
     if (style === 'lane') return Math.max(0, foes - 1)
     if (style === 'defender') return Math.min(BOARD_LIMIT, foes + 1)
     if (style === 'jungler') return Math.min(BOARD_LIMIT, foes + (t2 < TOWER_HP.t2 ? 1 : 0))
     return foes
   }
-  if (style === 'jungler' || style === 'lane') return 0
+  if (style === 'jungler') return 0
+  if (style === 'lane') return t1 <= foes ? 1 : 0
   if (style === 'defender') return foes
   const matching = Math.max(0, foes - 1)
   return t1 <= foes ? Math.max(matching, 1) : matching
@@ -176,17 +181,27 @@ function garrison(t1: number, t2: number, foes: number, style: AiStyle): number 
  * Tier 2: 2 + 2 per remaining health + 3. A full tower is 15, and a hero already soaking cuts 4.
  * Tier 1: 8 when the tower would fall, otherwise 4, under a camp.
  * Ancient: 50 plus the attackers, so the quota is filled before any push.
- * A jungler still fills a Tier 2 quota before farming, so that score stays at least 14.
+ * A jungler still fills a Tier 2 quota before farming, so that score stays at least 20.
  */
 function defendValue(t1: number, t2: number, foes: number, mine: number, style: AiStyle): number {
   if (mine >= garrison(t1, t2, foes, style)) return 0
-  if (t1 <= 0 && t2 <= 0) return 50 + foes
+  if (t1 <= 0 && t2 <= 0) return style === 'jungler' ? 70 : 50 + foes
   if (t1 <= 0) {
     const raw = 2 + 2 * Math.max(t2, 0) + 3
     const scored = mine > 0 ? raw - 4 : raw
-    return style === 'jungler' ? Math.max(scored, 14) : scored
+    return style === 'jungler' ? Math.max(scored, 20) : scored
   }
+  if (style === 'lane') return 30
   return mine === 0 && foes >= t1 ? 8 : 4
+}
+
+/** A jungler stacks on a lane held by 0 or 1 hero. Two defenders send them back to the camp. */
+function junglerPush(pressure: number, defenders: number, bodies: number, ancientOpen: boolean): number {
+  if (defenders >= 2) return 0
+  const crowd = Math.max(0, bodies - 2)
+  let score = pressure * 2 + defenders * 2 + 14 - crowd
+  if (ancientOpen) score += 28
+  return score
 }
 
 /** How badly we want to walk onto this tower. A healthy tier 1 is not a reason to leave a fight. */
@@ -249,10 +264,16 @@ function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr: Attribute | un
   const foes = enemyHeroes(s, p, lane)
   const mine = heroesIn(s, p, lane)
   const bodies = lineup(s, p, lane).length
-  const crowd = style === 'lane' ? Math.max(0, bodies - 2) : bodies * 3
-  let attack = towerPressure(enemyTw.t1, enemyTw.t2) * (style === 'lane' ? 3 : 2) + foes.length * 2 - crowd
-  if (enemyTw.t1 <= 0 && enemyTw.t2 <= 0) attack += 28
-  if (style === 'lane' && (enemyTw.t1 > 0 || enemyTw.t2 > 0)) attack += 12
+  const ancientOpen = enemyTw.t1 <= 0 && enemyTw.t2 <= 0
+  let attack = 0
+  if (style === 'jungler') {
+    attack = junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), foes.length, bodies, ancientOpen)
+  } else {
+    const crowd = style === 'lane' ? Math.max(0, bodies - 2) : bodies * 3
+    attack = towerPressure(enemyTw.t1, enemyTw.t2) * (style === 'lane' ? 3 : 2) + foes.length * 2 - crowd
+    if (ancientOpen) attack += 28
+    if (style === 'lane' && (enemyTw.t1 > 0 || enemyTw.t2 > 0)) attack += 12
+  }
   if (attr) attack += counterScore(attr, foes)
   const defense = defendValue(ownTw.t1, ownTw.t2, foes.length, mine, style)
   return Math.max(attack, defense)
@@ -270,14 +291,14 @@ function heroesIn(s: GameState, p: PlayerId, zone: ZoneId): number {
   return unitsIn(s, p, zone).filter((u) => u.kind === 'hero').length
 }
 
-/** A camp is 5 once two heroes are already in lanes. A jungler farms earlier and stacks three. */
+/** A camp is 5 once two heroes are already in lanes. A jungler sends the first two at 18 and a third at 12. */
 function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
   if (style === 'lane' || style === 'defender') return -999
   const home = homeJungle(p)
   const neutral = campNeutral(s, home)
   if (!neutral) return -999
   const mine = heroesIn(s, p, home)
-  if (style === 'jungler') return mine < 3 ? 12 : -999
+  if (style === 'jungler') return mine < 2 ? 18 : mine < 3 ? 12 : -999
   const laneHeroes = LANES.reduce((sum, lane) => sum + heroesIn(s, p, lane), 0)
   if (laneHeroes < 2) return -999
   if (mine >= campCap(neutral)) return -999
@@ -500,14 +521,20 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
   let stay = lineup(s, other(p), u.zone).length * 2
   if (campNeutral(s, u.zone)) stay += 3
   if (!isLane(u.zone)) {
-    if (style === 'jungler' && u.zone === homeJungle(p) && heroesIn(s, p, u.zone) < 3) stay += 12
+    // Two farmers stay for a healthy Tier 1 (16) and still leave for an exposed Tier 2 (24).
+    if (style === 'jungler' && u.zone === homeJungle(p) && heroesIn(s, p, u.zone) < 3) stay += 18
     return stay
   }
   const ownTw = s.players[p].structures.towers[u.zone]
   const foes = enemyHeroes(s, p, u.zone).length
   const mine = heroesIn(s, p, u.zone)
+  const enemyTw = s.players[other(p)].structures.towers[u.zone]
   stay += defendValue(ownTw.t1, ownTw.t2, foes, Math.max(0, mine - 1), style)
-  stay += exposedBonus(towerPressure(s.players[other(p)].structures.towers[u.zone].t1, s.players[other(p)].structures.towers[u.zone].t2))
+  if (style === 'jungler') {
+    stay += junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), foes, lineup(s, p, u.zone).length, enemyTw.t1 <= 0 && enemyTw.t2 <= 0)
+  } else {
+    stay += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
+  }
   if (soleDefender(s, p, u)) stay += 10
   return stay
 }
@@ -529,8 +556,10 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle): num
   }
   const enemyTw = s.players[other(p)].structures.towers[zone]
   const ownTw = s.players[p].structures.towers[zone]
-  score += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
-  score += defendValue(ownTw.t1, ownTw.t2, enemyHeroes(s, p, zone).length, heroesIn(s, p, zone), style)
+  const defenders = enemyHeroes(s, p, zone).length
+  if (style === 'jungler') score += junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), defenders, friends, enemyTw.t1 <= 0 && enemyTw.t2 <= 0)
+  else score += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
+  score += defendValue(ownTw.t1, ownTw.t2, defenders, heroesIn(s, p, zone), style)
   return score
 }
 

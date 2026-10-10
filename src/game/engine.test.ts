@@ -828,12 +828,93 @@ describe('opponent decisions', () => {
     expect(new Set(zones).size).toBeGreaterThan(1)
   })
 
-  it('a jungler ignores a Tier 1 and stacks the home camp', () => {
-    let s = setup(17, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+  it('a jungler farms with the first two heroes and pushes an empty lane with the third', () => {
+    let s = setup(17, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'jungler')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+  })
+
+  it('a jungler stacks a lane held by one hero', () => {
+    let s = setup(26, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s = placeHero(s, 'radiant', 'r1', 'mid')
     forceCamp(s, 'direJungle', 'neutral')
     s = aiAssign(s, 'dire', 'jungler')
-    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'direJungle')).toBe(true)
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'mid')).toBe(true)
+  })
+
+  it('a jungler stacks an empty lane once two heroes are already farming', () => {
+    let s = setup(27, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge'), hero('d4', 'axe'), hero('d5', 'sven')])
+    s = placeHero(s, 'dire', 'd1', 'direJungle')
+    s = placeHero(s, 'dire', 'd2', 'direJungle')
+    s.players.dire.placedThisRound = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'jungler')
+    const fresh = heroesOnBoard(s, 'dire').filter((u) => u.zone !== 'direJungle')
+    expect(fresh).toHaveLength(3)
+    expect(fresh.every((u) => u.zone === 'top')).toBe(true)
+  })
+
+  it('a jungler answers an open Ancient with every hero', () => {
+    let s = setup(
+      21,
+      [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')],
+      [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')],
+    )
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = placeHero(s, 'radiant', 'r3', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.dire.structures.towers.bot.t2 = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'jungler')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'bot')).toBe(true)
+  })
+
+  it('a lane stack ignores a Tier 1 chip and piles onto an open Tier 2', () => {
+    let s = setup(22, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'lane')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
+  })
+
+  it('a lane stack sends one hero when a Tier 1 would fall and pushes with the rest', () => {
+    let s = setup(
+      23,
+      [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')],
+      [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')],
+    )
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    s = placeHero(s, 'radiant', 'r2', 'mid')
+    s = placeHero(s, 'radiant', 'r3', 'mid')
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'lane')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
+  })
+
+  it('a lane stack defends an Ancient with one fewer hero than the attackers', () => {
+    let s = setup(24, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.dire.structures.towers.bot.t2 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'lane')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
+  })
+
+  it('a lane stack leaves an Ancient to a single attacker and pushes the open Tier 2', () => {
+    let s = setup(25, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.dire.structures.towers.bot.t2 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'lane')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
 
   it('a jungler matches a Tier 2 and sends the spare hero to camp', () => {
@@ -858,15 +939,40 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('mid')
   })
 
-  it('a jungler rotates into the enemy camp once home is stacked', () => {
+  it('a jungler on an empty lane stays to push instead of invading', () => {
     let s = setup(20, [hero('a', 'sven'), hero('b', 'axe'), hero('c', 'pudge')])
     s = placeHero(s, 'radiant', 'a', 'top')
     s = placeHero(s, 'radiant', 'b', 'radiantJungle')
     s = placeHero(s, 'radiant', 'c', 'radiantJungle')
     forceCamp(s, 'direJungle', 'neutral')
+    forceCamp(s, 'radiantJungle', 'neutral')
     s.phase = 'rotate'
     s = aiRotate(s, 'radiant', 'jungler')
-    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('direJungle')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('top')
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(2)
+  })
+
+  it('a spare jungler rotates onto an exposed Tier 2', () => {
+    let s = setup(28, [hero('a', 'sven'), hero('b', 'axe'), hero('c', 'pudge')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'b', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
+    s.players.dire.structures.towers.bot.t1 = 0
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'jungler')
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'bot')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(2)
+  })
+
+  it('two junglers stay on a camp while every enemy Tier 1 is up', () => {
+    let s = setup(29, [hero('a', 'sven'), hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'b', 'radiantJungle')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'jungler')
+    expect(heroesOnBoard(s, 'radiant').every((u) => u.zone === 'radiantJungle')).toBe(true)
   })
 
   it('defends a Tier 2 instead of farming when an attacker is on it', () => {

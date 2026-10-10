@@ -92,9 +92,9 @@ export function RulesDialog() {
             Heroes take 2 hits: Healthy → Wounded → slain. Attributes do not instakill. They only order basic attacks:
             Agility, then Universal, then Intelligence, then Strength. The lane order breaks ties inside a bracket: safe lane,
             mid, off lane, own jungle, enemy jungle. If that is still a tie, both units attack at the same time. There is no
-            day and night cycle. In Phase 3, a standing tower fires if an enemy attacked it, even when Glyph stopped the
-            damage. Tier 1 deals 1 to a creep in the attacking line, otherwise Position 1. Tier 2 deals 1 to each of the
-            first 3 units, and creeps are hit before heroes.
+            day and night cycle. A standing tower fires as soon as the swing that hit it resolves, even when Glyph stopped
+            the damage. A tower destroyed by that hit does not fire. Tier 1 deals 1 to a creep in the attacking line,
+            otherwise Position 1. Tier 2 deals 1 to each of the first 3 units, and creeps are hit before heroes.
             Physical damage is attacks and towers. Magical damage is ultimates, passives and items. Immunity blocks magical
             damage and debuffs. Ethereal blocks physical attack damage and takes 1 extra magical damage.
           </Section>

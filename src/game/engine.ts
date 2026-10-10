@@ -451,6 +451,7 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     combat: 'before',
     attacked: [],
     towersHit: [],
+    towersFired: [],
     log: [],
     nextId: 1,
     seed: seed | 0,
@@ -550,6 +551,7 @@ function kitApi(s: GameState): KitApi {
       else tw.t2 = Math.max(0, tw.t2 - dmg)
       log(s, `${fullName(src)} blasts the ${PLAYER_LABEL[enemy]} ${ZONE_LABEL[lane]} tower for ${dmg}.`, 'structure')
       if (tw[tier] === 0) onTowerLost(s, enemy, lane, tier, src.owner)
+      else retaliateTower(s, enemy, lane)
     },
     xp: (p, n) => {
       s.players[p].xp = Math.max(0, s.players[p].xp + n)
@@ -996,6 +998,7 @@ export function reveal(state: GameState): GameState {
     pl.ward = []
   }
   s.towersHit = []
+  s.towersFired = []
   s.combat = 'before'
   s.attacked = []
   openWindow(s, true)
@@ -2354,6 +2357,7 @@ function resolveAttackBatch(s: GameState, uids: string[]) {
   for (const u of batch) basicAttack(s, u)
   if (batch.length > 1) flushPendingKills(s)
   for (const uid of uids) if (!s.attacked.includes(uid)) s.attacked.push(uid)
+  retaliateAttacked(s)
 }
 
 function isCreepUnit(s: GameState, id: string) {
@@ -2373,30 +2377,38 @@ function towerTargets(s: GameState, defender: PlayerId, lane: LaneId, tier: 't1'
   return [...creeps, ...rest].slice(0, 3)
 }
 
+/** A standing tower shoots the moment the swing that hit it is done. A dead tower does not shoot. */
+function retaliateTower(s: GameState, defender: PlayerId, lane: LaneId) {
+  const laneKey = `${defender}:${lane}`
+  if (s.towersFired.includes(laneKey)) return
+  const tw = s.players[defender].structures.towers[lane]
+  const tier = tw.t1 > 0 ? 't1' : tw.t2 > 0 ? 't2' : null
+  if (!tier || !s.towersHit.includes(towerKey(defender, lane, tier))) return
+  s.towersFired.push(laneKey)
+  if (s.silencedTowers.includes(laneKey)) return
+  const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
+  const targets = towerTargets(s, defender, lane, tier)
+  if (!targets.length) {
+    log(s, `${label} has no attacker left to fire at.`, 'info')
+    return
+  }
+  for (const id of targets) {
+    if (s.units[id]?.dead) continue
+    dealDamage(s, null, id, TOWER_DAMAGE[tier], 'tower', { label })
+  }
+}
+
+function retaliateAttacked(s: GameState) {
+  for (const lane of LANES) for (const defender of PLAYERS) retaliateTower(s, defender, lane)
+}
+
 function fireTowers(s: GameState) {
   log(s, 'Phase 3 — Tower aggro', 'phase')
-  let fired = false
-  for (const lane of LANES) {
-    for (const defender of PLAYERS) {
-      const tw = s.players[defender].structures.towers[lane]
-      for (const tier of ['t1', 't2'] as const) {
-        if (!s.towersHit.includes(towerKey(defender, lane, tier)) || tw[tier] <= 0) continue
-        if (s.silencedTowers.includes(`${defender}:${lane}`)) continue
-        const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
-        const targets = towerTargets(s, defender, lane, tier)
-        fired = true
-        if (!targets.length) {
-          log(s, `${label} has no attacker left to fire at.`, 'info')
-          continue
-        }
-        for (const id of targets) {
-          if (s.units[id]?.dead) continue
-          dealDamage(s, null, id, TOWER_DAMAGE[tier], 'tower', { label })
-        }
-      }
-    }
+  const already = s.towersFired.length
+  retaliateAttacked(s)
+  if (s.towersFired.length === already) {
+    log(s, already ? 'Every attacked tower has already fired.' : 'No tower was attacked this round, so no tower fires.', 'info')
   }
-  if (!fired) log(s, 'No tower was attacked this round, so no tower fires.', 'info')
   settleBossKills(s)
 }
 

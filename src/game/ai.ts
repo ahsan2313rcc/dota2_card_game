@@ -163,8 +163,8 @@ function junglerFarming(round: number): boolean {
 
 /**
  * Minimum heroes on this lane while enemies are hitting it.
- * A jungler answers the Ancient with the whole board. A lane stack uses one fewer than the
- * attackers on a Tier 2 or the Ancient, ignores a Tier 1 chip, and sends one hero if that Tier 1 would fall.
+ * A jungler answers the Ancient with the whole board. On a Tier 2, a lane stack sacrifices one hero,
+ * a jungler sends one fewer than the attackers, and a defender sends one more.
  */
 function garrison(t1: number, t2: number, foes: number, style: AiStyle): number {
   if (foes <= 0) return 0
@@ -174,9 +174,9 @@ function garrison(t1: number, t2: number, foes: number, style: AiStyle): number 
     return Math.min(BOARD_LIMIT, foes + (style === 'defender' ? 2 : 1))
   }
   if (t1 <= 0) {
-    if (style === 'lane') return Math.max(0, foes - 1)
+    if (style === 'lane') return 1
     if (style === 'defender') return Math.min(BOARD_LIMIT, foes + 1)
-    if (style === 'jungler') return Math.min(BOARD_LIMIT, foes + (t2 < TOWER_HP.t2 ? 1 : 0))
+    if (style === 'jungler') return Math.min(BOARD_LIMIT, Math.max(0, foes - 1))
     return foes
   }
   if (style === 'jungler') return 0
@@ -191,15 +191,15 @@ function garrison(t1: number, t2: number, foes: number, style: AiStyle): number 
  * Tier 2: 2 + 2 per remaining health + 3. A full tower is 15, and a hero already soaking cuts 4.
  * Tier 1: 8 when the tower would fall, otherwise 4, under a camp.
  * Ancient: 50 plus the attackers, so the quota is filled before any push.
- * A jungler still fills a Tier 2 quota before farming, so that score stays at least 20.
+ * An unfilled Tier 2 garrison outranks a counter-push, so a stacked push is answered.
  */
 function defendValue(t1: number, t2: number, foes: number, mine: number, style: AiStyle): number {
   if (mine >= garrison(t1, t2, foes, style)) return 0
   if (t1 <= 0 && t2 <= 0) return style === 'jungler' ? 70 : 50 + foes
   if (t1 <= 0) {
+    if (style === 'lane' || style === 'jungler' || style === 'defender') return 40
     const raw = 2 + 2 * Math.max(t2, 0) + 3
-    const scored = mine > 0 ? raw - 4 : raw
-    return style === 'jungler' ? Math.max(scored, 20) : scored
+    return mine > 0 ? raw - 4 : raw
   }
   if (style === 'lane') return 30
   return mine === 0 && foes >= t1 ? 8 : 4

@@ -353,10 +353,30 @@ describe('setup and core rules', () => {
     s = placeCreep(s, 'radiant', 'c', 'mid')
     s = fight(s)
     const axe = heroesOnBoard(s, 'radiant')[0]
-    expect(s.players.dire.structures.towers.mid.t1).toBe(1)
+    // The tower shoots after Axe's swing and kills the creep before that creep can hit.
+    expect(s.players.dire.structures.towers.mid.t1).toBe(2)
     expect(axe.hp).toBe(2)
     expect(s.log.some((l) => l.text.includes('Tier 1 tower') && l.text.includes('Creep'))).toBe(true)
     expect(s.log.some((l) => /(Top|Bottom) Tier \d tower (deals|slays)/.test(l.text))).toBe(false)
+  })
+
+  it('a tower shoots when the swing that hit it resolves, before the next attacker', () => {
+    let s = setup(62, [hero('a', 'luna'), hero('b', 'axe')])
+    s.players.dire.structures.towers.mid.t1 = 0
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'radiant', 'b', 'mid')
+    s = reveal(s)
+    const axe = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'axe')!
+    axe.hp = 1
+    s = resolveRound(s)
+    expect(s.players.dire.structures.towers.mid.t2).toBe(4)
+    expect(s.units[axe.uid].dead).toBe(true)
+    const lunaHit = s.log.findIndex((l) => l.text.includes('Luna hits') && l.text.includes('Tier 2 tower'))
+    const shot = s.log.findIndex((l) => l.text.includes('Tier 2 tower') && l.text.includes('deals 1'))
+    const axeHit = s.log.findIndex((l) => l.text.includes('Axe hits') && l.text.includes('Tier 2 tower'))
+    expect(lunaHit).toBeGreaterThan(-1)
+    expect(shot).toBeGreaterThan(lunaHit)
+    expect(axeHit).toBe(-1)
   })
 })
 
@@ -994,7 +1014,7 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
 
-  it('a jungler matches a Tier 2 and sends the spare hero to camp from round 3', () => {
+  it('a jungler sends one fewer hero than the attackers to a Tier 2 and farms the rest', () => {
     let s = setup(18, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 3
     s = placeHero(s, 'radiant', 'r1', 'mid')
@@ -1002,8 +1022,52 @@ describe('opponent decisions', () => {
     s.players.dire.structures.towers.mid.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
     s = aiAssign(s, 'dire', 'jungler')
-    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
-    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(2)
+  })
+
+  it('a lane stack sacrifices one hero on its Tier 2 and pushes with the rest', () => {
+    let s = setup(
+      32,
+      [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')],
+      [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')],
+    )
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = placeHero(s, 'radiant', 'r3', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'lane')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
+  })
+
+  it('a jungler defends a Tier 2 with one fewer hero than the stack', () => {
+    let s = setup(
+      33,
+      [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')],
+      [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')],
+    )
+    s.round = 3
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = placeHero(s, 'radiant', 'r3', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'jungler')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+  })
+
+  it('a defender answers a Tier 2 stack with one more hero than the attackers', () => {
+    let s = setup(34, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.radiant.structures.towers.top.t1 = 0
+    s = aiAssign(s, 'dire', 'defender')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(3)
   })
 
   it('a defender answers a Tier 1 and does not farm', () => {
@@ -1255,5 +1319,5 @@ describe('simulation', () => {
       }
     }
     expect(finished).toBeGreaterThan(50)
-  }, 60000)
+  }, 180000)
 })

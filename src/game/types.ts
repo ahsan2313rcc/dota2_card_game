@@ -375,12 +375,14 @@ export interface GameState {
   priority: PlayerId
   /** Passes in a row. Two closes the window and resolves the next swing. */
   passes: number
-  /** before the first swing, between swings, or after the towers have fired. */
+  /** before the first swing, between swings, or after the attack step. */
   combat: 'before' | 'attacks' | 'towers'
   /** Units that have already taken their swing this round. */
   attacked: string[]
   /** Towers damaged during the current resolution, keyed `${defender}:${lane}:${tier}` */
   towersHit: string[]
+  /** Lanes whose tower already shot this round, keyed `${defender}:${lane}`. */
+  towersFired: string[]
   log: LogEntry[]
   nextId: number
   seed: number

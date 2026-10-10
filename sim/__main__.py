@@ -174,6 +174,7 @@ class Game:
     neutral_deck: list[str] = field(default_factory=list)
     neutral_discard: list[str] = field(default_factory=list)
     attacked_towers: set[tuple[str, str]] = field(default_factory=set)
+    fired_towers: set[tuple[str, str]] = field(default_factory=set)
     style: dict[str, str] = field(default_factory=lambda: {"radiant": "balanced", "dire": "balanced"})
     # Heroes who rotated into the enemy jungle. Assignment cannot start there.
     invade: dict[str, list[Unit]] = field(default_factory=dict)
@@ -192,6 +193,7 @@ class Game:
         self.neutral_kills = {p: 0 for p in ("radiant", "dire")}
         self.jungle_sent = {p: 0 for p in ("radiant", "dire")}
         self.attacked_towers = set()
+        self.fired_towers = set()
         self.aegis = {p: 0 for p in ("radiant", "dire")}
         deck = ["golem", "thunderhide", "ice_shaman", "dragon"] * 3 + ["roshan", "tormentor", "tormentor"]
         self.rng.shuffle(deck)
@@ -291,7 +293,7 @@ NEUTRAL_KILL = 5
 
 
 def garrison(t1: int, t2: int, foes: int, style: str) -> int:
-    """Jungler holds the Ancient with all 5. Lane uses attackers minus one, and one hero for a dying Tier 1."""
+    """Jungler holds the Ancient with all 5. A Tier 2 takes one sacrificial hero from lane, attackers minus one from a jungler, and attackers plus one from a defender."""
     if foes <= 0:
         return 0
     if t1 <= 0 and t2 <= 0:
@@ -302,11 +304,11 @@ def garrison(t1: int, t2: int, foes: int, style: str) -> int:
         return min(5, foes + (2 if style == "defender" else 1))
     if t1 <= 0:
         if style == "lane":
-            return max(0, foes - 1)
+            return 1
         if style == "defender":
             return min(5, foes + 1)
         if style == "jungler":
-            return min(5, foes + (1 if t2 < TOWER["t2"] else 0))
+            return min(5, max(0, foes - 1))
         return foes
     if style == "jungler":
         return 0
@@ -319,15 +321,16 @@ def garrison(t1: int, t2: int, foes: int, style: str) -> int:
 
 
 def defend_value(t1: int, t2: int, foes: int, mine: int, style: str) -> int:
-    """One more defender. 0 once the garrison is full. A soaker cuts the Tier 2 score by 4."""
+    """One more defender. 0 once the garrison is full. An open Tier 2 garrison beats a counter-push."""
     if mine >= garrison(t1, t2, foes, style):
         return 0
     if t1 <= 0 and t2 <= 0:
         return 70 if style == "jungler" else 50 + foes
     if t1 <= 0:
+        if style in ("lane", "jungler", "defender"):
+            return 40
         raw = 2 + 2 * max(t2, 0) + 3
-        scored = raw - 4 if mine else raw
-        return max(scored, 20) if style == "jungler" else scored
+        return raw - 4 if mine else raw
     if style == "lane":
         return 30
     return 8 if mine == 0 and foes >= t1 else 4
@@ -474,8 +477,10 @@ def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
             hurt(g, wounded, 1, p)
         else:
             hit_structure(g, other(p), lane, 1, p, ancient=False)
+            retaliate_towers(g)
     elif unit.hero.tower:
         hit_structure(g, other(p), lane, unit.hero.tower, p, ancient=False)
+        retaliate_towers(g)
 
 
 def legal_shield(g: Game, p: str) -> Unit | None:
@@ -740,6 +745,7 @@ def fight_jungle(g: Game) -> None:
 def combat(g: Game) -> None:
     """Interrupt window, then one swing, then another window, repeating through the towers."""
     g.attacked_towers = set()
+    g.fired_towers = set()
     cast(g)
     fight_jungle(g)
     if g.winner is not None:
@@ -752,6 +758,7 @@ def combat(g: Game) -> None:
         for row in batch:
             acted.add(id(row[5]))
         resolve_batch(g, batch)
+        retaliate_towers(g)
         if g.winner is not None:
             return
         cast(g)
@@ -783,19 +790,28 @@ def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str, *,
             g.winner = attacker
 
 
-def towers_fire(g: Game) -> None:
-    """A tower fires because it was attacked, even when the hit dealt no damage."""
-    for defender, lane in g.attacked_towers:
+def retaliate_towers(g: Game) -> None:
+    """A standing tower shoots as soon as the swing that hit it is done. Once per tower each round."""
+    for defender, lane in list(g.attacked_towers):
+        if (defender, lane) in g.fired_towers:
+            continue
         tw = g.sides[defender].towers[lane]
+        if tw["t1"] <= 0 and tw["t2"] <= 0:
+            continue
+        g.fired_towers.add((defender, lane))
         foes = [u for u in g.board[other(defender)][lane] if u.hp > 0]
         if not foes:
             continue
         if tw["t1"] > 0:
             physical(g, foes[0], 1, defender)
-        elif tw["t2"] > 0:
-            # First 3 units, 1 each. This sim has no creeps, so the front heroes take the shots.
+        else:
             for foe in foes[:3]:
                 physical(g, foe, 1, defender)
+
+
+def towers_fire(g: Game) -> None:
+    """Anything hit during an interrupt that has not shot yet."""
+    retaliate_towers(g)
 
 
 def cleanup(g: Game) -> None:

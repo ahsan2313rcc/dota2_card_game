@@ -52,7 +52,7 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 2. **Draw.** Spend Gold to draw, and buy any of the last 10 heroes back from the shared discard.
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
 4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
-5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side plays one. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. Either side can interrupt again between swings and after the towers fire. Passives are already on.
+5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side plays one. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. Either side can interrupt again between swings. A tower shoots as soon as the swing that hit it resolves. Passives are already on.
 6. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
 7. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
 8. **Income.** Hero-kill Gold and XP, and lane XP.
@@ -127,7 +127,7 @@ A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card
 
 **Order.** Hastened units attack first. Then Agility, Universal, Intelligence, Strength, then units with no attribute (creeps). Slowed units attack after everyone else, in that same order, unless they also have Haste. Ultimates resolve earlier: Strength, Intelligence, Universal, Agility. Ties use the lane and day/night priority above.
 
-**Towers.** A tower fires if an enemy attacked it this round and it is still standing. Glyph stops the damage and the tower still fires. A Tier 1 tower prefers a lane creep or siege creep in the attacking lineup, otherwise Position 1, and deals 1. A Tier 2 tower deals 1 to each of the first 3 units in the lane, with creeps taken before heroes.
+**Towers.** A standing tower fires as soon as the swing that hit it resolves, before the next swing. A tower destroyed by that hit does not fire. Glyph stops the damage and the tower still fires. A Tier 1 tower prefers a lane creep or siege creep in the attacking lineup, otherwise Position 1, and deals 1. A Tier 2 tower deals 1 to each of the first 3 units in the lane, with creeps taken before heroes. Each tower fires once per round.
 
 **Physical and magical.** Physical damage is basic attacks, towers, reflected damage, and ultimate or item damage printed as physical. Magical damage is ultimates, passives, and items that are not printed as physical. Immunity blocks magical damage and debuffs from enemies. Damage a card deals to itself still lands. Ethereal blocks physical damage and takes 1 extra magical damage. Invulnerable blocks all damage except self-damage. Banish is untargetable and invulnerable.
 

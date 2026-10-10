@@ -591,6 +591,10 @@ function kitApi(s: GameState): KitApi {
 function relocate(s: GameState, u: Unit, zone: ZoneId, front: boolean, cause?: 'tp' | 'move') {
   const from = u.zone
   if (u.owner === 'neutral' || u.dead || s.units[u.uid] !== u) return
+  if (u.status.stunned) {
+    log(s, `${fullName(u)} is Stunned and cannot move.`, 'info')
+    return
+  }
   removeFromBoard(s, u)
   u.zone = zone
   const arr = s.zones[zone][u.owner]
@@ -1128,7 +1132,7 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
       if (itemId === 'rune_water') return allies.filter((u) => DEBUFFS.some((d) => u.status[d]) || u.status.poisonedBy).map((u) => u.uid)
       return allies.map((u) => u.uid)
     case 'allyHeroToLane':
-      return allies.filter((u) => !u.status.rooted).map((u) => u.uid)
+      return allies.filter((u) => !u.status.rooted && !u.status.stunned).map((u) => u.uid)
     case 'enemyUnit':
       return enemies.map((u) => u.uid)
     case 'enemyHero':
@@ -1140,7 +1144,7 @@ export function itemTargets(s: GameState, p: PlayerId, itemId: string): string[]
 export function itemLanes(s: GameState, p: PlayerId, itemId: string, heroUid?: string): LaneId[] {
   const item = getItem(itemId)
   if (item.target === 'lane') {
-    if (item.id === 'gate') return heroesOnBoard(s, p).some((u) => !u.status.rooted) ? [...LANES] : []
+    if (item.id === 'gate') return heroesOnBoard(s, p).some((u) => !u.status.rooted && !u.status.stunned) ? [...LANES] : []
     return [...LANES]
   }
   if (item.target === 'allyHeroToLane' && heroUid) return LANES.filter((l) => s.units[heroUid]?.zone !== l)
@@ -1184,7 +1188,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     for (const u of heroesOnBoard(s, p)) heal(s, u, 'Lotus Pool')
   } else if (item.id === 'gate' && lane) {
     const movers = heroesOnBoard(s, p)
-      .filter((u) => u.zone !== lane && !u.status.rooted)
+      .filter((u) => u.zone !== lane && !u.status.rooted && !u.status.stunned)
       .sort(byPriority(s))
     for (const u of movers) teleport(s, u, lane)
     log(s, movers.length ? `${movers.map(unitName).join(', ')} step through the Twin Gate to ${ZONE_LABEL[lane]}.` : 'Nobody could use the Twin Gate.', tone(p))
@@ -1265,6 +1269,10 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
         st.skadi = true
         break
       case 'force_staff': {
+        if (t.status.stunned) {
+          log(s, `${fullName(t)} is Stunned and cannot move.`, 'info')
+          break
+        }
         const arr = s.zones[t.zone][t.owner as PlayerId]
         const i = arr.indexOf(t.uid)
         if (i >= 0) {
@@ -1928,7 +1936,9 @@ function castUlt(s: GameState, u: Unit, targetUid?: string) {
       break
     case 'pudge':
       if (target) {
-        if (target.status.rooted) {
+        if (target.status.stunned) {
+          log(s, `${fullName(target)} is Stunned and cannot be dragged.`, 'info')
+        } else if (target.status.rooted) {
           log(s, `${fullName(target)} is Rooted and cannot be dragged.`, 'info')
         } else if (target.status.immune) {
           log(s, `${fullName(target)} is Immune to Meat Hook.`, 'info')
@@ -2033,13 +2043,40 @@ function refreshNeutralAuras(s: GameState) {
   }
 }
 
-/** Contested camp passives. They are not ultimates, so they do not follow declaration order. */
+/** A neutral ultimate needs this many living units in the camp. The neutral itself does not count. */
+const NEUTRAL_ULT_MIN = 3
+
+function campUnitCount(s: GameState, camp: ZoneId): number {
+  return PLAYERS.reduce((n, p) => n + lineup(s, p, camp).length, 0)
+}
+
+function neutralUltName(u: Unit): string | null {
+  if (u.kind === 'roshan') return 'Roar'
+  if (u.cardId === 'thunderhide') return 'Thunder Clap'
+  if (u.cardId === 'ice_shaman') return 'Freezing Blast'
+  if (u.cardId === 'dragon') return 'Fire Pit'
+  return null
+}
+
+function neutralLock(u: Unit): string | null {
+  if (u.status.banished) return 'Banished'
+  if (u.status.feared) return 'Feared'
+  if (u.status.stunned) return 'Stunned'
+  return null
+}
+
+/** Neutral ultimates. They are not declared. They need 3 units in the camp, and a stun skips them. */
 function contestStrikes(s: GameState) {
   for (const camp of CAMPS) {
     const u = campNeutral(s, camp)
     if (!u || u.dead) continue
-    const present = PLAYERS.some((p) => lineup(s, p, camp).length > 0)
-    if (!present) continue
+    const ult = neutralUltName(u)
+    if (!ult || campUnitCount(s, camp) < NEUTRAL_ULT_MIN) continue
+    const locked = neutralLock(u)
+    if (locked) {
+      log(s, `${fullName(u)} is ${locked} and does not cast ${ult}.`, 'info')
+      continue
+    }
     const everyone = PLAYERS.flatMap((p) => targetableLineup(s, p, camp))
     if (u.kind === 'roshan') roshanRoar(s, u)
     if (u.cardId === 'thunderhide') {
@@ -2169,17 +2206,17 @@ function attackStructure(s: GameState, u: Unit, lane: LaneId) {
   checkWinner(s)
 }
 
-function neutralAttack(s: GameState, u: Unit) {
+function neutralStrikeTargets(s: GameState, u: Unit): string[] {
   const all = PLAYERS.flatMap((p) => targetableLineup(s, p, u.zone))
   const fronts = PLAYERS.map((p) => targetableLineup(s, p, u.zone)[0]).filter(Boolean)
-  const targets =
-    u.kind === 'roshan' || u.cardId === 'dragon'
-      ? all
-      : u.cardId === 'thunderhide'
-        ? all.filter((id) => s.units[id].kind === 'hero')
-        : u.cardId === 'ice_shaman'
-          ? fronts.filter((id) => s.units[id].kind === 'hero')
-          : fronts
+  if (u.kind === 'roshan' || u.cardId === 'dragon') return all
+  if (u.cardId === 'thunderhide') return all.filter((id) => s.units[id].kind === 'hero')
+  if (u.cardId === 'ice_shaman') return fronts.filter((id) => s.units[id].kind === 'hero')
+  return fronts
+}
+
+function neutralAttack(s: GameState, u: Unit) {
+  const targets = neutralStrikeTargets(s, u)
   if (u.status.blinded && !u.status.accuracy) {
     if (targets.length) log(s, `${fullName(u)} is Blinded and misses.`, 'info')
     return
@@ -2348,6 +2385,27 @@ function nextBatch(s: GameState): string[] | null {
   return batch.map((u) => u.uid)
 }
 
+/** Same as nextBatch, without marking illusions and Tormentors as having acted. */
+function peekNextBatch(s: GameState): string[] | null {
+  const acted = new Set(s.attacked)
+  const scan = (): string[] | null => {
+    const waiting = Object.values(s.units).filter((u) => !u.dead && !acted.has(u.uid))
+    if (!waiting.length) return null
+    const slowed = (u: Unit) => u.status.slowed && !u.status.haste
+    const ready = waiting.filter((u) => !slowed(u))
+    const pool = ready.length ? ready : waiting
+    const order = attackOrder(s, pool)
+    if (!order.length) {
+      for (const u of pool) acted.add(u.uid)
+      return scan()
+    }
+    const batch = [order[0]]
+    while (batch.length < order.length && sameSwing(s, batch[0], order[batch.length])) batch.push(order[batch.length])
+    return batch.map((u) => u.uid)
+  }
+  return scan()
+}
+
 function resolveAttackBatch(s: GameState, uids: string[]) {
   const batch = uids.map((id) => s.units[id]).filter((u): u is Unit => !!u && !u.dead)
   if (batch.length > 1) {
@@ -2471,6 +2529,92 @@ function advanceCombat(s: GameState) {
     return
   }
   beginRotation(s)
+}
+
+function structureName(s: GameState, u: Unit): string {
+  const enemy = other(u.owner as PlayerId)
+  const tw = s.players[enemy].structures.towers[u.zone as LaneId]
+  const lane = ZONE_LABEL[u.zone]
+  if (tw.t1 > 0) return `${PLAYER_LABEL[enemy]} ${lane} Tier 1 tower`
+  if (tw.t2 > 0) return `${PLAYER_LABEL[enemy]} ${lane} Tier 2 tower`
+  return `${PLAYER_LABEL[enemy]} Ancient`
+}
+
+function swingClause(s: GameState, u: Unit): string {
+  const who = fullName(u)
+  if (u.status.banished) return `${who} is Banished and does not attack`
+  if (u.status.stunned) return `${who} is Stunned and does not attack`
+  if (u.status.feared) return `${who} is Feared and does not attack`
+  if (u.status.disarmed) return `${who} is Disarmed and does not attack`
+  if (u.status.hexed) return `${who} is Hexed and does not attack`
+  const ids = u.owner === 'neutral' ? neutralStrikeTargets(s, u) : attackTargets(s, u)
+  const miss = u.status.blinded && !u.status.accuracy
+  if (ids.length === 0) {
+    if (u.owner !== 'neutral' && isLane(u.zone)) {
+      const building = structureName(s, u)
+      return miss ? `${who} is Blinded and misses the ${building}` : `${who} attacks the ${building}`
+    }
+    return `${who} has nothing to attack`
+  }
+  const names = ids.map((id) => fullName(s.units[id])).join(' and ')
+  return miss ? `${who} is Blinded and misses ${names}` : `${who} attacks ${names}`
+}
+
+function batchSentence(s: GameState, uids: string[]): string {
+  const units = uids.map((id) => s.units[id]).filter((u): u is Unit => !!u && !u.dead)
+  if (!units.length) return 'the next swing'
+  if (units.length > 1) return `${units.map((u) => swingClause(s, u)).join('; ')} (same time)`
+  return swingClause(s, units[0])
+}
+
+function openingPreview(s: GameState): string {
+  const notes: string[] = []
+  for (const u of Object.values(s.units)) {
+    if (u.status.echoUlt && !u.dead && u.owner !== 'neutral') notes.push(`${fullName(u)}'s ultimate echoes`)
+  }
+  for (const camp of CAMPS) {
+    const u = campNeutral(s, camp)
+    if (!u) continue
+    const ult = neutralUltName(u)
+    if (!ult || campUnitCount(s, camp) < NEUTRAL_ULT_MIN) continue
+    const locked = neutralLock(u)
+    notes.push(locked ? `${fullName(u)} is ${locked} and does not cast ${ult}` : `${fullName(u)} casts ${ult}`)
+  }
+  const lead = notes.length ? `${notes.join('. ')}.` : 'Opening effects resolve.'
+  return `${lead} Another interrupt opens before the first swing.`
+}
+
+function towerPreview(s: GameState): string {
+  const shots: string[] = []
+  for (const lane of LANES) {
+    for (const defender of PLAYERS) {
+      const laneKey = `${defender}:${lane}`
+      if (s.towersFired.includes(laneKey)) continue
+      const tw = s.players[defender].structures.towers[lane]
+      const tier = tw.t1 > 0 ? 't1' : tw.t2 > 0 ? 't2' : null
+      if (!tier || !s.towersHit.includes(towerKey(defender, lane, tier))) continue
+      const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
+      if (s.silencedTowers.includes(laneKey)) shots.push(`${label} is silenced and does not fire`)
+      else {
+        const targets = towerTargets(s, defender, lane, tier)
+        shots.push(targets.length ? `${label} fires at ${targets.map((id) => fullName(s.units[id])).join(' and ')}` : `${label} has nobody left to shoot`)
+      }
+    }
+  }
+  if (!shots.length) return 'No tower fires. Another interrupt opens before rotation.'
+  return `${shots.join('. ')}. Another interrupt opens before rotation.`
+}
+
+/** What both passes resolve next. Does not change the game. */
+export function nextCombatAction(s: GameState): string {
+  if (s.phase !== 'response') return ''
+  if (s.winner) return 'The duel is over.'
+  if (s.combat === 'before') return openingPreview(s)
+  if (s.combat === 'attacks') {
+    const batch = peekNextBatch(s)
+    return batch ? batchSentence(s, batch) : towerPreview(s)
+  }
+  return 'Rotation begins. Each side may move up to 2 heroes.'
 }
 
 /** The side with priority passes. Two passes in a row resolve the next part of combat. */

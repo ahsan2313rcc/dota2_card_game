@@ -52,7 +52,7 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 2. **Draw.** Spend Gold to draw, and buy any of the last 10 heroes back from the shared discard.
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
 4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
-5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side plays one. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. Either side can interrupt again between swings. A tower shoots as soon as the swing that hit it resolves. Passives are already on.
+5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side plays one. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next action, and the board names that action before you pass. Either side can interrupt again between swings. A tower shoots as soon as the swing that hit it resolves. Passives are already on.
 6. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
 7. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
 8. **Income.** Hero-kill Gold and XP, and lane XP.
@@ -141,7 +141,9 @@ The side that arrived first holds the camp. A tie goes to the owner of that jung
 
 Clearing a normal neutral pays 2 Gold, 2 XP, and one rune card to the killer's side.
 
-**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. While he is at full health he Roars at the start of ultimate resolution: Disarm and 1 damage to each contesting unit. His bounty is 3 Gold, 3 XP, a rune, and the Aegis.
+A neutral ultimate (Thunder Clap, Freezing Blast, Fire Pit, or Roshan's Roar) resolves only when 3 or more units are in that camp. The neutral itself does not count. A stunned neutral does not cast it.
+
+**Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. Roar, when the camp holds 3 or more units, Disarms them and deals 1 damage to each. His bounty is 3 Gold, 3 XP, a rune, and the Aegis.
 
 **Tormentor** is Universal, 2 health, and never attacks. It gains 1 Shield at the start of resolution if it has none. Reflection returns the damage to the attacker and the same amount to the other side's Position 1 in that camp. A Shield blocks reflected damage. Break turns Reflection off. Its bounty is 2 Gold, 2 XP, a rune, and a Refresher Shard.
 
@@ -161,7 +163,7 @@ Round statuses end at Cleanup. Health, permanent attack bonuses, the ultimate-co
 
 | Status | Effect |
 | --- | --- |
-| Stun | Skips the ultimate and the basic attack. |
+| Stun | Skips the ultimate, the move, and the basic attack. The same lock applies to a neutral. |
 | Silence | Skips the ultimate. |
 | Break | The passive is off. |
 | Disarm | Skips the basic attack. |
@@ -275,10 +277,10 @@ An ultimate is aimed at the caster's own lane or zone unless the card names anot
 | Camp | Attribute | Health | Attack |
 | --- | --- | --- | --- |
 | Stone Golem | Strength | 2 | Position 1. Hits against it are capped at 1. Immune to magical ultimate damage. |
-| Thunderhide | Agility | 2 | Haste. Hits every contesting enemy hero and applies Slow. |
-| Ice Shaman | Intelligence | 2 | Curses units in the camp. Hits each Position 1 for 1 and Silences them. |
-| Black Dragon | Universal | 2 | Accuracy. Hits every contesting unit. |
-| Roshan | Universal | 3 | Ignores the first damage each round. Hits every enemy. Roars while at full health. |
+| Thunderhide | Agility | 2 | Haste. Hits every enemy hero and applies Slow. Thunder Clap needs 3 units in the camp. |
+| Ice Shaman | Intelligence | 2 | Silences the camp. Hits each Position 1 and Silences them. Freezing Blast needs 3 units in the camp. |
+| Black Dragon | Universal | 2 | Accuracy. Hits every unit in the camp. Fire Pit needs 3 units in the camp. |
+| Roshan | Universal | 3 | Ignores the first damage each round. Hits every enemy. Roar needs 3 units in the camp. |
 | Tormentor | Universal | 2 | Does not attack. Shield and Reflection, as above. |
 
 ## What this prototype does not include

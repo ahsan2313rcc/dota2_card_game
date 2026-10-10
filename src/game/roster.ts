@@ -92,7 +92,7 @@ const ROWS: Row[] = [
   ['lion', 'Lion', 'INT', 'Ranged', 'Hex', 'Hex an enemy hero.', 'active', 2, 'enemyHeroInLane', '', 'hex target'],
   ['muerta', 'Muerta', 'INT', 'Ranged', 'Pierce the Veil', 'Become Ethereal. Silence and Slow lane enemies.', 'active', 2, 'none', '', 'ethereal self|silence laneE|slow laneE'],
   ['necrophos', 'Necrophos', 'INT', 'Ranged', 'Reaper\'s Scythe', 'Kill a wounded hero. That hero cannot be bought back.', 'active', 2, 'enemyHeroInLane', '', 'killwounded|nobuyback'],
-  ['oracle', 'Oracle', 'INT', 'Ranged', 'False Promise', 'An allied hero takes half damage and double healing, and heals at the end of the turn.', 'active', 1, 'allyHero', '', 'half target|doubleheal target|healend target'],
+  ['oracle', 'Oracle', 'INT', 'Ranged', 'False Promise', 'An allied hero takes half damage and double healing, and heals 1 HP at the end of the turn.', 'active', 2, 'allyHero', '', 'half target|doubleheal target|healend target'],
   ['outworld_destroyer', 'Outworld Destroyer', 'INT', 'Ranged', 'Astral Imprisonment', 'Banish a hero in this lane. An enemy also takes 1 magical damage, and you gain 1 XP.', 'active', 2, 'heroInLane', '', 'astral'],
   ['puck', 'Puck', 'INT', 'Ranged', 'Phase Shift', 'Become Invulnerable and Silence all lane enemies.', 'active', 2, 'none', '', 'invulnerable self|silence laneE'],
   ['pugna', 'Pugna', 'INT', 'Ranged', 'Nether Ward', 'A lane enemy that casts an ability takes 1 magical damage.', 'passive', 0, 'none', 'onUlt:pugna', ''],

@@ -29,6 +29,7 @@ import {
   itemBlockReason,
   itemLanes,
   itemTargets,
+  nextCombatAction,
   rotationTargets,
   shieldBlockReason,
   assignableZones,
@@ -383,6 +384,15 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+function passConsequence(s: GameState): string {
+  const pending = nextCombatAction(s)
+  const you = s.priority === HUMAN
+  if (s.passes === 0) {
+    return `If ${you ? 'you pass' : 'Dire passes'}, ${you ? 'Dire still gets' : 'you still get'} a turn. Once both sides pass: ${pending}`
+  }
+  return `If ${you ? 'you pass' : 'Dire passes'}: ${pending}`
+}
+
 function ActionBar({
   s,
   selectedCard,
@@ -436,7 +446,7 @@ function ActionBar({
                 : 'Choose a highlighted hero to teleport.'
               : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
           : s.priority === HUMAN
-            ? `Play one item, rune, reward, ability, or a 3 XP Shield, or pass. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A Shield lasts until it blocks a hit and does not stack. A second pass on each side resolves the next swing. You can interrupt again between swings and after the towers fire.`
+            ? `Play one item, rune, reward, ability, or a 3 XP Shield. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A Shield lasts until it blocks a hit and does not stack.`
             : 'Dire is answering.'
       cta = 'Pass'
       break
@@ -469,6 +479,7 @@ function ActionBar({
       <div className="flex-1">
         <div className="text-sm font-semibold text-amber-200">{title}</div>
         <div className="text-xs text-zinc-400">{hint}</div>
+        {s.phase === 'response' && <div className="mt-1 text-xs font-medium text-amber-100">{passConsequence(s)}</div>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {s.phase === 'draw' &&

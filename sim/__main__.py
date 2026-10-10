@@ -712,15 +712,17 @@ def fight_jungle(g: Game) -> None:
         camp = g.camps[p]
         if not heroes or camp is None or camp.hp <= 0:
             continue
-        if camp.kind == "roshan":
-            for hero in heroes:
-                hero.disarmed = True
-                hurt(g, hero, 1, "neutral")
-        elif camp.kind in ("thunderhide", "dragon"):
-            for hero in heroes:
-                hurt(g, hero, 1, "neutral")
-        elif camp.kind == "ice_shaman":
-            hurt(g, heroes[0], 1, "neutral")
+        # Roar, Thunder Clap, Freezing Blast, and Fire Pit need 3 units in the camp.
+        if len(heroes) >= 3:
+            if camp.kind == "roshan":
+                for hero in heroes:
+                    hero.disarmed = True
+                    hurt(g, hero, 1, "neutral")
+            elif camp.kind in ("thunderhide", "dragon"):
+                for hero in heroes:
+                    hurt(g, hero, 1, "neutral")
+            elif camp.kind == "ice_shaman":
+                hurt(g, heroes[0], 1, "neutral")
         for hero in heroes:
             if hero.hp <= 0 or hero.disarmed or camp.hp <= 0:
                 continue

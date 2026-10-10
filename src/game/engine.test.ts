@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aiAssign, aiDraw, aiRotate, aiUlts, playAiRound } from './ai'
-import { HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
+import { getHero, HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyShield,
   buyback,
@@ -18,8 +18,10 @@ import {
   endRotation,
   handCount,
   heroesOnBoard,
+  itemTargets,
   lineup,
   newGame,
+  nextCombatAction,
   nextRound,
   passResponse,
   placeCreep,
@@ -264,6 +266,77 @@ describe('setup and core rules', () => {
     expect(logHas(s, 'Laguna Blade')).toBe(true)
     expect(s.units[tide.uid].hp).toBe(1)
     expect(s.priority).toBe('radiant')
+  })
+
+  it('names the action a pass will resolve, without changing the game', () => {
+    let s = setup(3, [hero('a', 'luna')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = reveal(s)
+    for (const camp of CAMPS) {
+      const n = campNeutral(s, camp)
+      if (!n) continue
+      n.dead = true
+      s.camps[camp] = null
+    }
+    expect(nextCombatAction(s)).toContain('before the first swing')
+    s = passResponse(s, 'radiant')
+    s = passResponse(s, 'dire')
+    expect(s.combat).toBe('attacks')
+    const logged = s.log.length
+    const preview = nextCombatAction(s)
+    expect(preview).toContain('Radiant Luna attacks Dire Axe')
+    expect(s.attacked).toEqual([])
+    expect(s.log).toHaveLength(logged)
+    s = passResponse(s, 'radiant')
+    expect(nextCombatAction(s)).toContain('Radiant Luna attacks Dire Axe')
+    s = passResponse(s, 'dire')
+    expect(logHas(s, 'Luna')).toBe(true)
+    expect(s.units[heroesOnBoard(s, 'dire')[0].uid].hp).toBe(1)
+  })
+
+  it('False Promise costs 2 XP and heals the ally 1 HP at the end of the turn', () => {
+    expect(getHero('oracle').script?.xpCost).toBe(2)
+    expect(getHero('oracle').ult.text).toContain('1 HP')
+    let s = setup(11, [hero('o', 'oracle'), hero('a', 'omniknight')])
+    s = placeHero(s, 'radiant', 'o', 'mid')
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = reveal(s)
+    const oracle = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'oracle')!
+    const ally = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'omniknight')!
+    s.players.radiant.xp = 1
+    expect(ultBlockReason(s, oracle.uid)).toBe('Needs 2 XP')
+    s.players.radiant.xp = 2
+    s = declareUlt(s, oracle.uid, ally.uid)
+    expect(s.players.radiant.xp).toBe(0)
+    expect(s.units[ally.uid].status.healEnd).toBe(true)
+    expect(s.units[ally.uid].status.halfDamage).toBe(true)
+    s = resolveRound(s)
+    s.units[ally.uid].hp = 1
+    s = endRotation(s)
+    expect(s.units[ally.uid].hp).toBe(2)
+    expect(logHas(s, 'heals to Healthy')).toBe(true)
+  })
+
+  it('a stunned hero does not cast, move, or attack', () => {
+    let s = setup(4, [hero('a', 'axe')], [hero('b', 'sven')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = reveal(s)
+    const axe = heroesOnBoard(s, 'radiant')[0]
+    const sven = heroesOnBoard(s, 'dire')[0]
+    axe.status.stunned = true
+    expect(ultBlockReason(s, axe.uid)).toBe('Stunned')
+    s.players.radiant.hand.push(item('tp', 'tp'))
+    s.players.radiant.gold = 5
+    expect(itemTargets(s, 'radiant', 'tp')).not.toContain(axe.uid)
+    s.phase = 'rotate'
+    expect(rotationTargets(s, axe.uid)).toEqual([])
+    s.phase = 'response'
+    s.priority = 'radiant'
+    s = resolveRound(s)
+    expect(s.units[sven.uid].hp).toBe(2)
+    expect(logHas(s, 'Axe is Stunned and cannot attack')).toBe(true)
   })
 
   it('a Tier 2 tower deals 1 to the first 3 units, creeps before heroes', () => {
@@ -557,14 +630,42 @@ describe('jungle, Roshan and Tormentor', () => {
     expect(logHas(s, 'hand is full')).toBe(false)
   })
 
-  it('Roshan Roars from a jungle camp while he is at full health', () => {
-    let s = setup(23, [hero('a', 'sven')])
+  it('Roshan Roars only when 3 units are in the camp', () => {
+    let quiet = setup(23, [hero('a', 'sven')])
+    forceCamp(quiet, 'direJungle', 'roshan')
+    quiet = placeHero(quiet, 'radiant', 'a', 'radiantJungle')
+    station(quiet, 'radiant', heroesOnBoard(quiet, 'radiant')[0].uid, 'direJungle')
+    quiet = fight(quiet)
+    expect(logHas(quiet, 'Roshan Roars!')).toBe(false)
+    expect(logHas(quiet, 'Disarmed by Roar')).toBe(false)
+    expect(campNeutral(quiet, 'direJungle')?.hp).toBe(3)
+
+    let s = setup(29, [hero('a', 'sven'), hero('b', 'axe'), hero('c', 'tidehunter')])
     forceCamp(s, 'direJungle', 'roshan')
     s = placeHero(s, 'radiant', 'a', 'radiantJungle')
-    station(s, 'radiant', heroesOnBoard(s, 'radiant')[0].uid, 'direJungle')
+    s = placeHero(s, 'radiant', 'b', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
+    for (const u of heroesOnBoard(s, 'radiant')) station(s, 'radiant', u.uid, 'direJungle')
     s = fight(s)
+    expect(logHas(s, 'Roshan Roars!')).toBe(true)
     expect(logHas(s, 'Radiant Sven is Disarmed by Roar')).toBe(true)
     expect(campNeutral(s, 'direJungle')?.hp).toBe(3)
+  })
+
+  it('a stunned neutral does not cast its ultimate or attack', () => {
+    let s = setup(31, [hero('a', 'sven'), hero('b', 'axe'), hero('c', 'tidehunter')])
+    forceCamp(s, 'radiantJungle', 'neutral', 'thunderhide')
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'b', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
+    s = reveal(s)
+    const hide = campNeutral(s, 'radiantJungle')!
+    hide.status.stunned = true
+    s = resolveRound(s)
+    expect(logHas(s, 'Thunderhide is Stunned and does not cast Thunder Clap')).toBe(true)
+    expect(logHas(s, 'Thunderhide is Stunned and cannot attack')).toBe(true)
+    expect(logHas(s, 'Thunder Clap deals')).toBe(false)
+    for (const u of heroesOnBoard(s, 'radiant')) expect(u.hp).toBe(2)
   })
 
   it('Roshan is shuffled back if he flips before round 4', () => {

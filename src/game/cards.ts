@@ -68,9 +68,9 @@ export const SIEGE_CREEPS = 8
 
 export const NEUTRALS: NeutralCard[] = [
   { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Immune. Gains 1 Shield. Attacks Position 1.' },
-  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hasted. When contested, deal 1 magical damage to every enemy in the camp.' },
-  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Silence every enemy in the camp. When contested, deal 1 magical damage to both Position 1 units.' },
-  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Curse every enemy in the camp. When contested, deal 1 damage to every enemy there.' },
+  { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hasted. Ultimate, only with 3 or more units in the camp: 1 magical damage to every enemy there.' },
+  { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Silence every enemy in the camp. Ultimate, only with 3 or more units in the camp: 1 magical damage to both Position 1 units.' },
+  { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Curse every enemy in the camp. Ultimate, only with 3 or more units in the camp: 1 damage to every enemy there.' },
 ]
 export const NEUTRAL_COPIES = 3
 export const TORMENTOR_COPIES = 2
@@ -78,7 +78,7 @@ export const TORMENTOR_COPIES = 2
 export const ROSHAN = {
   name: 'Roshan',
   attribute: 'UNI' as const,
-  text: 'Evades the first damage each turn. When contested, Disarm and deal 1 damage to every enemy in the camp. Bounty: 3 Gold, 3 XP, a rune, and the Aegis. Never appears before round 4.',
+  text: 'Evades the first damage each turn. Ultimate, only with 3 or more units in the camp: Disarm and deal 1 damage to every enemy there. Bounty: 3 Gold, 3 XP, a rune, and the Aegis. Never appears before round 4.',
 }
 
 export const TORMENTOR = {

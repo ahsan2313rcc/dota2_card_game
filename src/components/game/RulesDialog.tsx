@@ -64,8 +64,8 @@ export function RulesDialog() {
               <li>
                 Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards,
                 abilities, and a 3 XP Shield are interrupts. Play one, it resolves immediately, then the other side plays one. Odd rounds
-                Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. You can interrupt
-                again between swings and after the towers fire.
+                Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next action, and the bar names that
+                action before you pass. You can interrupt again between swings and after the towers fire.
               </li>
               <li>
                 Abilities: each hero has one printed ability. Passives are always on. An active ability costs its printed XP
@@ -101,8 +101,9 @@ export function RulesDialog() {
           <Section title="Jungle, Roshan & Tormentor">
             Two jungles hold one camp each, drawn from a 15-card jungle deck: Stone Golem, Thunderhide, Ice Shaman and Black
             Dragon, three each, plus one Roshan and two Tormentors. A normal neutral kill pays 2 Gold, 2 XP, and a rune.
-            Roshan pays 3 Gold, 3 XP, a rune, and the Aegis. He evades the first damage each turn and, when contested, Disarms
-            and deals 1 damage to every enemy in the camp. He never appears before round 4. The Tormentor pays 2 Gold, 2 XP,
+            Roshan pays 3 Gold, 3 XP, a rune, and the Aegis. He evades the first damage each turn. His Roar, and the other
+            neutral ultimates, resolve only when 3 or more units are in the camp: Roar Disarms and deals 1 damage to every
+            enemy there. A stunned hero or neutral does not cast, move, or attack. Roshan never appears before round 4. The Tormentor pays 2 Gold, 2 XP,
             a rune, and a Refresher Shard. It gains a Shield each turn and reflects damage to the attacker and to each
             contesting Position 1.
           </Section>

@@ -4,12 +4,12 @@ import {
   buyback,
   buybackBlockReason,
   buybackChoices,
-  buybackCost,
   discardToHandLimit,
   campNeutral,
   declareUlt,
   drawBlockReason,
   drawCard,
+  handCount,
   endDraw,
   endItems,
   endRotation,
@@ -38,8 +38,9 @@ import {
   ultZones,
 } from './engine'
 import {
-  BOARD_LIMIT,
   CAMPS,
+  DRAW_CAP,
+  HAND_LIMIT,
   LANES,
   PLAYERS,
   ROTATIONS_PER_ROUND,
@@ -156,7 +157,7 @@ function heroCount(s: GameState, p: PlayerId): number {
   return inHand + heroesOnBoard(s, p).length
 }
 
-/** Gold kept for a shop item, or for buyback when the board is thin. An empty roster spends it all. */
+/** Gold kept for a shop item already in hand. An empty roster spends it all on draws. */
 function goldToHold(s: GameState, p: PlayerId): number {
   if (heroCount(s, p) === 0) return 0
   const pl = s.players[p]
@@ -164,36 +165,35 @@ function goldToHold(s: GameState, p: PlayerId): number {
     .filter((c) => c.type === 'item')
     .map((c) => getItem(c.cardId).cost ?? 0)
     .filter((c) => c > 0)
-  let itemHold = 0
-  if (costs.length) {
-    const affordable = costs.filter((c) => c <= pl.gold)
-    itemHold = affordable.length ? Math.max(...affordable) : Math.min(...costs)
-  }
-  const buybackHold = buybackChoices(s).length > 0 && heroesOnBoard(s, p).length < 2 ? buybackCost(s, p) : 0
-  return Math.max(itemHold, buybackHold)
+  if (!costs.length) return 0
+  const affordable = costs.filter((c) => c <= pl.gold)
+  return affordable.length ? Math.max(...affordable) : Math.min(...costs)
 }
 
+/**
+ * Draw heroes and items before considering buyback. Buyback is only for a side that
+ * cannot take another card from the deck and has no hero to play.
+ */
 export function aiDraw(state: GameState, p: PlayerId): GameState {
   let s = state
-  for (let guard = 0; guard < 2; guard++) {
+  for (let guard = 0; guard < DRAW_CAP; guard++) {
     const pl = s.players[p]
-    const heroesHeld = pl.hand.filter((c) => c.type === 'hero').length
-    const choice = buybackChoices(s).at(-1)
-    const id = choice?.cardId
-    if (!id || heroesHeld >= 2 || heroesOnBoard(s, p).length + heroesHeld >= BOARD_LIMIT) break
-    if (buybackBlockReason(s, p, id)) break
-    s = buyback(s, p, id)
-  }
-  for (let draws = 0; draws < 3; draws++) {
-    if (s.players[p].gold <= goldToHold(s, p)) break
+    if (pl.gold <= goldToHold(s, p)) break
     const heroes = heroCount(s, p)
+    if (handCount(pl) >= (heroes < 2 ? DRAW_CAP : HAND_LIMIT)) break
     const want = heroes < 3 ? 'unit' : 'item'
     const fallback = want === 'unit' ? 'item' : 'unit'
     const type = !drawBlockReason(s, p, want) ? want : !drawBlockReason(s, p, fallback) ? fallback : null
     if (!type) break
-    s = drawCard(s, p, type)
+    const next = drawCard(s, p, type)
+    if (next === s) break
+    s = next
   }
-  return s
+  if (heroCount(s, p) > 0) return s
+  if (!drawBlockReason(s, p, 'unit')) return s
+  const choice = buybackChoices(s).at(-1)
+  if (!choice || buybackBlockReason(s, p, choice.cardId)) return s
+  return buyback(s, p, choice.cardId)
 }
 
 function counterScore(_attr: Attribute, _enemies: Unit[]): number {
@@ -272,6 +272,7 @@ export function aiAssign(state: GameState, p: PlayerId): GameState {
   }
   if (s === state) s = structuredClone(state)
   for (const lane of LANES) {
+    s.zones[lane][p] = s.zones[lane][p].filter((uid) => s.units[uid])
     s.zones[lane][p].sort((a, b) => positionRank(s.units[a]) - positionRank(s.units[b]))
   }
   return s

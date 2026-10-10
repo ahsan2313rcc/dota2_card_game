@@ -37,9 +37,9 @@ export function RulesDialog() {
         <div className="space-y-3 text-sm leading-relaxed text-zinc-300">
           <Section title="Goal">
             Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1, worth 3 Gold) and a Tier 2
-            tower (5 hits, deals 2, worth 5 Gold). The attacker is paid. The defender still takes the hidden card. Clearing
-            every enemy lane tower adds +1 Gold to upkeep. The Radiant Ancient heals allies in Bot. The Dire Ancient heals
-            allies in Top. Fountain still heals 1 in a lane that has no towers left.
+            tower (5 hits, deals 2, worth 5 Gold). The attacker is paid. The defender still takes the hidden card. Each lane
+            with both towers down adds +1 Gold to upkeep, so three open lanes pay 4 Gold (1 + 3). The Radiant Ancient heals
+            allies in Bot. The Dire Ancient heals allies in Top. Fountain still heals 1 in a lane that has no towers left.
           </Section>
           <Section title="Round">
             <ol className="list-decimal space-y-0.5 pl-5">
@@ -62,11 +62,11 @@ export function RulesDialog() {
               <li>Reveal: both sides flip.</li>
               <li>Item: play items, runes and tower cards. Shop items cost their printed Gold and are single use. Runes and tower cards are free. All resolve immediately.</li>
               <li>
-                Abilities: each hero has one printed ability. Passives are always on. Active abilities cost their printed XP
-                (1, 2 or 3) every time. Keeper of the Light reduces an ally's cost by 1, to a minimum of 1. An Arcane rune
-                reduces one hero's cost by 1. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the
-                ability be declared a second time, and that cast can pick a new target. Items, runes, tower cards and boss
-                rewards resolve the moment they are paid for.
+                Abilities: each hero has one printed ability. Passives are always on. An active ability costs its printed XP
+                (1, 2 or 3) and that cost does not increase. It can be declared once per turn. A Refresher Orb allows a
+                second declaration in that same turn, and that cast can pick a new target. Keeper of the Light reduces an
+                ally's cost by 1, to a minimum of 1. An Arcane rune reduces one hero's cost by 1. A Refresher Shard makes
+                that hero's ability cost 0. Items, runes, tower cards and boss rewards resolve the moment they are paid for.
               </li>
               <li>Resolution: abilities declared together resolve last-in, first-out. Basic attacks go Haste, then AGI → UNI → INT → STR, then creeps, with Slow last. A true tie means both attacks happen together. Then towers fire.</li>
               <li>

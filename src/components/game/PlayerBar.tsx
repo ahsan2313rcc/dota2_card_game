@@ -1,5 +1,5 @@
 import { Castle, Coins, Layers, Skull, Sparkles, Users } from 'lucide-react'
-import { PLAYER_LABEL, handCount, heroesOnBoard, other, standingTowers } from '@/game/engine'
+import { PLAYER_LABEL, handCount, heroesOnBoard, openedLanes, other } from '@/game/engine'
 import { ANCIENT_HP, BOARD_LIMIT, HAND_LIMIT, type GameState, type PlayerId } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { CardBack } from './HandCard'
@@ -9,6 +9,7 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
   const pl = s.players[player]
   const side = SIDE_STYLE[player]
   const ancientPct = (pl.structures.ancient / ANCIENT_HP) * 100
+  const open = openedLanes(s, other(player))
   return (
     <div className={cn('flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border px-3 py-2', side.border, side.bg)}>
       <div className="min-w-24">
@@ -46,8 +47,10 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
           </div>
         </div>
       </div>
-      {standingTowers(s, other(player)) === 0 && (
-        <span className="text-[11px] text-amber-300">+1 passive Gold (every enemy lane tower is down)</span>
+      {open > 0 && (
+        <span className="text-[11px] text-amber-300">
+          Upkeep Gold {1 + open} (1 + {open} open {open === 1 ? 'lane' : 'lanes'})
+        </span>
       )}
     </div>
   )

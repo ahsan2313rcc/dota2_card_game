@@ -310,6 +310,37 @@ describe('items, runes and statuses', () => {
     expect(ultCost(s.units[tide])).toBe(2)
   })
 
+  it('refuses a second ability in the same turn, and a Refresher allows one more at no extra XP', () => {
+    let s = setup(43, [hero('a', 'tidehunter'), item('r', 'refresher')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'top')
+    s = reveal(s)
+    const tide = heroesOnBoard(s, 'radiant')[0].uid
+    s.players.radiant.xp = 4
+    s = endItems(s)
+    s = declareUlt(s, tide)
+    expect(s.players.radiant.xp).toBe(2)
+    expect(ultBlockReason(s, tide)).toBe('Already declared')
+    const stuck = declareUlt(s, tide)
+    expect(stuck.ultDeclarations).toHaveLength(1)
+    expect(stuck.players.radiant.xp).toBe(2)
+    expect(ultCost(stuck.units[tide])).toBe(2)
+    s = cancelUlt(s, tide)
+    s.phase = 'items'
+    s.players.radiant.gold = 3
+    s = playItem(s, 'radiant', 'r', tide)
+    s = endItems(s)
+    s.players.radiant.xp = 2
+    s = declareUlt(s, tide)
+    expect(s.players.radiant.xp).toBe(0)
+    expect(ultBlockReason(s, tide)).toBeNull()
+    s = declareUlt(s, tide)
+    expect(s.players.radiant.xp).toBe(0)
+    expect(s.ultDeclarations.filter((d) => d.uid === tide)).toHaveLength(2)
+    expect(ultBlockReason(s, tide)).toBe('Already declared')
+    expect(ultCost(s.units[tide])).toBe(2)
+  })
+
   it('Arcane rune reduces one hero\'s ability cost by 1 XP', () => {
     let s = setup(41, [hero('a', 'axe'), item('i', 'rune_arcane')], [hero('b', 'sven')])
     s = placeHero(s, 'radiant', 'a', 'mid')
@@ -549,6 +580,18 @@ describe('opponent decisions', () => {
     expect(s.players.dire.gold).toBeGreaterThanOrEqual(2)
   })
 
+  it('draws from the deck while a buyback is available', () => {
+    let s = newGame(undefined, 1)
+    s.players.dire.gold = 10
+    s.players.dire.hand = [hero('h', 'axe')]
+    s.heroDiscard = [{ cardId: 'sven', owner: 'radiant', buybackUsed: false }]
+    s = aiDraw(s, 'dire')
+    expect(s.log.some((l) => l.text.includes('buys back'))).toBe(false)
+    expect(handCount(s.players.dire)).toBe(HAND_LIMIT)
+    expect(s.players.dire.gold).toBeLessThan(10)
+    expect(s.heroDiscard.some((h) => h.cardId === 'sven')).toBe(true)
+  })
+
   it('assigns a counter into the lane that already holds the countered hero', () => {
     let s = setup(1, [hero('sv', 'sven')], [hero('pa', 'phantom_assassin')])
     s = placeHero(s, 'radiant', 'sv', 'mid')
@@ -580,6 +623,32 @@ describe('opponent decisions', () => {
 })
 
 describe('gold and xp sinks', () => {
+  it('each lane with both towers down adds 1 passive Gold, and three open lanes pay 4', () => {
+    let s = newGame(undefined, 5)
+    s.phase = 'report'
+    for (const p of PLAYERS) s.players[p].hand = []
+    const base = s.players.radiant.gold
+    s = nextRound(s)
+    expect(s.players.radiant.gold).toBe(base + 1)
+    s.phase = 'report'
+    s.players.dire.structures.towers.mid.t1 = 0
+    s.players.dire.structures.towers.mid.t2 = 0
+    const one = s.players.radiant.gold
+    s = nextRound(s)
+    expect(s.players.radiant.gold).toBe(one + 2)
+    expect(logHas(s, 'Upkeep: Radiant gains 2 Gold')).toBe(true)
+    s.phase = 'report'
+    for (const lane of LANES) {
+      s.players.dire.structures.towers[lane].t1 = 0
+      s.players.dire.structures.towers[lane].t2 = 0
+    }
+    const all = s.players.radiant.gold
+    s = nextRound(s)
+    expect(s.players.radiant.gold).toBe(all + 4)
+    expect(logHas(s, 'Upkeep: Radiant gains 4 Gold')).toBe(true)
+    expect(s.players.dire.gold).toBeGreaterThan(0)
+  })
+
   it('draws past 7, then the next round waits until the hand is discarded down', () => {
     let s = newGame(undefined, 11)
     s.players.radiant.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve'))

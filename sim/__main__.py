@@ -127,10 +127,14 @@ def other(p: str) -> str:
     return "dire" if p == "radiant" else "radiant"
 
 
+def opened_lanes(side: Side) -> int:
+    return sum(1 for lane in LANES if side.towers[lane]["t1"] <= 0 and side.towers[lane]["t2"] <= 0)
+
+
 def upkeep(g: Game) -> None:
     for p, side in g.sides.items():
-        bonus = 1 if standing(g.sides[other(p)]) == 0 else 0
-        side.gold += 1 + bonus
+        # Base 1, plus 1 for each enemy lane with both towers down. Three open lanes pay 4.
+        side.gold += 1 + opened_lanes(g.sides[other(p)])
         side.xp += 1
 
 
@@ -298,7 +302,13 @@ def cleanup(g: Game) -> None:
             side.hand.pop()
 
 
-def play(g: Game, limit: int) -> None:
+def end_of_turn(g: Game) -> dict[str, tuple[int, int, int]]:
+    """Standing towers, gold, and XP for each side after cleanup."""
+    return {p: (standing(g.sides[p]), g.sides[p].gold, g.sides[p].xp) for p in ("radiant", "dire")}
+
+
+def play(g: Game, limit: int) -> dict[int, dict[str, tuple[int, int, int]]]:
+    trace: dict[int, dict[str, tuple[int, int, int]]] = {}
     while g.winner is None and g.round <= limit:
         upkeep(g)
         draw_and_deploy(g)
@@ -313,7 +323,9 @@ def play(g: Game, limit: int) -> None:
         }
         towers_fire(g, damaged)
         cleanup(g)
+        trace[g.round] = end_of_turn(g)
         g.round += 1
+    return trace
 
 
 def simulate(games: int, seed: int, limit: int) -> None:
@@ -324,15 +336,24 @@ def simulate(games: int, seed: int, limit: int) -> None:
     xp: list[int] = []
     towers: list[int] = []
     unfinished = 0
+    # round -> sums of (towers, gold, xp) per side, and how many games reached it
+    reached: Counter[int] = Counter()
+    totals: dict[int, dict[str, list[int]]] = {}
+    # checkpoint -> (behind games, wins from behind, wins that happened after the checkpoint)
+    marks = list(range(5, limit + 1, 5))
+    behind: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
+    comeback: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
+    later: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     for n in range(games):
         rng = random.Random(seed + n)
         g = Game(rng=rng, heroes=heroes, sides={"radiant": Side(), "dire": Side()}, board={})
         for side in g.sides.values():
             side.hand = [rng.choice(heroes) for _ in range(5)]
-        play(g, limit)
+        trace = play(g, limit)
+        length = g.round - 1 if g.winner else limit
         if g.winner:
             wins[g.winner] += 1
-            lengths.append(g.round - 1)
+            lengths.append(length)
         else:
             unfinished += 1
             lengths.append(limit)
@@ -340,6 +361,24 @@ def simulate(games: int, seed: int, limit: int) -> None:
             gold.append(side.gold)
             xp.append(side.xp)
         towers.append(g.towers_fallen)
+        for rnd, snap in trace.items():
+            reached[rnd] += 1
+            bucket = totals.setdefault(rnd, {"radiant": [0, 0, 0], "dire": [0, 0, 0]})
+            for p in ("radiant", "dire"):
+                for i, value in enumerate(snap[p]):
+                    bucket[p][i] += value
+        for mark in marks:
+            snap = trace.get(mark)
+            if snap is None or g.winner is None:
+                continue
+            for p in ("radiant", "dire"):
+                if snap[p][0] < snap[other(p)][0]:
+                    behind[mark][p] += 1
+                    if g.winner == p:
+                        comeback[mark][p] += 1
+                        if length > mark:
+                            later[mark][p] += 1
+
     def avg(xs: list[int]) -> float:
         return sum(xs) / len(xs) if xs else 0
 
@@ -351,7 +390,32 @@ def simulate(games: int, seed: int, limit: int) -> None:
     print(f"mean length {avg(lengths):.1f} rounds")
     print(f"mean gold left {avg(gold):.1f}  mean xp left {avg(xp):.1f}")
     print(f"mean towers destroyed {avg(towers):.1f}")
+    print()
+    print("end of turn, average of games still going (towers standing / gold / xp)")
+    print(f"{'round':>5}  {'games':>5}  {'R towers':>8}  {'D towers':>8}  {'R gold':>7}  {'D gold':>7}  {'R xp':>7}  {'D xp':>7}")
+    for rnd in sorted(totals):
+        n = reached[rnd]
+        rt, rg, rx = (totals[rnd]["radiant"][i] / n for i in range(3))
+        dt, dg, dx = (totals[rnd]["dire"][i] / n for i in range(3))
+        print(f"{rnd:5d}  {n:5d}  {rt:8.2f}  {dt:8.2f}  {rg:7.2f}  {dg:7.2f}  {rx:7.2f}  {dx:7.2f}")
+    print()
+    print("checkpoints: average gold and xp, and wins from behind on towers")
+    print("Behind means fewer standing towers than the opponent at the end of that round.")
+    for mark in marks:
+        n = reached[mark]
+        if n == 0:
+            continue
+        rg, rx = totals[mark]["radiant"][1] / n, totals[mark]["radiant"][2] / n
+        dg, dx = totals[mark]["dire"][1] / n, totals[mark]["dire"][2] / n
+        print(f"after round {mark:>2}  games {n:4d}  radiant gold {rg:6.2f} xp {rx:6.2f}  dire gold {dg:6.2f} xp {dx:6.2f}")
+        for p in ("radiant", "dire"):
+            b = behind[mark][p]
+            c = comeback[mark][p]
+            late = later[mark][p]
+            rate = c / b if b else 0
+            print(f"  {p:8} behind {b:4d}  won anyway {c:4d} ({rate:5.1%})  of which the win came after round {mark}: {late}")
     costs = Counter(h.cost for h in heroes if h.kind == "active")
+    print()
     print(f"active abilities {sum(costs.values())}  costs {dict(sorted(costs.items()))}  passives {sum(h.kind == 'passive' for h in heroes)}")
 
 

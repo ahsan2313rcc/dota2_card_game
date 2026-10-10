@@ -34,10 +34,10 @@ export function Inspector({ unit, state }: { unit?: Unit; state?: GameState }) {
   if (!unit) {
     return (
       <p className="text-xs leading-relaxed text-zinc-500">
-        Click any icon on the map to inspect it. Counter loop: <span className="text-green-300">AGI</span> →{' '}
-        <span className="text-red-300">STR</span> → <span className="text-sky-300">INT</span> →{' '}
-        <span className="text-green-300">AGI</span>. A basic attack against the attribute it counters is an instant kill.{' '}
-        <span className="text-violet-300">UNI</span> sits outside the loop. An active Shield and every other status are labeled on the hero.
+        Click any icon on the map to inspect it. Basic attacks go{' '}
+        <span className="text-green-300">AGI</span> → <span className="text-violet-300">UNI</span> →{' '}
+        <span className="text-sky-300">INT</span> → <span className="text-red-300">STR</span>. Attributes do not change
+        damage. An active Shield and every other status are labeled on the hero.
       </p>
     )
   }

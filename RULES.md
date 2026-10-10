@@ -70,7 +70,7 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 
 | Source | Amount | When |
 | --- | --- | --- |
-| Upkeep | 1, plus 1 more after every enemy lane tower is down | Start of every round |
+| Upkeep | 1, plus 1 for each enemy lane where both towers are down. Three open lanes pay 4. | Start of every round |
 | Enemy hero killed by your unit | 1 per hero, and 1 XP | Income, after Cleanup. Creeps do not pay this. Tower kills do not pay this. |
 | Neutral camp cleared | 1, plus a rune. No XP. | Immediately |
 | Enemy tower destroyed | 3 for Tier 1, 5 for Tier 2, paid to the attacker. The defender takes the hidden card. | Immediately |
@@ -103,7 +103,7 @@ Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
 
 ### XP out
 
-Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3, every time it is cast. Shields are not bought with XP.
+Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be declared once per turn. A Refresher Orb allows one more declaration that turn. Shields are not bought with XP.
 
 If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune reduces one allied hero's cost by 1 XP, to a minimum of 0. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the ability be declared a second time in the same step, and that cast can choose a new target. If it is not declared again, the same cast happens twice.
 

@@ -383,6 +383,12 @@ export function standingTowers(s: GameState, p: PlayerId): number {
   return LANES.reduce((n, l) => n + (t[l].t1 > 0 ? 1 : 0) + (t[l].t2 > 0 ? 1 : 0), 0)
 }
 
+/** Lanes where both towers are gone. Each one adds 1 Gold to that opponent's upkeep. */
+export function openedLanes(s: GameState, p: PlayerId): number {
+  const t = s.players[p].structures.towers
+  return LANES.filter((l) => t[l].t1 <= 0 && t[l].t2 <= 0).length
+}
+
 // ---------- setup ----------
 
 export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
@@ -512,6 +518,7 @@ function kitApi(s: GameState): KitApi {
     heal: (u, label) => heal(s, u, label),
     move: (u, zone, front, cause) => relocate(s, u, zone, !!front, cause),
     transfer: (u, owner, zone) => {
+      if (u.dead || s.units[u.uid] !== u) return
       removeFromBoard(s, u)
       u.owner = owner
       u.zone = zone
@@ -548,8 +555,9 @@ function kitApi(s: GameState): KitApi {
       s.unitDeck = shuffle(s, s.unitDeck)
     },
     returnToHand: (u) => {
-      if (u.owner === 'neutral') return
+      if (u.owner === 'neutral' || u.dead || s.units[u.uid] !== u) return
       const owner = u.owner
+      u.dead = true
       removeFromBoard(s, u)
       s.players[owner].hand.push({
         iid: u.handIid ?? newId(s, 'c'),
@@ -569,7 +577,7 @@ function kitApi(s: GameState): KitApi {
 
 function relocate(s: GameState, u: Unit, zone: ZoneId, front: boolean, cause?: 'tp' | 'move') {
   const from = u.zone
-  if (u.owner === 'neutral') return
+  if (u.owner === 'neutral' || u.dead || s.units[u.uid] !== u) return
   removeFromBoard(s, u)
   u.zone = zone
   const arr = s.zones[zone][u.owner]
@@ -653,15 +661,16 @@ function startRound(s: GameState) {
       heal(s, u, p === 'radiant' ? 'Radiant Ancient' : 'Dire Ancient')
     }
     const xpAura = heroesOnBoard(s, p).filter((u) => hasTag(u, 'xpAura')).length
-    const cleared = standingTowers(s, other(p)) === 0
-    const gold = 1 + (cleared ? 1 : 0)
+    const opened = openedLanes(s, other(p))
+    const gold = 1 + opened
     pl.gold += gold
     pl.xp += 1 + xpAura
     pl.placedThisRound = 0
     pl.killsThisRound = 0
     pl.rotationsUsed = 0
     pl.rotatedUids = []
-    log(s, `Upkeep: ${PLAYER_LABEL[p]} gains ${gold} Gold and ${1 + xpAura} XP${xpAura ? ' (Arcane Aura)' : ''}.`, tone(p))
+    const laneNote = opened ? ` (${opened} open ${opened === 1 ? 'lane' : 'lanes'})` : ''
+    log(s, `Upkeep: ${PLAYER_LABEL[p]} gains ${gold} Gold and ${1 + xpAura} XP${laneNote}${xpAura ? ' (Arcane Aura)' : ''}.`, tone(p))
   }
 }
 
@@ -2418,6 +2427,9 @@ export function endRotation(state: GameState): GameState {
     }
   }
 
+  for (const z of ZONES) {
+    for (const pl of PLAYERS) s.zones[z][pl] = s.zones[z][pl].filter((uid) => s.units[uid])
+  }
   for (const u of Object.values(s.units)) {
     if (u.dead) {
       if (u.kind === 'hero' && !u.copy) {

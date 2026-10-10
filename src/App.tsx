@@ -437,7 +437,7 @@ function ActionBar({
         ? ultZones(s, ultCaster).length
           ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
           : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
-        : `Declare abilities on your board. Each one costs its printed XP. If several are declared together, the last one resolves first. Declared: ${s.ultDeclarations.length}.`
+        : `Declare each ability once this turn. The printed XP cost does not increase. A Refresher allows a second declaration. If several are declared together, the last one resolves first. Declared: ${s.ultDeclarations.length}.`
       cta = 'Resolve combat'
       break
     case 'rotate': {

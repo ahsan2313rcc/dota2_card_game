@@ -162,11 +162,11 @@ function RosterRow({ s, u, index, total, actions }: { s: GameState; u: Unit; ind
           )}
         </span>
       )}
-      {s.phase === 'ults' && active && (
+      {s.phase === 'response' && s.priority === u.owner && active && (
         <button
           type="button"
           onClick={() => actions.onUlt(u)}
-          title={declared ? `Cancel and refund ${declaration?.free ? 'the Arcane rune' : `${declaration?.cost ?? 0} XP`}` : (reason ?? getHero(u.cardId!).ult.text)}
+          title={declared ? 'Already cast this turn' : (reason ?? getHero(u.cardId!).ult.text)}
           className={cn(
             'shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold transition',
             declared

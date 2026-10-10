@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Coins, Footprints, RotateCcw, ScrollText, Skull, Sparkles, Swords, Trophy } from 'lucide-react'
+import { Coins, Footprints, RotateCcw, ScrollText, Skull, Swords, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import { CombatLog, LogLines } from '@/components/game/CombatLog'
 import { HandCard } from '@/components/game/HandCard'
@@ -64,8 +64,8 @@ export default function App() {
   const selectedItem = selectedCard?.type === 'item' ? getItem(selectedCard.cardId) : undefined
 
   const targetable = useMemo(() => {
-    if (s.phase === 'items' && selectedCard?.type === 'item' && !tpHero) return new Set(itemTargets(s, HUMAN, selectedCard.cardId))
-    if (s.phase === 'ults' && ultCaster) return new Set(ultTargets(s, ultCaster))
+    if (s.phase === 'response' && selectedCard?.type === 'item' && !tpHero) return new Set(itemTargets(s, HUMAN, selectedCard.cardId))
+    if (s.phase === 'response' && ultCaster) return new Set(ultTargets(s, ultCaster))
     if (s.phase === 'rotate' && !rotator) {
       return new Set(Object.values(s.units).filter((u) => u.owner === HUMAN && rotationTargets(s, u.uid).length).map((u) => u.uid))
     }
@@ -88,7 +88,7 @@ export default function App() {
       return setSelectedHand(card.iid)
     }
     if (s.phase === 'assign' && card.type === 'creep') return setSelectedHand(card.iid)
-    if (s.phase === 'items' && card.type === 'item') {
+    if (s.phase === 'response' && s.priority === HUMAN && card.type === 'item') {
       setTpHero(null)
       const r = itemBlockReason(s, HUMAN, card)
       if (r) return toast.error(`${getItem(card.cardId).name}: ${r}`)
@@ -98,7 +98,7 @@ export default function App() {
       }
       return setSelectedHand(card.iid)
     }
-    if (card.type === 'item') toast.message('Items are played during the Item step.')
+    if (card.type === 'item') toast.message(s.phase === 'response' ? 'Wait for priority.' : 'Items are interrupts once both sides have revealed.')
     else toast.message(`${card.type === 'hero' ? 'Heroes' : 'Creeps'} are placed during the Assign step.`)
   }
 
@@ -126,7 +126,6 @@ export default function App() {
   }
 
   function onUlt(u: Unit) {
-    if (s.ultDeclarations.some((d) => d.uid === u.uid)) return dispatch({ type: 'cancelUlt', uid: u.uid })
     const r = ultBlockReason(s, u.uid)
     if (r) return toast.error(`${getHero(u.cardId!).ult.name}: ${r}`)
     if (ultNeedsTarget(u)) {
@@ -141,14 +140,14 @@ export default function App() {
   if (s.phase === 'assign' && selectedCard) {
     if (selectedCard.type === 'creep') dropZones = LANES
     else if (selectedCard.type === 'hero' && !placeBlockReason(s, HUMAN)) dropZones = assignableZones(HUMAN)
-  } else if (s.phase === 'items' && selectedCard && selectedItem) {
+  } else if (s.phase === 'response' && selectedCard && selectedItem) {
     if (selectedItem.target === 'lane') dropZones = itemLanes(s, HUMAN, selectedCard.cardId)
     else if (selectedItem.target === 'allyHeroToLane' && tpHero) dropZones = itemLanes(s, HUMAN, selectedCard.cardId, tpHero)
     dropLabel = 'Teleport to'
   } else if (s.phase === 'rotate' && rotator) {
     dropZones = rotationTargets(s, rotator)
     dropLabel = 'Rotate to'
-  } else if (s.phase === 'ults' && ultCaster && ultZones(s, ultCaster).length) {
+  } else if (s.phase === 'response' && ultCaster && ultZones(s, ultCaster).length) {
     dropZones = ultZones(s, ultCaster)
     dropLabel = 'Cast toward'
   }
@@ -161,7 +160,7 @@ export default function App() {
     dropZones: [...dropZones],
     dropLabel,
     onDrop: (zone) => {
-      if (s.phase === 'ults' && ultCaster) {
+      if (s.phase === 'response' && ultCaster) {
         dispatch({ type: 'declareUlt', uid: ultCaster, target: zone })
         setUltCaster(null)
         return
@@ -172,7 +171,7 @@ export default function App() {
         return
       }
       if (!selectedCard) return
-      if (s.phase === 'items') {
+      if (s.phase === 'response') {
         if (isLane(zone)) dispatch({ type: 'playItem', handIid: selectedCard.iid, target: tpHero ?? undefined, lane: zone })
         setTpHero(null)
       } else {
@@ -183,7 +182,7 @@ export default function App() {
   }
 
   const roundEntries = s.log.filter((e) => e.round === s.round)
-  const resolutionStart = roundEntries.findIndex((e) => e.text.startsWith('Phase 1'))
+  const resolutionStart = roundEntries.findIndex((e) => e.text.startsWith('Interrupts') || e.text.startsWith('Phase 2'))
   const resolutionEntries = resolutionStart >= 0 ? roundEntries.slice(resolutionStart) : []
 
   return (
@@ -209,7 +208,7 @@ export default function App() {
             <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
               Runes {s.runeDeck.length}
             </span>
-            <span className="text-zinc-500" title="Version 3. Abilities, items, runes and reward cards resolve immediately. Several abilities declared together resolve last-in, first-out.">
+            <span className="text-zinc-500" title="Version 3. Items, runes, rewards, and abilities are interrupts. Odd rounds Radiant plays first; even rounds Dire plays first. Each card resolves immediately, and either side can interrupt between swings and after the towers fire.">
               v3
             </span>
           </div>
@@ -250,8 +249,7 @@ export default function App() {
             onAdvance={() => {
               if (s.phase === 'draw') dispatch({ type: 'endDraw' })
               else if (s.phase === 'assign') dispatch({ type: 'endAssign' })
-              else if (s.phase === 'items') dispatch({ type: 'endItems' })
-              else if (s.phase === 'ults') dispatch({ type: 'resolve' })
+              else if (s.phase === 'response') dispatch({ type: 'pass' })
               else if (s.phase === 'rotate') dispatch({ type: 'endRotate' })
               else if (s.phase === 'report') dispatch({ type: 'nextRound' })
               else dispatch({ type: 'new' })
@@ -281,7 +279,7 @@ export default function App() {
                     disabledReason={
                       s.phase === 'report'
                         ? discardBlockReason(s, HUMAN, c.iid)
-                        : s.phase === 'items' && c.type === 'item'
+                        : s.phase === 'response' && s.priority === HUMAN && c.type === 'item'
                           ? itemBlockReason(s, HUMAN, c)
                           : s.phase === 'assign' && c.type === 'hero'
                             ? placeBlockReason(s, HUMAN)
@@ -418,27 +416,24 @@ function ActionBar({
         : `Select a hero or creep card, then a green + on the map. Heroes go to a lane or your jungle. Creeps go to lanes. Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round.`
       cta = 'Lock in & reveal'
       break
-    case 'items':
-      title = 'Items'
-      hint = !selectedCard
-        ? 'Select an item, rune or tower card, then a highlighted target. Shop items cost 1, 2 or 3 Gold. Runes and tower cards are free. All are single use and resolve immediately.'
-        : getItem(selectedCard.cardId).target === 'lane'
-          ? `Click a green + to choose the lane for ${getItem(selectedCard.cardId).name}.`
-          : getItem(selectedCard.cardId).target === 'allyHeroToLane'
-            ? tpHero
-              ? `Click a green + to teleport ${getHero(s.units[tpHero].cardId!).name}.`
-              : 'Choose a highlighted hero to teleport.'
-            : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
-      cta = 'Done with items'
-      break
-    case 'ults':
-      title = 'Ultimates'
+    case 'response':
+      title = s.priority === HUMAN ? 'Your interrupt' : 'Dire has priority'
       hint = ultCaster
         ? ultZones(s, ultCaster).length
-          ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
-          : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}.`
-        : `Declare each ability once this turn. The printed XP cost does not increase. A Refresher allows a second declaration. If several are declared together, the last one resolves first. Declared: ${s.ultDeclarations.length}.`
-      cta = 'Resolve combat'
+          ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}. It resolves now.`
+          : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}. It resolves now.`
+        : selectedCard?.type === 'item'
+          ? getItem(selectedCard.cardId).target === 'lane'
+            ? `Click a green + to choose the lane for ${getItem(selectedCard.cardId).name}.`
+            : getItem(selectedCard.cardId).target === 'allyHeroToLane'
+              ? tpHero
+                ? `Click a green + to teleport ${getHero(s.units[tpHero].cardId!).name}.`
+                : 'Choose a highlighted hero to teleport.'
+              : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
+          : s.priority === HUMAN
+            ? `Play one item, rune, reward, or ability, or pass. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A second pass on each side resolves the next swing. You can interrupt again between swings and after the towers fire.`
+            : 'Dire is answering.'
+      cta = 'Pass'
       break
     case 'rotate': {
       title = 'Rotation'
@@ -483,8 +478,8 @@ function ActionBar({
             <ScrollText /> Round report
           </Button>
         )}
-        <Button size="sm" disabled={s.phase === 'report' && excessHand(me) > 0} onClick={onAdvance} className="bg-amber-400 text-zinc-950 hover:bg-amber-300">
-          {s.phase === 'ults' ? <Swords /> : s.phase === 'items' ? <Sparkles /> : null}
+        <Button size="sm" disabled={(s.phase === 'report' && excessHand(me) > 0) || (s.phase === 'response' && s.priority !== HUMAN)} onClick={onAdvance} className="bg-amber-400 text-zinc-950 hover:bg-amber-300">
+          {s.phase === 'response' ? <Swords /> : null}
           {cta}
         </Button>
       </div>

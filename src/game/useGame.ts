@@ -1,24 +1,22 @@
 import { useReducer } from 'react'
-import { aiAssign, aiDraw, aiItems, aiUlts, playAiRound, takeRotations } from './ai'
+import { aiAssign, aiDraw, aiOneResponse, playAiRound, takeRotations } from './ai'
 import {
   buyShield,
   buyback,
-  cancelUlt,
   declareUlt,
   discardFromHand,
   discardToHandLimit,
   drawCard,
   endDraw,
-  endItems,
   endRotation,
   moveInLineup,
   newGame,
   nextRound,
   passRotation,
   placeCreep,
+  passResponse,
   placeHero,
   playItem,
-  resolveRound,
   reveal,
   rotateHero,
   setCampFocus,
@@ -46,16 +44,25 @@ export type Action =
   | { type: 'move'; uid: string; dir: -1 | 1 }
   | { type: 'endAssign' }
   | { type: 'playItem'; handIid: string; target?: string; lane?: LaneId }
-  | { type: 'endItems' }
   | { type: 'declareUlt'; uid: string; target?: string }
-  | { type: 'cancelUlt'; uid: string }
+  | { type: 'pass' }
   | { type: 'campFocus'; camp: CampId; focus: 'neutral' | 'enemy' }
-  | { type: 'resolve' }
   | { type: 'rotate'; uid: string; zone: ZoneId }
   | { type: 'endRotate' }
   | { type: 'nextRound' }
   | { type: 'settings'; settings: Partial<Settings> }
   | { type: 'morph'; uid: string }
+
+/** Dire plays its interrupt, then the next swing if both sides pass, until Radiant has priority again. */
+function respondAi(s: GameState): GameState {
+  let guard = 0
+  while (s.phase === 'response' && s.priority === AI && guard++ < 80) {
+    const next = aiOneResponse(s, AI)
+    if (next === s) break
+    s = next
+  }
+  return s
+}
 
 /** After Radiant is finished, Dire spends whatever rotations it has left. */
 function finishRotation(s: GameState): GameState {
@@ -89,23 +96,15 @@ function reducer(s: GameState, a: Action): GameState {
     case 'move':
       return moveInLineup(s, a.uid, a.dir)
     case 'endAssign':
-      return reveal(aiAssign(s, AI))
+      return respondAi(reveal(aiAssign(s, AI)))
     case 'playItem':
-      return playItem(s, HUMAN, a.handIid, a.target, a.lane)
-    case 'endItems':
-      return endItems(aiItems(s, AI))
+      return respondAi(playItem(s, HUMAN, a.handIid, a.target, a.lane))
     case 'declareUlt':
-      return declareUlt(s, a.uid, a.target)
-    case 'cancelUlt':
-      return cancelUlt(s, a.uid)
+      return respondAi(declareUlt(s, a.uid, a.target))
+    case 'pass':
+      return respondAi(passResponse(s, HUMAN))
     case 'campFocus':
       return setCampFocus(s, HUMAN, a.camp, a.focus)
-    case 'resolve': {
-      // When the AI has priority it rotates first, so the human sees its move before answering.
-      const r = resolveRound(aiUlts(s, AI))
-      if (r.phase === 'gameover') return discardToHandLimit(r, AI)
-      return r
-    }
     case 'rotate': {
       const r = rotateHero(s, HUMAN, a.uid, a.zone)
       return r === s ? s : finishRotation(r)

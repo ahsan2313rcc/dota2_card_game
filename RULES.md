@@ -52,13 +52,11 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 2. **Draw.** Spend Gold to draw, and buy any of the last 10 heroes back from the shared discard.
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
 4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
-5. **Items.** Play shop cards, runes, tower cards, and boss rewards. They resolve immediately.
-6. **Abilities.** Declare active abilities. Passives are already on. Items, runes, tower cards and boss rewards already resolved when they were paid for.
-7. **Resolution.** Declared abilities resolve last-in, first-out. Then basic attacks, then towers.
-8. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
-9. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
-10. **Income.** Hero-kill Gold and XP, and lane XP.
-11. **Report.** Then the next round begins at Upkeep.
+5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side plays one. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. Either side can interrupt again between swings and after the towers fire. Passives are already on.
+6. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
+7. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
+8. **Income.** Hero-kill Gold and XP, and lane XP.
+9. **Report.** Then the next round begins at Upkeep.
 
 There is no day and night cycle. Basic attacks go Haste, then Agility, Universal, Intelligence, Strength, then creeps. Slow attacks last. Inside a bracket the order is safe lane, mid, off lane, own jungle, enemy jungle, then the unit closer to Position 1. If that is still a tie, both units attack at the same time. Abilities do not use the attribute order.
 
@@ -103,9 +101,9 @@ Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
 
 ### XP out
 
-Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be declared once per turn. A Refresher Orb allows one more declaration that turn. Shields are not bought with XP.
+Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be cast once per turn. A Refresher Orb allows one more cast that turn. Items, runes, rewards, and abilities are interrupts: one card, then the other player, resolving as they are played. Odd rounds Radiant starts. Even rounds Dire starts. Two passes resolve the next swing. Shields are not bought with XP.
 
-If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune reduces one allied hero's cost by 1 XP, to a minimum of 0. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the ability be declared a second time in the same step, and that cast can choose a new target. If it is not declared again, the same cast happens twice.
+If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune reduces one allied hero's cost by 1 XP, to a minimum of 0. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the ability be played again later in the round as another interrupt, and that cast can choose a new target. If it is never played again, the same cast repeats when attacks begin.
 
 A cast that fizzles refunds its XP. A cast fizzles when the caster is stunned, silenced, feared, banished, or dead, or the target is gone.
 

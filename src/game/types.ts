@@ -235,8 +235,10 @@ export interface Unit {
   dead: boolean
   /** True once this hero has cast at least once during this deployment. */
   ultUsed: boolean
-  /** Successful Ultimate casts during this deployment. The next one costs this many XP, plus one. */
+  /** Successful ability casts during this deployment. The printed cost does not change. */
   ultCasts: number
+  /** Target of this hero's last ability this turn. A Refresher echoes it if the second cast is never chosen. */
+  lastCastTarget?: string
   /** Legion Commander duel wins. Added to attack damage for the rest of the game. */
   permanentAtk: number
   /** A single-use passive has already fired this deployment. */
@@ -320,7 +322,12 @@ export interface BossKill {
   present: PlayerId[]
 }
 
-export type Phase = 'draw' | 'assign' | 'items' | 'ults' | 'rotate' | 'report' | 'gameover'
+export type Phase = 'draw' | 'assign' | 'response' | 'rotate' | 'report' | 'gameover'
+
+/** Which side plays the first interrupt. Odd rounds Radiant, even rounds Dire. */
+export function firstPlayer(round: number): PlayerId {
+  return round % 2 === 1 ? 'radiant' : 'dire'
+}
 
 export type LogTone = 'info' | 'radiant' | 'dire' | 'neutral' | 'damage' | 'kill' | 'structure' | 'phase'
 
@@ -364,6 +371,14 @@ export interface GameState {
   neutralDeck: string[]
   neutralDiscard: string[]
   ultDeclarations: UltDeclaration[]
+  /** Who may play the next item, rune, reward, or ability. */
+  priority: PlayerId
+  /** Passes in a row. Two closes the window and resolves the next swing. */
+  passes: number
+  /** before the first swing, between swings, or after the towers have fired. */
+  combat: 'before' | 'attacks' | 'towers'
+  /** Units that have already taken their swing this round. */
+  attacked: string[]
   /** Towers damaged during the current resolution, keyed `${defender}:${lane}:${tier}` */
   towersHit: string[]
   log: LogEntry[]

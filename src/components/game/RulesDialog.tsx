@@ -60,15 +60,19 @@ export function RulesDialog() {
                 defends first.
               </li>
               <li>Reveal: both sides flip.</li>
-              <li>Item: play items, runes and tower cards. Shop items cost their printed Gold and are single use. Runes and tower cards are free. All resolve immediately.</li>
+              <li>
+                Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards, and
+                abilities are interrupts. Play one, it resolves immediately, then the other side plays one. Odd rounds
+                Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next swing. You can interrupt
+                again between swings and after the towers fire.
+              </li>
               <li>
                 Abilities: each hero has one printed ability. Passives are always on. An active ability costs its printed XP
-                (1, 2 or 3) and that cost does not increase. It can be declared once per turn. A Refresher Orb allows a
-                second declaration in that same turn, and that cast can pick a new target. Keeper of the Light reduces an
-                ally's cost by 1, to a minimum of 1. An Arcane rune reduces one hero's cost by 1. A Refresher Shard makes
-                that hero's ability cost 0. Items, runes, tower cards and boss rewards resolve the moment they are paid for.
+                (1, 2 or 3) and that cost does not increase. It can be cast once per turn. A Refresher Orb allows a second
+                cast that turn, and that cast can pick a new target. Keeper of the Light reduces an ally's cost by 1, to a
+                minimum of 1. An Arcane rune reduces one hero's cost by 1. A Refresher Shard makes that hero's ability cost 0.
               </li>
-              <li>Resolution: abilities declared together resolve last-in, first-out. Basic attacks go Haste, then AGI → UNI → INT → STR, then creeps, with Slow last. A true tie means both attacks happen together. Then towers fire.</li>
+              <li>Basic attacks go Haste, then AGI → UNI → INT → STR, then creeps, with Slow last. A true tie means both attacks happen together. Then towers fire.</li>
               <li>
                 Rotation: each side may move up to 2 heroes, one step each, along Top · Dire Jungle · Mid · Radiant Jungle ·
                 Bot. You move, then Dire. Rooted or stunned heroes stay. From a lane with no allied towers a hero may walk

@@ -10,7 +10,6 @@ import {
   discardToHandLimit,
   drawBlockReason,
   campNeutral,
-  cancelUlt,
   declareUlt,
   drawCard,
   endDraw,
@@ -21,6 +20,7 @@ import {
   lineup,
   newGame,
   nextRound,
+  passResponse,
   placeCreep,
   placeHero,
   playItem,
@@ -109,8 +109,13 @@ describe('setup and core rules', () => {
     s = reveal(s)
     s.players.radiant.xp = 2
     s = declareUlt(s, heroesOnBoard(s, 'radiant')[0].uid)
-    s = resolveRound(endItems(s))
-    expect(heroesOnBoard(s, 'dire')[0].hp).toBe(1)
+    const axe = heroesOnBoard(s, 'dire')[0]
+    expect(logHas(s, 'Echo Slam deals 1 to Dire Axe')).toBe(true)
+    expect(axe.status.stunned).toBe(true)
+    expect(axe.hp).toBe(1)
+    s = resolveRound(s)
+    expect(heroesOnBoard(s, 'dire')).toHaveLength(0)
+    expect(logHas(s, 'Stunned and cannot attack')).toBe(true)
   })
 
   it('limits hero placements to 3 per round', () => {
@@ -176,24 +181,32 @@ describe('setup and core rules', () => {
     expect(logHas(s, 'counters')).toBe(false)
   })
 
-  it('abilities declared together resolve last-in, first-out', () => {
+  it('odd rounds let Radiant interrupt first, and the cast resolves before Dire answers', () => {
     let s = setup(3, [hero('a', 'tidehunter')], [hero('b', 'lina')])
     s = placeHero(s, 'radiant', 'a', 'top')
     s = placeHero(s, 'dire', 'b', 'top')
-    s = endItems(reveal(s))
+    s = reveal(s)
+    expect(s.priority).toBe('radiant')
     const tide = heroesOnBoard(s, 'radiant')[0]
     const lina = heroesOnBoard(s, 'dire')[0]
     s.players.radiant.xp = 2
     s.players.dire.xp = 2
     s = declareUlt(s, tide.uid)
+    expect(logHas(s, 'casts Ravage')).toBe(true)
+    expect(s.units[lina.uid].status.stunned).toBe(true)
+    expect(s.priority).toBe('dire')
+    expect(ultBlockReason(s, lina.uid)).toBe('Stunned')
+    s.round = 2
+    s.ultDeclarations = []
+    s.units[lina.uid].status.stunned = false
+    s.phase = 'response'
+    s.combat = 'before'
+    s.passes = 0
+    s.priority = 'dire'
     s = declareUlt(s, lina.uid, tide.uid)
-    s = resolveRound(s)
-    const laguna = s.log.findIndex((l) => l.text.includes('Laguna Blade'))
-    const ravage = s.log.findIndex((l) => l.text.includes('casts Ravage'))
-    expect(laguna).toBeGreaterThan(-1)
-    expect(ravage).toBeGreaterThan(laguna)
-    expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(1)
-    expect(logHas(s, 'Dire Lina is Stunned and cannot attack')).toBe(true)
+    expect(logHas(s, 'Laguna Blade')).toBe(true)
+    expect(s.units[tide.uid].hp).toBe(1)
+    expect(s.priority).toBe('radiant')
   })
 
   it('a damaged tower fires at the attacking side Position 1; undamaged towers stay silent', () => {
@@ -293,16 +306,19 @@ describe('items, runes and statuses', () => {
     s = resolveRound(s)
     expect(s.units[tide].ultCasts).toBe(1)
     expect(ultCost(s.units[tide])).toBe(2)
-    s.phase = 'ults'
+    s.phase = 'response'
+    s.priority = 'radiant'
+    s.passes = 0
+    s.combat = 'before'
     s.ultDeclarations = []
     s.players.radiant.xp = 1
     expect(ultBlockReason(s, tide)).toBe('Needs 2 XP')
     s.players.radiant.xp = 2
     s = declareUlt(s, tide)
     expect(s.players.radiant.xp).toBe(0)
-    s = cancelUlt(s, tide)
-    expect(s.players.radiant.xp).toBe(2)
-    s.phase = 'items'
+    s.phase = 'response'
+    s.priority = 'radiant'
+    s.passes = 0
     s.players.radiant.gold = 3
     s.players.radiant.hand.push(item('r', 'refresher'))
     s = playItem(s, 'radiant', 'r', tide)
@@ -320,23 +336,22 @@ describe('items, runes and statuses', () => {
     s = endItems(s)
     s = declareUlt(s, tide)
     expect(s.players.radiant.xp).toBe(2)
+    expect(s.priority).toBe('dire')
+    s = passResponse(s, 'dire')
     expect(ultBlockReason(s, tide)).toBe('Already declared')
     const stuck = declareUlt(s, tide)
     expect(stuck.ultDeclarations).toHaveLength(1)
     expect(stuck.players.radiant.xp).toBe(2)
     expect(ultCost(stuck.units[tide])).toBe(2)
-    s = cancelUlt(s, tide)
-    s.phase = 'items'
     s.players.radiant.gold = 3
     s = playItem(s, 'radiant', 'r', tide)
-    s = endItems(s)
+    expect(s.units[tide].status.echoUlt).toBe(true)
+    s = passResponse(s, 'dire')
     s.players.radiant.xp = 2
     s = declareUlt(s, tide)
-    expect(s.players.radiant.xp).toBe(0)
-    expect(ultBlockReason(s, tide)).toBeNull()
-    s = declareUlt(s, tide)
-    expect(s.players.radiant.xp).toBe(0)
+    expect(s.players.radiant.xp).toBe(2)
     expect(s.ultDeclarations.filter((d) => d.uid === tide)).toHaveLength(2)
+    s = passResponse(s, 'dire')
     expect(ultBlockReason(s, tide)).toBe('Already declared')
     expect(ultCost(s.units[tide])).toBe(2)
   })
@@ -484,8 +499,9 @@ describe('comeback rules and rotation', () => {
     let s = setup(61, [hero('a', 'sven')], [item('g', 'glyph')])
     s = placeHero(s, 'radiant', 'a', 'top')
     s = reveal(s)
+    s = passResponse(s, 'radiant')
     s = playItem(s, 'dire', 'g')
-    s = resolveRound(endItems(s))
+    s = resolveRound(s)
     expect(s.players.dire.structures.towers.top.t1).toBe(3)
     expect(heroesOnBoard(s, 'radiant')[0].hp).toBe(2)
   })
@@ -604,9 +620,10 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'e1', 'mid')
     s = placeHero(s, 'dire', 'fv', 'mid')
     s = placeHero(s, 'dire', 'ally', 'mid')
-    s = endItems(reveal(s))
+    s = passResponse(reveal(s), 'radiant')
     s.players.dire.xp = 5
     s = aiUlts(s, 'dire')
+    expect(s.priority).toBe('dire')
     expect(s.ultDeclarations.some((d) => s.units[d.uid]?.cardId === 'faceless_void')).toBe(false)
   })
 
@@ -615,7 +632,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'e1', 'mid')
     s = placeHero(s, 'radiant', 'e2', 'mid')
     s = placeHero(s, 'dire', 'fv', 'mid')
-    s = endItems(reveal(s))
+    s = passResponse(reveal(s), 'radiant')
     s.players.dire.xp = 5
     s = aiUlts(s, 'dire')
     expect(s.ultDeclarations.some((d) => s.units[d.uid]?.cardId === 'faceless_void')).toBe(true)

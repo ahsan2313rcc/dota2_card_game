@@ -89,6 +89,7 @@ class Unit:
     stunned: bool = False
     haste: bool = False
     slow: bool = False
+    cast: bool = False
 
 
 @dataclass
@@ -163,41 +164,57 @@ def weakest_lane(g: Game, p: str) -> str:
     return min(LANES, key=score)
 
 
-def cast(g: Game) -> None:
-    """Both sides declare, then the declarations resolve last-in, first-out."""
-    declared: list[tuple[str, str, Unit]] = []
-    for p in ("radiant", "dire"):
-        side = g.sides[p]
-        for lane in LANES:
-            for unit in g.board[p][lane]:
-                hero = unit.hero
-                if hero.kind != "active" or unit.stunned or side.xp < hero.cost:
-                    continue
-                if hero.damage == 0 and not hero.stun and not hero.amp:
-                    continue
-                foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
-                if hero.damage and not foes and (g.sides[other(p)].towers[lane]["t1"] or g.sides[other(p)].towers[lane]["t2"]):
-                    pass
-                elif hero.damage and not foes and not hero.stun:
-                    continue
-                side.xp -= hero.cost
-                declared.append((p, lane, unit))
-    for p, lane, unit in reversed(declared):
-        if unit.hp <= 0 or unit.stunned:
-            g.sides[p].xp += unit.hero.cost
-            continue
-        if unit.hero.amp:
-            unit.haste = True
-        foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
-        if unit.hero.stun:
+def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
+    side = g.sides[p]
+    for lane in LANES:
+        for unit in g.board[p][lane]:
+            hero = unit.hero
+            if hero.kind != "active" or unit.stunned or unit.hp <= 0 or side.xp < hero.cost:
+                continue
+            if getattr(unit, "cast", False):
+                continue
+            if hero.damage == 0 and not hero.stun and not hero.amp:
+                continue
+            foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
+            if hero.damage and not foes and (g.sides[other(p)].towers[lane]["t1"] or g.sides[other(p)].towers[lane]["t2"]):
+                pass
+            elif hero.damage and not foes and not hero.stun:
+                continue
+            return lane, unit
+    return None
+
+
+def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
+    unit.cast = True
+    g.sides[p].xp -= unit.hero.cost
+    if unit.hero.amp:
+        unit.haste = True
+    foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
+    if unit.hero.stun:
+        for foe in foes:
+            foe.stunned = True
+    if unit.hero.damage:
+        if foes:
             for foe in foes:
-                foe.stunned = True
-        if unit.hero.damage:
-            if foes:
-                for foe in foes:
-                    hurt(g, foe, unit.hero.damage, p)
-            else:
-                hit_structure(g, other(p), lane, unit.hero.damage, p)
+                hurt(g, foe, unit.hero.damage, p)
+        else:
+            hit_structure(g, other(p), lane, unit.hero.damage, p)
+
+
+def cast(g: Game) -> None:
+    """One interrupt at a time. Odd rounds Radiant starts, even rounds Dire starts. Each cast resolves now."""
+    priority = "radiant" if g.round % 2 == 1 else "dire"
+    passed = 0
+    while passed < 2:
+        pick = legal_cast(g, priority)
+        if pick is None:
+            passed += 1
+            priority = other(priority)
+            continue
+        passed = 0
+        lane, unit = pick
+        resolve_cast(g, priority, lane, unit)
+        priority = other(priority)
 
 
 def hurt(g: Game, unit: Unit, amount: int, killer: str) -> None:
@@ -222,31 +239,63 @@ def attackers(g: Game) -> list[tuple[int, int, int, str, str, Unit]]:
     return rows
 
 
-def strike(g: Game) -> None:
-    planned = attackers(g)
+def next_batch(g: Game, acted: set[int]) -> list[tuple[int, int, int, str, str, Unit]]:
+    """The next simultaneous swing, rebuilt so a stun or Haste from an interrupt is honored."""
+    planned = [row for row in attackers(g) if id(row[5]) not in acted]
+    if not planned:
+        return []
+    batch = [planned[0]]
+    while len(batch) < len(planned) and planned[0][:3] == planned[len(batch)][:3]:
+        batch.append(planned[len(batch)])
+    return batch
+
+
+def resolve_batch(g: Game, batch: list[tuple[int, int, int, str, str, Unit]]) -> None:
     # Tied keys swing together: a killing blow does not cancel the other swing.
-    i = 0
-    while i < len(planned):
-        batch = [planned[i]]
-        while i + len(batch) < len(planned) and planned[i][:3] == planned[i + len(batch)][:3]:
-            batch.append(planned[i + len(batch)])
-        i += len(batch)
-        shots: list[tuple[str, str, Unit, Unit | None]] = []
-        for _b, _a, _k, p, lane, unit in batch:
-            if unit.hp <= 0:
-                continue
-            foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
-            shots.append((p, lane, unit, foes[0] if foes else None))
-        for p, lane, unit, foe in shots:
-            dmg = 1 + (1 if unit.hero.amp or unit.hero.cleave else 0)
-            if foe:
-                hurt(g, foe, dmg, p)
-                if unit.hero.cleave and len(g.board[other(p)][lane]) > 1:
-                    second = g.board[other(p)][lane][1]
-                    if second is not foe:
-                        hurt(g, second, 1, p)
-            else:
-                hit_structure(g, other(p), lane, dmg, p)
+    shots: list[tuple[str, str, Unit, Unit | None]] = []
+    for _b, _a, _k, p, lane, unit in batch:
+        if unit.hp <= 0:
+            continue
+        foes = [u for u in g.board[other(p)][lane] if u.hp > 0]
+        shots.append((p, lane, unit, foes[0] if foes else None))
+    for p, lane, unit, foe in shots:
+        dmg = 1 + (1 if unit.hero.amp or unit.hero.cleave else 0)
+        if foe:
+            hurt(g, foe, dmg, p)
+            if unit.hero.cleave and len(g.board[other(p)][lane]) > 1:
+                second = g.board[other(p)][lane][1]
+                if second is not foe:
+                    hurt(g, second, 1, p)
+        else:
+            hit_structure(g, other(p), lane, dmg, p)
+
+
+def combat(g: Game) -> None:
+    """Interrupt window, then one swing, then another window, repeating through the towers."""
+    before = {(p, lane): (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) for p in g.sides for lane in LANES}
+    cast(g)
+    acted: set[int] = set()
+    while g.winner is None:
+        batch = next_batch(g, acted)
+        if not batch:
+            break
+        for row in batch:
+            acted.add(id(row[5]))
+        resolve_batch(g, batch)
+        if g.winner is not None:
+            return
+        cast(g)
+    if g.winner is not None:
+        return
+    damaged = {
+        (p, lane)
+        for p, lane in before
+        if (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) != before[(p, lane)]
+        and (g.sides[p].towers[lane]["t1"] > 0 or g.sides[p].towers[lane]["t2"] > 0)
+    }
+    towers_fire(g, damaged)
+    if g.winner is None:
+        cast(g)
 
 
 def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str) -> None:
@@ -289,6 +338,7 @@ def cleanup(g: Game) -> None:
             for unit in g.board[p][lane]:
                 if unit.hp > 0:
                     unit.stunned = False
+                    unit.cast = False
                     unit.haste = unit.hero.amp and unit.hero.kind == "passive"
                     unit.slow = False
                     alive.append(unit)
@@ -312,16 +362,7 @@ def play(g: Game, limit: int) -> dict[int, dict[str, tuple[int, int, int]]]:
     while g.winner is None and g.round <= limit:
         upkeep(g)
         draw_and_deploy(g)
-        before = {(p, lane): (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) for p in g.sides for lane in LANES}
-        cast(g)
-        strike(g)
-        damaged = {
-            (p, lane)
-            for p, lane in before
-            if (g.sides[p].towers[lane]["t1"], g.sides[p].towers[lane]["t2"]) != before[(p, lane)]
-            and (g.sides[p].towers[lane]["t1"] > 0 or g.sides[p].towers[lane]["t2"] > 0)
-        }
-        towers_fire(g, damaged)
+        combat(g)
         cleanup(g)
         trace[g.round] = end_of_turn(g)
         g.round += 1

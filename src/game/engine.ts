@@ -53,6 +53,7 @@ import {
   ROTATIONS_PER_ROUND,
   PLAYERS,
   ROSHAN_EARLIEST_ROUND,
+  firstPlayer,
   ROSHAN_HP,
   STARTING_HEROES,
   TORMENTOR_HP,
@@ -75,6 +76,7 @@ import {
   type TowerTier,
   type UnitDeckCard,
   type HeroCard,
+  type UltDeclaration,
   type UltEffect,
   type ComebackRules,
   type Unit,
@@ -442,6 +444,10 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     neutralDeck: [],
     neutralDiscard: [],
     ultDeclarations: [],
+    priority: 'radiant',
+    passes: 0,
+    combat: 'before',
+    attacked: [],
     towersHit: [],
     log: [],
     nextId: 1,
@@ -636,6 +642,9 @@ function startRound(s: GameState) {
   s.round++
   s.phase = 'draw'
   s.ultDeclarations = []
+  s.passes = 0
+  s.combat = 'before'
+  s.attacked = []
   s.bossKills = []
   s.cycle = undefined
   log(s, `Round ${s.round}`, 'phase')
@@ -999,8 +1008,33 @@ export function reveal(state: GameState): GameState {
     pl.smoke = []
     pl.ward = []
   }
-  s.phase = 'items'
+  s.towersHit = []
+  s.combat = 'before'
+  s.attacked = []
+  openWindow(s, true)
   return s
+}
+
+/** Odd rounds Radiant starts. Even rounds Dire starts. */
+function openWindow(s: GameState, fresh: boolean) {
+  s.phase = 'response'
+  s.passes = 0
+  s.priority = firstPlayer(s.round)
+  if (fresh) {
+    log(s, `Interrupts — ${PLAYER_LABEL[s.priority]} plays first. One item, rune, reward, or ability, then the other side answers.`, 'phase')
+  } else {
+    log(s, `${PLAYER_LABEL[s.priority]} has priority.`, 'phase')
+  }
+}
+
+function tookPriority(s: GameState, p: PlayerId) {
+  if (s.winner) {
+    s.phase = 'gameover'
+    return
+  }
+  s.passes = 0
+  s.priority = other(p)
+  log(s, `${PLAYER_LABEL[s.priority]} has priority.`, 'phase')
 }
 
 // ---------- status ----------
@@ -1124,7 +1158,8 @@ export function itemLanes(s: GameState, p: PlayerId, itemId: string, heroUid?: s
 }
 
 export function itemBlockReason(s: GameState, p: PlayerId, card: HandCard): string | null {
-  if (s.phase !== 'items') return 'Items are played during the Item step'
+  if (s.phase !== 'response') return 'Items are interrupts during combat'
+  if (s.priority !== p) return 'Wait for priority'
   const item = getItem(card.cardId)
   const cost = item.cost ?? 0
   if (cost > 0 && s.players[p].gold < cost) return `Needs ${cost} Gold`
@@ -1327,14 +1362,13 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     }
   }
   discardItem(s, item.id)
+  tookPriority(s, p)
   return s
 }
 
+/** Items and abilities are no longer a phase. Passing priority is `passResponse`. */
 export function endItems(state: GameState): GameState {
-  if (state.phase !== 'items') return state
-  const s = clone(state)
-  s.phase = 'ults'
-  return s
+  return state
 }
 
 export function setCampFocus(state: GameState, p: PlayerId, camp: CampId, focus: 'neutral' | 'enemy'): GameState {
@@ -1427,7 +1461,8 @@ function castPreventedReason(s: GameState, u: Unit): string | null {
 export function ultBlockReason(s: GameState, uid: string): string | null {
   const u = s.units[uid]
   if (!u || u.kind !== 'hero' || u.owner === 'neutral') return 'Not a hero'
-  if (s.phase !== 'ults') return 'Ultimates are declared during the ULT step'
+  if (s.phase !== 'response') return 'Abilities are interrupts during combat'
+  if (u.owner !== s.priority) return 'Wait for priority'
   const script = u.cardId ? getHero(u.cardId).script : undefined
   if (script?.kind !== 'active') return 'Passive ability'
   const prior = s.ultDeclarations.filter((d) => d.uid === uid)
@@ -1465,7 +1500,11 @@ export function declareUlt(state: GameState, uid: string, target?: string): Game
   const cost = echoing ? 0 : ultCost(u, state)
   if (!echoing) pl.xp -= cost
   else s.units[uid].status.echoUlt = false
-  s.ultDeclarations.push({ uid, owner, target, cost, echo: echoing || undefined })
+  const decl: UltDeclaration = { uid, owner, target, cost, echo: echoing || undefined }
+  s.ultDeclarations.push(decl)
+  s.units[uid].lastCastTarget = target
+  resolveOneCast(s, decl)
+  tookPriority(s, owner)
   return s
 }
 
@@ -1484,13 +1523,9 @@ export function toggleMorph(state: GameState, uid: string): GameState {
   return s
 }
 
-export function cancelUlt(state: GameState, uid: string): GameState {
-  const d = state.ultDeclarations.find((x) => x.uid === uid)
-  if (!d || state.phase !== 'ults') return state
-  const s = clone(state)
-  refundUlt(s, d)
-  s.ultDeclarations = s.ultDeclarations.filter((x) => x.uid !== uid)
-  return s
+/** An interrupt resolves as it is played, so it cannot be taken back. */
+export function cancelUlt(state: GameState, _uid: string): GameState {
+  return state
 }
 
 // ---------- damage model ----------
@@ -2248,116 +2283,100 @@ function checkWinner(s: GameState) {
   }
 }
 
-/** Phases 1–3, then the Rotation step. Cleanup and income follow in `endRotation`. */
-export function resolveRound(state: GameState): GameState {
-  if (state.phase !== 'ults') return state
-  const s = clone(state)
-  deferLethal = false
-  pendingKills.length = 0
-  s.towersHit = []
-
-  s.resolvedUlts = []
-  opening(kitApi(s))
-  refreshNeutralAuras(s)
-  log(s, 'Phase 1 — Abilities (last declared resolves first)', 'phase')
-  type Cast = { u: Unit; target?: string; free?: boolean; echo?: boolean; cost: number }
-  const casts: Cast[] = []
-  for (const d of s.ultDeclarations) {
-    const u = s.units[d.uid]
-    if (!u || u.dead) {
-      refundUlt(s, d)
-      continue
-    }
-    casts.push({ u, target: d.target, free: d.free, echo: d.echo, cost: d.cost })
+function resolveOneCast(s: GameState, c: UltDeclaration) {
+  const u = s.units[c.uid]
+  if (!u || u.dead) {
+    refundUlt(s, c)
+    return
   }
-  casts.reverse()
-  if (casts.length === 0) log(s, 'No abilities were declared.', 'info')
-  for (const c of casts) {
-    if (s.winner) break
-    const u = c.u
-    const owner = u.owner as PlayerId
-    const reason = castPreventedReason(s, u)
-    const zoneCast = isZoneId(c.target)
-    const target = !zoneCast && c.target ? s.units[c.target] : undefined
-    const targetGone =
-      !!c.target &&
-      (zoneCast ? !ZONES.includes(c.target as ZoneId) : !target || target.dead || (target.owner !== u.owner && hiddenFromEnemies(target)))
-    if (reason || targetGone) {
-      refundUlt(s, { owner, free: c.free, cost: c.cost })
-      log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.echo ? 'the extra cast is lost' : `${c.cost} XP refunded`}.`, 'info')
-      continue
-    }
-    log(s, `${fullName(u)} casts ${getHero(u.cardId!).ult.name}${target ? ` on ${fullName(target)}` : ''}.`, tone(owner))
-    u.ultCasts += 1
-    u.ultUsed = true
-    s.resolvedUlts.push(u.zone)
-    castUlt(s, u, c.target)
-    if (u.status.echoUlt && !u.dead) {
-      u.status.echoUlt = false
-      log(s, `${fullName(u)}'s Ultimate echoes.`, tone(owner))
-      s.resolvedUlts.push(u.zone)
-      castUlt(s, u, c.target)
-    }
+  const owner = u.owner as PlayerId
+  const reason = castPreventedReason(s, u)
+  const zoneCast = isZoneId(c.target)
+  const target = !zoneCast && c.target ? s.units[c.target] : undefined
+  const targetGone =
+    !!c.target &&
+    (zoneCast ? !ZONES.includes(c.target as ZoneId) : !target || target.dead || (target.owner !== u.owner && hiddenFromEnemies(target)))
+  if (reason || targetGone) {
+    refundUlt(s, { owner, free: c.free, cost: c.cost })
+    log(s, `${fullName(u)}'s ${getHero(u.cardId!).ult.name} fizzles (${reason ?? 'target gone'}); ${c.echo ? 'the extra cast is lost' : `${c.cost} XP refunded`}.`, 'info')
+    return
   }
+  log(s, `${fullName(u)} casts ${getHero(u.cardId!).ult.name}${target ? ` on ${fullName(target)}` : ''}.`, tone(owner))
+  u.ultCasts += 1
+  u.ultUsed = true
+  s.resolvedUlts.push(u.zone)
+  castUlt(s, u, c.target)
+}
 
-  if (!s.winner) {
-    combatAuras(kitApi(s))
-    contestStrikes(s)
-    log(s, 'Phase 2 — Basic attacks (Haste, then AGI → UNI → INT → STR → Creeps, Slowed last)', 'phase')
-    const isSlowed = (u: Unit) => u.status.slowed && !u.status.haste
-    const alive = Object.values(s.units).filter((u) => !u.dead)
-    const acted = new Set<string>()
-    const swing = (list: Unit[]) => {
-      const order = attackOrder(s, list)
-      for (let i = 0; i < order.length; ) {
-        const batch = [order[i]]
-        while (i + batch.length < order.length && sameSwing(s, batch[0], order[i + batch.length])) batch.push(order[i + batch.length])
-        i += batch.length
-        if (batch.length > 1) {
-          deferLethal = true
-          log(s, `${batch.map((u) => fullName(u)).join(' and ')} attack at the same time.`, 'info')
+/** A Refresher that was never cast a second time repeats the same target as attacks begin. */
+function echoRemaining(s: GameState) {
+  for (const u of Object.values(s.units)) {
+    if (!u.status.echoUlt || u.dead || u.owner === 'neutral') continue
+    u.status.echoUlt = false
+    log(s, `${fullName(u)}'s Ultimate echoes.`, tone(u.owner))
+    resolveOneCast(s, { uid: u.uid, owner: u.owner, target: u.lastCastTarget, cost: 0, echo: true })
+  }
+}
+
+/** The next swing, rebuilt from whoever has not attacked yet so a new Haste or Slow is honored. */
+function nextBatch(s: GameState): string[] | null {
+  const acted = new Set(s.attacked)
+  const waiting = Object.values(s.units).filter((u) => !u.dead && !acted.has(u.uid))
+  if (!waiting.length) return null
+  const slowed = (u: Unit) => u.status.slowed && !u.status.haste
+  const ready = waiting.filter((u) => !slowed(u))
+  const pool = ready.length ? ready : waiting
+  const order = attackOrder(s, pool)
+  if (!order.length) {
+    for (const u of pool) s.attacked.push(u.uid)
+    return nextBatch(s)
+  }
+  const batch = [order[0]]
+  while (batch.length < order.length && sameSwing(s, batch[0], order[batch.length])) batch.push(order[batch.length])
+  return batch.map((u) => u.uid)
+}
+
+function resolveAttackBatch(s: GameState, uids: string[]) {
+  const batch = uids.map((id) => s.units[id]).filter((u): u is Unit => !!u && !u.dead)
+  if (batch.length > 1) {
+    deferLethal = true
+    log(s, `${batch.map((u) => fullName(u)).join(' and ')} attack at the same time.`, 'info')
+  }
+  for (const u of batch) basicAttack(s, u)
+  if (batch.length > 1) flushPendingKills(s)
+  for (const uid of uids) if (!s.attacked.includes(uid)) s.attacked.push(uid)
+}
+
+function fireTowers(s: GameState) {
+  log(s, 'Phase 3 — Tower aggro', 'phase')
+  let fired = false
+  for (const lane of LANES) {
+    for (const defender of PLAYERS) {
+      const tw = s.players[defender].structures.towers[lane]
+      for (const tier of ['t1', 't2'] as const) {
+        if (!s.towersHit.includes(towerKey(defender, lane, tier)) || tw[tier] <= 0) continue
+        if (s.silencedTowers.includes(`${defender}:${lane}`)) continue
+        const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
+        const ids = targetableLineup(s, other(defender), lane)
+        const creep = ids.find((id) => s.units[id].kind === 'creep' || s.units[id].kind === 'siege')
+        const front = creep ?? ids[0]
+        fired = true
+        if (!front) {
+          log(s, `${label} has no attacker left to fire at.`, 'info')
+          continue
         }
-        for (const u of batch) {
-          acted.add(u.uid)
-          basicAttack(s, u)
-        }
-        if (batch.length > 1) flushPendingKills(s)
+        dealDamage(s, null, front, TOWER_DAMAGE[tier], 'tower', { label })
       }
     }
-    swing(alive.filter((x) => !isSlowed(x)))
-    swing(Object.values(s.units).filter((u) => !u.dead && isSlowed(u) && !acted.has(u.uid)))
   }
-
-  if (!s.winner) {
-    log(s, 'Phase 3 — Tower aggro', 'phase')
-    let fired = false
-    for (const lane of LANES) {
-      for (const defender of PLAYERS) {
-        const tw = s.players[defender].structures.towers[lane]
-        for (const tier of ['t1', 't2'] as const) {
-          // Only a tower that took damage this round and is still standing fires back.
-          if (!s.towersHit.includes(towerKey(defender, lane, tier)) || tw[tier] <= 0) continue
-          if (s.silencedTowers.includes(`${defender}:${lane}`)) continue
-          const label = `${PLAYER_LABEL[defender]} ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower`
-          const ids = targetableLineup(s, other(defender), lane)
-          const creep = ids.find((id) => s.units[id].kind === 'creep' || s.units[id].kind === 'siege')
-          const front = creep ?? ids[0]
-          fired = true
-          if (!front) {
-            log(s, `${label} has no attacker left to fire at.`, 'info')
-            continue
-          }
-          dealDamage(s, null, front, TOWER_DAMAGE[tier], 'tower', { label })
-        }
-      }
-    }
-    if (!fired) log(s, 'No surviving tower took damage this round, so no tower fires.', 'info')
-  }
-
+  if (!fired) log(s, 'No surviving tower took damage this round, so no tower fires.', 'info')
   settleBossKills(s)
+}
+
+function beginRotation(s: GameState) {
   if (s.winner) {
     s.phase = 'gameover'
-    return s
+    return
   }
   log(s, `Rotation — each side may move ${ROTATIONS_PER_ROUND} heroes`, 'phase')
   for (const p of PLAYERS) {
@@ -2365,6 +2384,79 @@ export function resolveRound(state: GameState): GameState {
     s.players[p].rotatedUids = []
   }
   s.phase = 'rotate'
+}
+
+/** Both players passed. Resolve the next swing, the towers, or hand the round to Rotation. */
+function advanceCombat(s: GameState) {
+  if (s.winner) {
+    s.phase = 'gameover'
+    return
+  }
+  deferLethal = false
+  pendingKills.length = 0
+  if (s.combat === 'before') {
+    echoRemaining(s)
+    opening(kitApi(s))
+    refreshNeutralAuras(s)
+    combatAuras(kitApi(s))
+    contestStrikes(s)
+    s.attacked = []
+    s.combat = 'attacks'
+    log(s, 'Phase 2 — Basic attacks (Haste, then AGI → UNI → INT → STR → Creeps, Slowed last)', 'phase')
+    if (s.winner) {
+      s.phase = 'gameover'
+      return
+    }
+    // Opening is its own step. The next window is the chance to interrupt before the first swing.
+    openWindow(s, false)
+    return
+  }
+  if (s.combat === 'attacks') {
+    const batch = nextBatch(s)
+    if (batch) {
+      resolveAttackBatch(s, batch)
+      if (s.winner) {
+        s.phase = 'gameover'
+        return
+      }
+      openWindow(s, false)
+      return
+    }
+    fireTowers(s)
+    s.combat = 'towers'
+    if (s.winner) {
+      s.phase = 'gameover'
+      return
+    }
+    openWindow(s, false)
+    return
+  }
+  beginRotation(s)
+}
+
+/** The side with priority passes. Two passes in a row resolve the next part of combat. */
+export function passResponse(state: GameState, p: PlayerId): GameState {
+  if (state.phase !== 'response' || state.priority !== p) return state
+  const s = clone(state)
+  s.passes += 1
+  log(s, `${PLAYER_LABEL[p]} passes.`, tone(p))
+  if (s.passes >= 2) advanceCombat(s)
+  else {
+    s.priority = other(p)
+    log(s, `${PLAYER_LABEL[s.priority]} has priority.`, 'phase')
+  }
+  return s
+}
+
+/** Run every remaining interrupt window by passing, for tests and the AI. */
+export function resolveRound(state: GameState): GameState {
+  if (state.phase !== 'response') return state
+  let s = state
+  for (let guard = 0; s.phase === 'response' && guard < 80; guard++) {
+    const next = passResponse(s, s.priority)
+    if (next === s) break
+    s = next
+  }
   return s
 }
 

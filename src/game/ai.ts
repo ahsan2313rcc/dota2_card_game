@@ -11,7 +11,6 @@ import {
   drawCard,
   handCount,
   endDraw,
-  endItems,
   endRotation,
   heroesOnBoard,
   homeJungle,
@@ -21,12 +20,12 @@ import {
   itemTargets,
   lineup,
   other,
+  passResponse,
   passRotation,
   placeBlockReason,
   placeCreep,
   placeHero,
   playItem,
-  resolveRound,
   reveal,
   rotateHero,
   rotationTargets,
@@ -361,19 +360,20 @@ function soleDefender(s: GameState, p: PlayerId, u: Unit): boolean {
   return heroes.length === 1 && heroes[0].uid === u.uid
 }
 
-export function aiItems(state: GameState, p: PlayerId): GameState {
-  let s = state
-  const cards = s.players[p].hand.filter((c) => c.type === 'item').sort((a, b) => playRank(a.cardId) - playRank(b.cardId))
+function aiOneItem(state: GameState, p: PlayerId): GameState {
+  const cards = state.players[p].hand.filter((c) => c.type === 'item').sort((a, b) => playRank(a.cardId) - playRank(b.cardId))
   for (const card of cards) {
-    if (itemBlockReason(s, p, card)) continue
+    if (itemBlockReason(state, p, card)) continue
     const item = getItem(card.cardId)
-    if (item.kind === 'Tower') {
-      s = aiTowerCard(s, p, card.iid, card.cardId)
-      continue
-    }
-    s = playAiItem(s, p, card.iid, item)
+    const next = item.kind === 'Tower' ? aiTowerCard(state, p, card.iid, card.cardId) : playAiItem(state, p, card.iid, item)
+    if (next !== state) return next
   }
-  return s
+  return state
+}
+
+/** One interrupt: a single item, rune, or reward, else the same state. */
+export function aiItems(state: GameState, p: PlayerId): GameState {
+  return aiOneItem(state, p)
 }
 
 function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard): GameState {
@@ -428,10 +428,11 @@ export function playAiRound(state: GameState): GameState {
   s = endDraw(s)
   for (const p of PLAYERS) s = aiAssign(s, p)
   s = reveal(s)
-  for (const p of PLAYERS) s = aiItems(s, p)
-  s = endItems(s)
-  for (const p of PLAYERS) s = aiUlts(s, p)
-  s = resolveRound(s)
+  for (let guard = 0; s.phase === 'response' && guard < 200; guard++) {
+    const next = aiOneResponse(s, s.priority)
+    if (next === s) break
+    s = next
+  }
   if (s.phase === 'rotate') {
     for (const p of PLAYERS) s = takeRotations(s, p)
     s = endRotation(s)
@@ -560,6 +561,7 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
   const casters = heroesOnBoard(s, p).sort(
     (a, b) => ultCost(a, s) - ultCost(b, s) || Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a)),
   )
+  const before = s.ultDeclarations.length
   for (const caster of casters) {
     const u = s.units[caster.uid]
     if (!u || ultBlockReason(s, u.uid)) continue
@@ -569,15 +571,11 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
       const allies = unitsIn(s, p, u.zone).filter((x) => x.kind === 'hero' && x.uid !== u.uid).length
       const enemies = enemyHeroes(s, p, u.zone).length
       if (enemies > allies) s = declareUlt(s, u.uid)
-      continue
-    }
-    const zones = ultZones(s, u.uid)
-    if (zones.length) {
+    } else if (ultZones(s, u.uid).length) {
+      const zones = ultZones(s, u.uid)
       const dest = [...zones].sort((a, b) => zoneUltScore(s, p, b) - zoneUltScore(s, p, a))[0]
       if (dest && zoneUltScore(s, p, dest) > 0) s = declareUlt(s, u.uid, dest)
-      continue
-    }
-    if (ultNeedsTarget(u)) {
+    } else if (ultNeedsTarget(u)) {
       const targets = ultTargets(s, u.uid).map((id) => s.units[id])
       const kind = getHero(u.cardId!).ult.target
       let pick: Unit | undefined
@@ -596,22 +594,27 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
         pick = pickEnemy(s, p, u, serious.length ? serious : targets)
       }
       if (pick) s = declareUlt(s, u.uid, pick.uid)
-      continue
-    }
-    if (shape.global) {
+    } else if (shape.global) {
       if (heroesOnBoard(s, other(p)).length > 0) s = declareUlt(s, u.uid)
-      continue
-    }
-    if (shape.healOnly) {
+    } else if (shape.healOnly) {
       if (heroesOnBoard(s, p).some((hero) => hero.hp < hero.maxHp)) s = declareUlt(s, u.uid)
-      continue
-    }
-    if (!shape.hitsEnemy && shape.buff) {
+    } else if (!shape.hitsEnemy && shape.buff) {
       s = declareUlt(s, u.uid)
-      continue
+    } else {
+      const enemiesHere = enemyHeroes(s, p, u.zone).length + (campNeutral(s, u.zone) ? 1 : 0)
+      if (shape.hitsEnemy && enemiesHere > 0) s = declareUlt(s, u.uid)
     }
-    const enemiesHere = enemyHeroes(s, p, u.zone).length + (campNeutral(s, u.zone) ? 1 : 0)
-    if (shape.hitsEnemy && enemiesHere > 0) s = declareUlt(s, u.uid)
+    if (s.ultDeclarations.length > before) return s
   }
   return s
+}
+
+/** The side with priority plays one interrupt, or passes. */
+export function aiOneResponse(state: GameState, p: PlayerId): GameState {
+  if (state.phase !== 'response' || state.priority !== p) return state
+  const item = aiOneItem(state, p)
+  if (item !== state) return item
+  const cast = aiUlts(state, p)
+  if (cast.ultDeclarations.length > state.ultDeclarations.length) return cast
+  return passResponse(cast, p)
 }

@@ -1,4 +1,5 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import type { AiStyle } from '@/game/ai'
 
 const OPPONENTS: { value: AiStyle; label: string; blurb: string }[] = [
@@ -42,6 +43,27 @@ export function OpponentSelect({ value, onChange }: { value: AiStyle | undefined
         </SelectContent>
       </Select>
       <span className="hidden text-xs text-zinc-500 md:inline">{blurb}</span>
+    </div>
+  )
+}
+
+/** Keep pays 3 for a Tier 1 and 5 for a Tier 2. Off pays nothing. The hidden card still goes to the defender. */
+export function TowerGoldToggle({ value, onChange }: { value: boolean | undefined; onChange: (on: boolean) => void }) {
+  const on = value !== false
+  return (
+    <div className="flex items-center gap-2">
+      <label htmlFor="tower-gold" className="text-xs font-medium tracking-wide text-zinc-400 uppercase">
+        Tower gold
+      </label>
+      <Switch
+        id="tower-gold"
+        size="sm"
+        checked={on}
+        onCheckedChange={onChange}
+        aria-label="Tower destruction gold"
+        title="On pays 3 Gold for a Tier 1 tower and 5 for a Tier 2. Off pays nothing. The defender still takes the hidden card."
+      />
+      <span className="text-xs text-zinc-500">{on ? 'Keep' : 'Off'}</span>
     </div>
   )
 }

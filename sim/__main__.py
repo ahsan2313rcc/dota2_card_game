@@ -226,6 +226,8 @@ class Game:
     attacked_towers: set[tuple[str, str]] = field(default_factory=set)
     fired_towers: set[tuple[str, str]] = field(default_factory=set)
     style: dict[str, str] = field(default_factory=lambda: {"radiant": "balanced", "dire": "balanced"})
+    # False pays the attacker nothing when a tower falls. The live game's creep bounty is not modeled here.
+    tower_gold: bool = True
     # Heroes who rotated into the enemy jungle. Assignment cannot start there.
     invade: dict[str, list[Unit]] = field(default_factory=dict)
 
@@ -1404,12 +1406,14 @@ def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str, *,
     if tw["t1"] > 0:
         tw["t1"] = max(0, tw["t1"] - dmg)
         if tw["t1"] == 0:
-            g.sides[attacker].gold += TOWER_GOLD["t1"]
+            if g.tower_gold:
+                g.sides[attacker].gold += TOWER_GOLD["t1"]
             g.towers_fallen += 1
     elif tw["t2"] > 0:
         tw["t2"] = max(0, tw["t2"] - dmg)
         if tw["t2"] == 0:
-            g.sides[attacker].gold += TOWER_GOLD["t2"]
+            if g.tower_gold:
+                g.sides[attacker].gold += TOWER_GOLD["t2"]
             g.towers_fallen += 1
     elif ancient:
         side.ancient = max(0, side.ancient - dmg)
@@ -1537,7 +1541,14 @@ def rd(a: float, b: float) -> str:
     return f"{a:.2f}/{b:.2f}"
 
 
-def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire: str = "balanced") -> dict[str, object]:
+def simulate(
+    games: int,
+    seed: int,
+    limit: int,
+    radiant: str = "balanced",
+    dire: str = "balanced",
+    tower_gold: bool = True,
+) -> dict[str, object]:
     heroes = load_heroes()
     wins: Counter[str] = Counter()
     lengths: list[int] = []
@@ -1575,6 +1586,7 @@ def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire:
             sides={"radiant": Side(), "dire": Side()},
             board={},
             style={"radiant": radiant, "dire": dire},
+            tower_gold=tower_gold,
         )
         for side in g.sides.values():
             side.hand = [rng.choice(heroes) for _ in range(5)]
@@ -1623,7 +1635,11 @@ def simulate(games: int, seed: int, limit: int, radiant: str = "balanced", dire:
     def avg(xs: list[int]) -> float:
         return sum(xs) / len(xs) if xs else 0
 
-    print(f"games {games}  seed {seed}  round cap {limit}  radiant {radiant}  dire {dire}")
+    print(
+        f"games {games}  seed {seed}  round cap {limit}  radiant {radiant}  dire {dire}  "
+        f"tower gold {'on' if tower_gold else 'off'}"
+    )
+    print("Creep kills pay 1 Gold in the live game. This sim has no lane creeps, so that bounty is not applied.")
     print(f"finished {games - unfinished}  unfinished {unfinished}")
     print(f"radiant wins {wins['radiant']}  dire wins {wins['dire']}")
     if games:
@@ -1783,7 +1799,7 @@ def record_falls(
         first_t2_won[first_t2] += 1
 
 
-def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES) -> None:
+def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES, tower_gold: bool = True) -> None:
     """Every listed style against every listed style. The cell is Radiant's win rate."""
     rows: list[dict[str, object]] = []
     for radiant in styles:
@@ -1792,7 +1808,7 @@ def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES)
             print("=" * 88)
             print(f"Radiant {radiant} vs Dire {dire}")
             print("=" * 88)
-            rows.append(simulate(games, seed, limit, radiant, dire))
+            rows.append(simulate(games, seed, limit, radiant, dire, tower_gold))
     print()
     print("Radiant win rate. Row is Radiant's style, column is Dire's style.")
     print(f"{'':10}  " + "  ".join(f"{name:>10}" for name in styles))
@@ -1839,11 +1855,13 @@ def main() -> None:
     parser.add_argument("--radiant", choices=STYLES, default="balanced")
     parser.add_argument("--dire", choices=STYLES, default="balanced")
     parser.add_argument("--tourney", action="store_true", help="Play every style against every style")
+    parser.add_argument("--no-tower-gold", action="store_true", help="Pay the attacker nothing when a tower falls")
     args = parser.parse_args()
+    tower_gold = not args.no_tower_gold
     if args.tourney:
-        tourney(args.games, args.seed, args.limit)
+        tourney(args.games, args.seed, args.limit, tower_gold=tower_gold)
     else:
-        simulate(args.games, args.seed, args.limit, args.radiant, args.dire)
+        simulate(args.games, args.seed, args.limit, args.radiant, args.dire, tower_gold)
 
 
 if __name__ == "__main__":

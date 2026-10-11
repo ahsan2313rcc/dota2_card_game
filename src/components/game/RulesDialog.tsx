@@ -41,8 +41,8 @@ export function RulesDialog() {
           <div className="mt-3 space-y-3">
           <Section title="Goal">
             Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1, worth 3 Gold) and a Tier 2
-            tower (5 hits, deals 1 to the first 3 units, creeps first, worth 5 Gold). The attacker is paid. The defender still
-            takes the hidden card. Each lane with both towers down adds +1 Gold to upkeep, so three open lanes pay 4 Gold
+            tower (5 hits, deals 1 to the first 3 units, creeps first, worth 5 Gold). The attacker is paid, unless Tower gold
+            is off. The defender still takes the hidden card. Killing a lane creep or siege creep pays the killer 1 Gold. Each lane with both towers down adds +1 Gold to upkeep, so three open lanes pay 4 Gold
             (1 + 3). At the end of the turn your Ancient fully heals your own heroes in a lane where your towers are gone.
             Enemies in that lane are not healed. Curse blocks the heal, and poison lands after it.
           </Section>

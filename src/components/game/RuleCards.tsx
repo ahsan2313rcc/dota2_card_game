@@ -70,7 +70,8 @@ export function RuleCards() {
             <li>A hero you kill: 1 Gold and 1 XP, at Income.</li>
             <li>A lane with your living hero: 1 XP at Income.</li>
             <li>Camp: 2 Gold, 2 XP, and a rune. Roshan: 3 Gold, 3 XP, a rune, and the Aegis. Tormentor: 2 Gold, 2 XP, a rune, and a Refresher Shard.</li>
-            <li>You destroy Tier 1: 3 Gold. Tier 2: 5. The defender takes the hidden card.</li>
+            <li>You destroy Tier 1: 3 Gold. Tier 2: 5. The defender takes the hidden card. Tower gold off pays 0.</li>
+            <li>You kill a lane creep or siege creep: 1 Gold. An illusion pays nothing.</li>
             <li>Bounty rune: 1 Gold. Wisdom rune or Clarity: 1 XP.</li>
           </ul>
         </Block>

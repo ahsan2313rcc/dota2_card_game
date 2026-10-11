@@ -352,6 +352,11 @@ export interface Settings {
   rules?: ComebackRules
   /** Who Dire plays as. A new game keeps the current choice. */
   direStyle?: AiStyle
+  /**
+   * Gold paid to the attacker when a tower falls. Missing or true keeps it (Tier 1 is 3, Tier 2 is 5).
+   * False pays nothing. The defender's hidden tower card is a separate rule.
+   */
+  towerGold?: boolean
 }
 
 export interface GameState {
@@ -415,8 +420,10 @@ export const DRAW_CAP = 10
 
 /** XP spent, as an interrupt, to put one Shield on an allied hero. It lasts until it blocks a hit. */
 export const SHIELD_XP_COST = 3
-/** Gold the attacker is paid when a tower falls. The defender still takes the hidden card. */
+/** Gold the attacker is paid when a tower falls, unless Settings.towerGold is false. The defender still takes the hidden card. */
 export const TOWER_GOLD = { t1: 3, t2: 5 } as const
+/** Gold the killer is paid when a lane creep or siege creep dies. Illusions pay nothing. */
+export const CREEP_GOLD = 1
 export const BOARD_LIMIT = 5
 export const PLACE_PER_ROUND = 3
 /** Heroes each side may move during Rotation. */

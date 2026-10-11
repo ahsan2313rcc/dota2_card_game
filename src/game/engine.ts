@@ -48,6 +48,7 @@ import {
   CAMPS,
   DRAW_CAP,
   HAND_LIMIT,
+  CREEP_GOLD,
   TOWER_GOLD,
   LANES,
   PLACE_PER_ROUND,
@@ -824,9 +825,13 @@ export function swapTowerCards(state: GameState, p: PlayerId, tier: TowerTier, a
   return s
 }
 
+function towerGoldOn(s: GameState): boolean {
+  return s.settings.towerGold !== false
+}
+
 function onTowerLost(s: GameState, defender: PlayerId, lane: LaneId, tier: TowerTier, attacker?: PlayerId) {
   const bounty = TOWER_GOLD[tier]
-  if (attacker) {
+  if (attacker && towerGoldOn(s)) {
     s.players[attacker].gold += bounty
     log(s, `${PLAYER_LABEL[attacker]} claims ${bounty} Gold for destroying the ${ZONE_LABEL[lane]} Tier ${tier === 't1' ? 1 : 2} tower.`, tone(attacker))
   }
@@ -1786,6 +1791,11 @@ function handleLethal(s: GameState, t: Unit, src: Unit | null, label: string, ki
 
   const byPlayer = killer && killer !== 'neutral' && killer !== t.owner ? killer : undefined
   if (t.kind === 'hero' && byPlayer) s.players[byPlayer].killsThisRound++
+  // The killer's bounty. Alchemist's lane passive is a separate +1, applied in onDeath. An illusion pays nothing.
+  if ((t.kind === 'creep' || t.kind === 'siege') && byPlayer && src?.kind !== 'illusion') {
+    s.players[byPlayer].gold += CREEP_GOLD
+    log(s, `${PLAYER_LABEL[byPlayer]} claims ${CREEP_GOLD} Gold for killing ${fullName(t)}.`, tone(byPlayer))
+  }
   if (t.kind === 'neutral') {
     s.neutralDiscard.push(t.cardId!)
     if (byPlayer) {
@@ -2487,7 +2497,7 @@ function retaliateTower(s: GameState, defender: PlayerId, lane: LaneId) {
   }
   for (const id of targets) {
     if (s.units[id]?.dead) continue
-    dealDamage(s, null, id, TOWER_DAMAGE[tier], 'tower', { label })
+    dealDamage(s, null, id, TOWER_DAMAGE[tier], 'tower', { label, sourceOwner: defender })
   }
 }
 

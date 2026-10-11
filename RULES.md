@@ -71,7 +71,8 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 | Upkeep | 1, plus 1 for each enemy lane where both towers are down. Three open lanes pay 4. | Start of every round |
 | Enemy hero killed by your unit | 1 per hero, and 1 XP | Income, after Cleanup. Creeps do not pay this. Tower kills do not pay this. |
 | Neutral camp cleared | 1, plus a rune. No XP. | Immediately |
-| Enemy tower destroyed | 3 for Tier 1, 5 for Tier 2, paid to the attacker. The defender takes the hidden card. | Immediately |
+| Enemy tower destroyed | 3 for Tier 1, 5 for Tier 2, paid to the attacker. Turn Tower gold off and this is 0. The defender still takes the hidden card. | Immediately |
+| Lane creep or siege creep killed | 1, paid to the killer. An illusion pays nothing. Alchemist's Greevil's Greed is still an extra 1 when a creep dies in his lane. | Immediately |
 | Bounty Rune | 1 | When played |
 | Bounty Hunter's attacks, Alchemist's creep deaths, and similar card text | as printed | When the card says |
 
@@ -113,7 +114,7 @@ There is no XP cap.
 
 Every slain hero, from either side, goes into one shared discard. The most recent death is at the top. Buyback, during the Draw step, can take any hero from the last 10 in that pile, whether it was yours or the enemy's. It costs 4 Gold, or 5 if you have more towers standing than the enemy. The card comes to your hand. A hero can be bought back only once. A card that says it cannot be bought back stays in the pile and cannot be chosen. Older than the last 10, it waits there until the unit deck runs out and the pile is shuffled back in. Copies are removed and do not enter the discard. Creeps go to their own discard, not this pile.
 
-When your tower falls, you gain that tower's face-down card. The attacker gains 3 Gold for a Tier 1 tower and 5 Gold for a Tier 2 tower. The card does not use a hand slot.
+When your tower falls, you gain that tower's face-down card. The attacker gains 3 Gold for a Tier 1 tower and 5 Gold for a Tier 2 tower. Turn Tower gold off and the attacker is paid nothing. The card does not use a hand slot. Killing a lane creep or a siege creep pays the killer 1 Gold.
 
 At the end of the turn, your Ancient fully heals your own heroes in every lane where you have no towers left. It does not heal enemies in that lane, and it does not heal heroes in the jungle. Curse is still on the hero when this heal happens, so a Cursed hero does not heal. Poison and other delayed damage are applied after the heal. A lane that still has a tower is not healed. Other heals, such as a Salve or Lotus Pool, restore a hero to Healthy unless the hero is Cursed.
 

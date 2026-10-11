@@ -8,7 +8,7 @@ import { Minimap, type MapInteraction } from '@/components/game/Minimap'
 import { PhaseTracker } from '@/components/game/PhaseTracker'
 import { PlayerBar } from '@/components/game/PlayerBar'
 import { Roster } from '@/components/game/Roster'
-import { OpponentSelect, opponentLabel } from '@/components/game/OpponentSelect'
+import { OpponentSelect, TowerGoldToggle, opponentLabel } from '@/components/game/OpponentSelect'
 import { RulesDialog } from '@/components/game/RulesDialog'
 import { TowerCards } from '@/components/game/TowerCards'
 import { Button } from '@/components/ui/button'
@@ -264,6 +264,7 @@ export default function App() {
           <PhaseTracker phase={s.phase} />
           <div className="ml-auto flex flex-wrap items-center gap-3">
             <OpponentSelect value={s.settings.direStyle} onChange={(direStyle) => dispatch({ type: 'settings', settings: { direStyle } })} />
+            <TowerGoldToggle value={s.settings.towerGold} onChange={(towerGold) => dispatch({ type: 'settings', settings: { towerGold } })} />
             <RulesDialog />
             <Button
               variant="outline"

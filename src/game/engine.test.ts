@@ -27,6 +27,7 @@ import {
   nextRound,
   passResponse,
   placeCreep,
+  setSettings,
   placeHero,
   playItem,
   resolveRound,
@@ -827,6 +828,84 @@ describe('comeback rules and rotation', () => {
     expect(s.players.dire.gold).toBe(defenderGold)
     expect(s.players.dire.hand.some((c) => c.cardId === hidden)).toBe(true)
     expect(handCount(s.players.dire)).toBe(HAND_LIMIT)
+  })
+
+  it('turning tower gold off pays nothing and still gives the hidden card', () => {
+    let s = setup(60, [hero('a', 'sven')])
+    s = setSettings(s, { towerGold: false })
+    s.players.dire.structures.towers.top.t1 = 1
+    s.players.dire.hand = Array.from({ length: HAND_LIMIT }, (_, i) => item(`f${i}`, 'salve'))
+    const attackerGold = s.players.radiant.gold
+    const defenderGold = s.players.dire.gold
+    const hidden = s.players.dire.towerCards.top.t1
+    s = placeHero(s, 'radiant', 'a', 'top')
+    s = fight(s)
+    expect(s.players.dire.structures.towers.top.t1).toBe(0)
+    expect(s.players.radiant.gold).toBe(attackerGold)
+    expect(s.players.dire.gold).toBe(defenderGold)
+    expect(s.players.dire.hand.some((c) => c.cardId === hidden)).toBe(true)
+    expect(logHas(s, 'claims 3 Gold')).toBe(false)
+  })
+
+  it('killing a lane creep or a siege creep pays the killer 1 Gold', () => {
+    let lane = setup(61, [hero('a', 'sven')], [{ iid: 'c', type: 'creep', cardId: 'creep' }])
+    lane = placeHero(lane, 'radiant', 'a', 'mid')
+    lane = placeCreep(lane, 'dire', 'c', 'mid')
+    const before = lane.players.radiant.gold
+    const direBefore = lane.players.dire.gold
+    lane = fight(lane)
+    expect(lineup(lane, 'dire', 'mid')).toHaveLength(0)
+    expect(lane.players.radiant.gold).toBe(before + 1)
+    expect(lane.players.dire.gold).toBe(direBefore)
+    expect(logHas(lane, 'claims 1 Gold for killing Dire Creep')).toBe(true)
+
+    let siege = setup(62, [hero('a', 'sven')], [{ iid: 'c', type: 'creep', cardId: 'siege' }])
+    siege = placeHero(siege, 'radiant', 'a', 'bot')
+    siege = placeCreep(siege, 'dire', 'c', 'bot')
+    const siegeBefore = siege.players.radiant.gold
+    siege = fight(siege)
+    expect(siege.players.radiant.gold).toBe(siegeBefore + 1)
+    expect(logHas(siege, 'claims 1 Gold for killing Dire Siege Creep')).toBe(true)
+  })
+
+  it('a tower that slays a creep pays its owner, and an illusion pays nothing', () => {
+    let s = setup(63, [{ iid: 'c', type: 'creep', cardId: 'creep' }])
+    s = placeCreep(s, 'radiant', 'c', 'top')
+    const dire = s.players.dire.gold
+    const radiant = s.players.radiant.gold
+    s = fight(s)
+    expect(lineup(s, 'radiant', 'top')).toHaveLength(0)
+    expect(s.players.dire.gold).toBe(dire + 1)
+    expect(s.players.radiant.gold).toBe(radiant)
+    expect(logHas(s, 'claims 1 Gold for killing Radiant Creep')).toBe(true)
+
+    let decoy = setup(65, [hero('a', 'sven'), item('i', 'rune_illusion')], [{ iid: 'c', type: 'creep', cardId: 'creep' }])
+    decoy = placeHero(decoy, 'radiant', 'a', 'mid')
+    decoy = placeCreep(decoy, 'dire', 'c', 'mid')
+    decoy = reveal(decoy)
+    const sven = heroesOnBoard(decoy, 'radiant')[0]
+    decoy.players.radiant.hand = [item('i', 'rune_illusion')]
+    decoy = playItem(decoy, 'radiant', 'i', sven.uid)
+    const illusion = lineup(decoy, 'radiant', 'mid')[0]
+    expect(decoy.units[illusion].kind).toBe('illusion')
+    const gold = decoy.players.radiant.gold
+    decoy = resolveRound(endItems(decoy))
+    expect(logHas(decoy, 'claims 1 Gold for killing Dire Creep')).toBe(true)
+    expect(decoy.players.radiant.gold).toBe(gold + 1)
+    expect(decoy.log.filter((l) => l.text.includes('claims 1 Gold')).length).toBe(1)
+  })
+
+  it("Alchemist's lane gold stays extra on top of the killer's bounty", () => {
+    let s = setup(64, [hero('a', 'sven')], [hero('b', 'alchemist'), { iid: 'c', type: 'creep', cardId: 'creep' }])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeCreep(s, 'dire', 'c', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    const radiant = s.players.radiant.gold
+    const dire = s.players.dire.gold
+    s = fight(s)
+    expect(lineup(s, 'dire', 'mid').some((id) => s.units[id].kind === 'creep')).toBe(false)
+    expect(s.players.radiant.gold).toBe(radiant + 1)
+    expect(s.players.dire.gold).toBe(dire + 1)
   })
 
   it('magical abilities still cut through Ethereal', () => {

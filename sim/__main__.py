@@ -1604,7 +1604,13 @@ def rd(a: float, b: float) -> str:
     return f"{a:.2f}/{b:.2f}"
 
 
-def print_flow(title: str, headers: list[str], columns: list[list[int]], games: list[int]) -> None:
+def print_flow(
+    title: str,
+    headers: list[str],
+    columns: list[list[int]],
+    games: list[int],
+    wins: list[int],
+) -> None:
     """One row per stat. Each column is a personality in a seat. `columns` are sums."""
     label_w = 10
     col_w = max(7, *(len(header) for header in headers))
@@ -1612,6 +1618,7 @@ def print_flow(title: str, headers: list[str], columns: list[list[int]], games: 
     print(f"{'':{label_w}}  " + "  ".join(f"{header:>{col_w}}" for header in headers))
     specs: tuple[tuple[str, str | int], ...] = (
         ("games", "n"),
+        ("win rate", "w"),
         ("T1", 0),
         ("T2", 1),
         ("Gold in", 2),
@@ -1628,12 +1635,15 @@ def print_flow(title: str, headers: list[str], columns: list[list[int]], games: 
     )
     for label, spec in specs:
         cells: list[str] = []
-        for col, n in zip(columns, games, strict=True):
+        for col, n, won in zip(columns, games, wins, strict=True):
             if spec == "n":
                 cells.append(f"{n:{col_w}d}")
                 continue
             if n == 0:
                 cells.append(f"{'—':>{col_w}}")
+                continue
+            if spec == "w":
+                cells.append(f"{won / n:{col_w}.1%}")
                 continue
             if spec == "g":
                 value = (col[2] - col[3]) / n
@@ -1664,6 +1674,7 @@ def simulate(
     jungle_sent: list[dict[str, int]] = []
     # round -> sums of the snap. Gold and XP slots are cumulative income and expense.
     reached: Counter[int] = Counter()
+    reached_wins: dict[int, Counter[str]] = {rnd: Counter() for rnd in FLOW_ROUNDS}
     totals: dict[int, dict[str, list[int]]] = {}
     lifetime = {"radiant": [0, 0, 0, 0, 0, 0], "dire": [0, 0, 0, 0, 0, 0]}
     final_sums = {"radiant": [0] * SNAP_LEN, "dire": [0] * SNAP_LEN}
@@ -1718,6 +1729,8 @@ def simulate(
                     lifetime[p][i] += last[p][ACTION_AT + i]
         for rnd, snap in trace.items():
             reached[rnd] += 1
+            if g.winner and rnd in reached_wins:
+                reached_wins[rnd][g.winner] += 1
             bucket = totals.setdefault(rnd, {"radiant": [0] * SNAP_LEN, "dire": [0] * SNAP_LEN})
             for p in ("radiant", "dire"):
                 for i, value in enumerate(snap[p]):
@@ -1799,6 +1812,7 @@ def simulate(
     print("Opening 1 Gold and 1 XP count as income. Left is the bank (in − out).")
     print("Hero, Ability, Item, Neutral, and Shield are the sum of rounds 1 through this round.")
     print("T1 and T2 are standing towers.")
+    print("Win rate is how often that side wins among the games in that row. Unfinished games count for neither side.")
     headers = [f"{radiant} R", f"{dire} D"]
     for rnd in FLOW_ROUNDS:
         n = reached[rnd]
@@ -1806,13 +1820,20 @@ def simulate(
             print(f"Round {rnd}: no games still going")
             print()
             continue
-        print_flow(f"Round {rnd}", headers, [totals[rnd]["radiant"], totals[rnd]["dire"]], [n, n])
+        print_flow(
+            f"Round {rnd}",
+            headers,
+            [totals[rnd]["radiant"], totals[rnd]["dire"]],
+            [n, n],
+            [reached_wins[rnd]["radiant"], reached_wins[rnd]["dire"]],
+        )
     if final_n:
         print_flow(
             "End of game. Mean through the round each game ended.",
             headers,
             [final_sums["radiant"], final_sums["dire"]],
             [final_n, final_n],
+            [wins["radiant"], wins["dire"]],
         )
     print("Advantage is more standing towers (Tier 1 + Tier 2). Lead held is how often that side then wins.")
     print("Comeback is fewer towers, and that side still wins. Even is a tower tie.")
@@ -1885,6 +1906,7 @@ def simulate(
         "flow": {
             rnd: {
                 "n": reached[rnd],
+                "wins": {"radiant": reached_wins[rnd]["radiant"], "dire": reached_wins[rnd]["dire"]},
                 "radiant": totals[rnd]["radiant"][:] if rnd in totals else [0] * SNAP_LEN,
                 "dire": totals[rnd]["dire"][:] if rnd in totals else [0] * SNAP_LEN,
             }
@@ -1892,6 +1914,7 @@ def simulate(
         },
         "final_flow": {
             "n": final_n,
+            "wins": {"radiant": wins["radiant"], "dire": wins["dire"]},
             "radiant": final_sums["radiant"],
             "dire": final_sums["dire"],
         },
@@ -2013,17 +2036,17 @@ def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES,
     }
     headers = [f"{short[style]} {seat}" for style in styles for seat in ("R", "D")]
     marks: tuple[int | str, ...] = (*FLOW_ROUNDS, "end")
-    buckets: dict[int | str, dict[str, dict[str, tuple[int, list[int]]]]] = {
-        mark: {style: {"R": (0, [0] * SNAP_LEN), "D": (0, [0] * SNAP_LEN)} for style in styles} for mark in marks
+    buckets: dict[int | str, dict[str, dict[str, tuple[int, int, list[int]]]]] = {
+        mark: {style: {"R": (0, 0, [0] * SNAP_LEN), "D": (0, 0, [0] * SNAP_LEN)} for style in styles} for mark in marks
     }
     seat_wins = {style: {"R": [0, 0], "D": [0, 0]} for style in styles}
     seat_when = {style: {"R": [0.0, 0], "D": [0.0, 0]} for style in styles}
 
-    def absorb(mark: int | str, style: str, seat: str, n: int, sums: list[int]) -> None:
-        held_n, held_sums = buckets[mark][style][seat]
+    def absorb(mark: int | str, style: str, seat: str, n: int, won: int, sums: list[int]) -> None:
+        held_n, held_won, held_sums = buckets[mark][style][seat]
         for i, value in enumerate(sums):
             held_sums[i] += value
-        buckets[mark][style][seat] = (held_n + n, held_sums)
+        buckets[mark][style][seat] = (held_n + n, held_won + won, held_sums)
 
     for row in rows:
         radiant_name = row["radiant"]
@@ -2049,31 +2072,35 @@ def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES,
             block = flow[rnd]
             assert isinstance(block, dict)
             n = block["n"]
+            block_wins = block["wins"]
             radiant_sums = block["radiant"]
             dire_sums = block["dire"]
-            assert isinstance(n, int)
+            assert isinstance(n, int) and isinstance(block_wins, dict)
             assert isinstance(radiant_sums, list) and isinstance(dire_sums, list)
-            absorb(rnd, radiant_name, "R", n, radiant_sums)
-            absorb(rnd, dire_name, "D", n, dire_sums)
+            absorb(rnd, radiant_name, "R", n, int(block_wins.get("radiant", 0)), radiant_sums)
+            absorb(rnd, dire_name, "D", n, int(block_wins.get("dire", 0)), dire_sums)
         final = row["final_flow"]
         assert isinstance(final, dict)
         final_n = final["n"]
-        assert isinstance(final_n, int)
+        final_wins = final["wins"]
+        assert isinstance(final_n, int) and isinstance(final_wins, dict)
         final_r = final["radiant"]
         final_d = final["dire"]
         assert isinstance(final_r, list) and isinstance(final_d, list)
-        absorb("end", radiant_name, "R", final_n, final_r)
-        absorb("end", dire_name, "D", final_n, final_d)
+        absorb("end", radiant_name, "R", final_n, int(final_wins.get("radiant", 0)), final_r)
+        absorb("end", dire_name, "D", final_n, int(final_wins.get("dire", 0)), final_d)
 
-    def flow_columns(mark: int | str) -> tuple[list[list[int]], list[int]]:
+    def flow_columns(mark: int | str) -> tuple[list[list[int]], list[int], list[int]]:
         columns: list[list[int]] = []
         counts: list[int] = []
+        won_counts: list[int] = []
         for style in styles:
             for seat in ("R", "D"):
-                n, sums = buckets[mark][style][seat]
+                n, won, sums = buckets[mark][style][seat]
                 counts.append(n)
+                won_counts.append(won)
                 columns.append(sums)
-        return columns, counts
+        return columns, counts, won_counts
 
     print()
     print("Win rate in that seat, over every opponent. Unfinished games count for neither side.")
@@ -2096,6 +2123,7 @@ def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES,
     print("Games still going weight the average. Opening 1 Gold and 1 XP count as income.")
     print("Left is the bank (in − out). Hero through Shield are the sum of rounds 1 through this round.")
     print("T1 and T2 are standing towers.")
+    print("Win rate is how often that side wins among the games in that row. Unfinished games count for neither side.")
     print(
         f"Tower gold is {'on' if tower_gold else 'off'}. "
         "This sim has no lane creeps, so creep-kill gold is not in the income."
@@ -2108,8 +2136,8 @@ def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES,
         "end": "End of game. Mean through the round each game ended.",
     }
     for mark in marks:
-        columns, counts = flow_columns(mark)
-        print_flow(titles[mark], headers, columns, counts)
+        columns, counts, won_counts = flow_columns(mark)
+        print_flow(titles[mark], headers, columns, counts, won_counts)
 
 
 def main() -> None:

@@ -5,11 +5,14 @@
 The simulator uses the printed hero sheet in ``src/game/roster.ts`` and the version 3
 economy. It is a lane-level model: two heuristic sides, real ability costs, attack
 order, tower bounties, and hero-kill income. A thin board spends gold drawing heroes.
-A stocked board spends gold playing items. Each side can send a hero to its home jungle
-once the lanes are covered. Each active ability can be cast once per
-round, or twice that round when a Refresher is played. Silence is simulated: it blocks
-the cast and turns a passive off. Invisibility is not, so Gem of True Sight has no
-effect here. The rest of the status list is not simulated.
+Once that Gold is gone, the draw step ends. Items, runes, abilities, and Shields are
+interrupts: one card resolves, then the other side may counter or pass. A side with
+nothing it can play passes on its own. Two passes resolve the next swing. Each side
+can send a hero to its home jungle once the lanes are covered. Each active ability can
+be cast once per round, or twice that round when a Refresher is played. Silence is
+simulated: it blocks the cast and turns a passive off. Invisibility is not, so Gem of
+True Sight, Illusion, Invisibility, and Water runes have no effect here. The rest of
+the status list is not simulated.
 """
 
 from __future__ import annotations
@@ -168,6 +171,10 @@ class Side:
     towers: dict[str, dict[str, int]] = field(default_factory=dict)
     ancient: int = ANCIENT
     kills: int = 0
+    # Runes earned from camps. Each one is an interrupt, not an instant effect.
+    runes: list[str] = field(default_factory=list)
+    # Tormentor reward. Playing it is an interrupt.
+    shards: int = 0
 
     def __post_init__(self) -> None:
         if not self.towers:
@@ -269,7 +276,7 @@ def board_size(g: Game, p: str) -> int:
 
 
 def draw_and_deploy(g: Game) -> None:
-    """Spend gold. A thin board buys hero cards. A stocked board buys items and plays them."""
+    """A thin board draws while it can pay 1 Gold. No Gold left ends the step. Items wait for combat."""
     for p, side in g.sides.items():
         on_board = len(living(g, p))
         if on_board < ENOUGH_HEROES:
@@ -296,23 +303,6 @@ def draw_and_deploy(g: Game) -> None:
                 g.board[p][lane].append(unit)
             placed += 1
             g.played[p] += 1
-        # Items are played onto heroes already on the board, so the gold leaves the bank.
-        while len(living(g, p)) >= ENOUGH_HEROES and side.gold >= 1 and g.items[p] < len(living(g, p)):
-            heroes = living(g, p)
-            active = [pair for pair in heroes if pair[1].hero.kind == "active" and not pair[1].refresher]
-            if side.gold >= 3 and active:
-                _lane, unit = active[0]
-                side.gold -= 3
-                unit.refresher = True
-            elif side.gold >= 2:
-                _lane, unit = heroes[0]
-                side.gold -= 2
-                unit.amplify += 1
-            else:
-                _lane, unit = heroes[0]
-                side.gold -= 1
-                unit.haste = True
-            g.items[p] += 1
 
 
 def tower_pressure(t1: int, t2: int) -> int:
@@ -652,8 +642,122 @@ def buy_shield(g: Game, p: str, unit: Unit) -> None:
     g.shields[p] += 1
 
 
-def cast(g: Game) -> None:
-    """One interrupt at a time. Odd rounds Radiant starts, even rounds Dire starts. Each action resolves now."""
+def swinging(g: Game, p: str) -> list[tuple[str, Unit]]:
+    """Heroes who can still land a basic attack. A stun or a jungle disarm removes them."""
+    rows: list[tuple[str, Unit]] = []
+    for lane, unit in living(g, p):
+        if unit.stunned:
+            continue
+        if lane in ("jungle", "invade") and unit.disarmed:
+            continue
+        rows.append((lane, unit))
+    return rows
+
+
+def take_rune(side: Side, kind: str) -> None:
+    side.runes.remove(kind)
+
+
+def play_rune(g: Game, p: str) -> bool:
+    """One rune, when it does something now. A blank rune stays in hand and does not spend the window."""
+    side = g.sides[p]
+    if not side.runes:
+        return False
+    heroes = [unit for _lane, unit in living(g, p)]
+    wounded = [unit for unit in heroes if unit.hp < 2]
+    if "regen" in side.runes and wounded:
+        take_rune(side, "regen")
+        min(wounded, key=lambda unit: unit.hp).hp = 2
+        return True
+    open_shield = [unit for unit in heroes if unit.shield <= 0]
+    if "shield" in side.runes and open_shield:
+        take_rune(side, "shield")
+        open_shield[0].shield = 1
+        return True
+    arcane = [unit for unit in heroes if unit.hero.kind == "active" and unit.casts == 0 and unit.hero.cost > 0 and not unit.stunned and not unit.silenced]
+    if "arcane" in side.runes and arcane:
+        take_rune(side, "arcane")
+        unit = max(arcane, key=lambda candidate: candidate.hero.cost)
+        unit.hero = replace(unit.hero, cost=max(0, unit.hero.cost - 1))
+        return True
+    attackers = [unit for lane, unit in swinging(g, p) if lane not in ("jungle", "invade")]
+    if "dd" in side.runes and attackers:
+        take_rune(side, "dd")
+        attackers[0].amplify += 1
+        return True
+    unhasted = [unit for unit in attackers if not unit.haste]
+    if "haste" in side.runes and unhasted:
+        take_rune(side, "haste")
+        unhasted[0].haste = True
+        return True
+    if "wisdom" in side.runes:
+        take_rune(side, "wisdom")
+        side.xp += 1
+        return True
+    if "gold" in side.runes:
+        take_rune(side, "gold")
+        side.gold += 1
+        return True
+    return False
+
+
+def play_shard(g: Game, p: str) -> bool:
+    """The Tormentor's Refresher is a reward card. It resolves on its own action."""
+    side = g.sides[p]
+    if side.shards <= 0:
+        return False
+    active = [
+        unit
+        for _lane, unit in living(g, p)
+        if unit.hero.kind == "active" and not unit.refresher and not unit.stunned and not unit.silenced
+    ]
+    if not active:
+        return False
+    side.shards -= 1
+    g.rng.choice(active).refresher = True
+    return True
+
+
+def play_item(g: Game, p: str) -> bool:
+    """One shop effect, paid with Gold. A full board buys these. A thin board keeps Gold for the next draw."""
+    side = g.sides[p]
+    heroes = living(g, p)
+    if len(heroes) < ENOUGH_HEROES or side.gold < 1 or g.items[p] >= len(heroes):
+        return False
+    casters = [
+        unit
+        for _lane, unit in heroes
+        if unit.hero.kind == "active" and not unit.refresher and unit.casts < 2 and not unit.stunned and not unit.silenced
+    ]
+    if side.gold >= 3 and casters:
+        side.gold -= 3
+        casters[0].refresher = True
+        g.items[p] += 1
+        return True
+    fighters = swinging(g, p)
+    if not fighters:
+        return False
+    if side.gold >= 2:
+        side.gold -= 2
+        fighters[0][1].amplify += 1
+        g.items[p] += 1
+        return True
+    target = next((unit for _lane, unit in fighters if not unit.haste), None)
+    if target is None:
+        return False
+    side.gold -= 1
+    target.haste = True
+    g.items[p] += 1
+    return True
+
+
+def interrupt(g: Game) -> None:
+    """One ability, rune, item, or Shield. The other side may counter or pass. Two passes move combat on.
+
+    A side with no legal card passes on its own. Odd rounds Radiant starts. Even rounds Dire starts.
+    The ability is the answer when it can be cast. A rune or item follows, which is also how a stunned
+    hero still answers. Both sides are AI, so the counter is immediate rather than a 5 second clock.
+    """
     priority = "radiant" if g.round % 2 == 1 else "dire"
     passed = 0
     while passed < 2 and g.winner is None:
@@ -662,6 +766,10 @@ def cast(g: Game) -> None:
             passed = 0
             lane, unit = pick
             resolve_cast(g, priority, lane, unit)
+            priority = other(priority)
+            continue
+        if play_rune(g, priority) or play_shard(g, priority) or play_item(g, priority):
+            passed = 0
             priority = other(priority)
             continue
         shield = legal_shield(g, priority)
@@ -789,24 +897,13 @@ def spawn_camps(g: Game) -> None:
 RUNES = ("gold", "regen", "dd", "shield", "arcane", "illusion", "invis", "haste", "wisdom", "water")
 
 
-def apply_rune(g: Game, p: str) -> None:
-    """A camp clear draws one rune and plays it on a lane hero before the swings."""
+def gain_rune(g: Game, p: str) -> None:
+    """A camp clear draws one rune into hand. Playing it is an interrupt, so the other side can answer."""
     rune = g.rng.choice(RUNES)
-    hero = next((unit for lane, unit in living(g, p) if lane != "jungle"), None)
-    if rune == "gold":
-        g.sides[p].gold += 1
-    elif rune == "wisdom":
-        g.sides[p].xp += 1
-    elif rune == "regen" and hero is not None:
-        hero.hp = 2
-    elif rune == "dd" and hero is not None:
-        hero.amplify += 1
-    elif rune == "shield" and hero is not None and hero.shield <= 0:
-        hero.shield = 1
-    elif rune == "haste" and hero is not None:
-        hero.haste = True
-    elif rune == "arcane" and hero is not None and hero.casts == 0:
-        hero.hero = replace(hero.hero, cost=max(0, hero.hero.cost - 1))
+    # Illusion, Invisibility, and Water have no model here, so the draw does not create a card.
+    if rune in ("illusion", "invis", "water"):
+        return
+    g.sides[p].runes.append(rune)
 
 
 def claim_camp(g: Game, p: str, camp: Camp, owner: str | None = None) -> None:
@@ -817,16 +914,14 @@ def claim_camp(g: Game, p: str, camp: Camp, owner: str | None = None) -> None:
         g.sides[p].gold += 3
         g.sides[p].xp += 3
         g.aegis[p] += 1
-        apply_rune(g, p)
+        gain_rune(g, p)
     else:
         # A normal camp and a Tormentor both pay 2 Gold, 2 XP, and a rune. The Tormentor also leaves a Refresher.
         g.sides[p].gold += 2
         g.sides[p].xp += 2
-        apply_rune(g, p)
+        gain_rune(g, p)
         if camp.kind == "tormentor":
-            active = [unit for _lane, unit in living(g, p) if unit.hero.kind == "active" and not unit.refresher]
-            if active:
-                g.rng.choice(active).refresher = True
+            g.sides[p].shards += 1
     g.camps[owner or p] = None
 
 
@@ -909,13 +1004,14 @@ def jungler_rotate(g: Game) -> None:
 
 
 def combat(g: Game) -> None:
-    """Interrupt window, then one swing, then another window, repeating through the towers."""
+    """A window, then the jungle, then a window, then one swing at a time. Two passes open the next step."""
     g.attacked_towers = set()
     g.fired_towers = set()
-    cast(g)
+    interrupt(g)
     fight_jungle(g)
     if g.winner is not None:
         return
+    interrupt(g)
     acted: set[int] = set()
     while g.winner is None:
         batch = next_batch(g, acted)
@@ -927,12 +1023,12 @@ def combat(g: Game) -> None:
         retaliate_towers(g)
         if g.winner is not None:
             return
-        cast(g)
+        interrupt(g)
     if g.winner is not None:
         return
     towers_fire(g)
     if g.winner is None:
-        cast(g)
+        interrupt(g)
 
 
 def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str, *, ancient: bool = True) -> None:
@@ -1320,11 +1416,11 @@ def record_falls(
         first_t2_won[first_t2] += 1
 
 
-def tourney(games: int, seed: int, limit: int) -> None:
-    """Every style against every style. The cell is Radiant's win rate."""
+def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES) -> None:
+    """Every listed style against every listed style. The cell is Radiant's win rate."""
     rows: list[dict[str, object]] = []
-    for radiant in STYLES:
-        for dire in STYLES:
+    for radiant in styles:
+        for dire in styles:
             print()
             print("=" * 88)
             print(f"Radiant {radiant} vs Dire {dire}")
@@ -1332,11 +1428,11 @@ def tourney(games: int, seed: int, limit: int) -> None:
             rows.append(simulate(games, seed, limit, radiant, dire))
     print()
     print("Radiant win rate. Row is Radiant's style, column is Dire's style.")
-    print(f"{'':10}  " + "  ".join(f"{name:>10}" for name in STYLES))
-    by_seat = {name: [] for name in STYLES}
-    for radiant in STYLES:
+    print(f"{'':10}  " + "  ".join(f"{name:>10}" for name in styles))
+    by_seat = {name: [] for name in styles}
+    for radiant in styles:
         cells = []
-        for dire in STYLES:
+        for dire in styles:
             row = next(item for item in rows if item["radiant"] == radiant and item["dire"] == dire)
             wins = row["wins"]
             assert isinstance(wins, dict)
@@ -1348,7 +1444,7 @@ def tourney(games: int, seed: int, limit: int) -> None:
     print()
     print("Mean win rate and average rounds to win. Rounds count only games that style won.")
     print(f"{'':10}  {'win rate':>10}  {'rounds':>8}")
-    won_rounds = {name: [0.0, 0] for name in STYLES}
+    won_rounds = {name: [0.0, 0] for name in styles}
     for row in rows:
         r_sum, d_sum = row["win_rounds"]
         r_n, d_n = row["win_n"]
@@ -1361,7 +1457,7 @@ def tourney(games: int, seed: int, limit: int) -> None:
         won_rounds[radiant_name][1] += r_n
         won_rounds[dire_name][0] += d_sum
         won_rounds[dire_name][1] += d_n
-    for name in sorted(STYLES, key=lambda style: sum(by_seat[style]) / len(by_seat[style]), reverse=True):
+    for name in sorted(styles, key=lambda style: sum(by_seat[style]) / len(by_seat[style]), reverse=True):
         rates = by_seat[name]
         total, count = won_rounds[name]
         rounds = total / count if count else 0

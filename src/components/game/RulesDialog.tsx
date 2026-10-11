@@ -33,7 +33,7 @@ export function RulesDialog() {
       <DialogContent initialFocus={false} className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Dota: The Ancient's Duel — quick rules</DialogTitle>
-          <DialogDescription>Three reference cards. The card on a hero, item, rune, or neutral still wins.</DialogDescription>
+          <DialogDescription>Four reference cards. The card on a hero, item, rune, or neutral still wins.</DialogDescription>
         </DialogHeader>
         <RuleCards />
         <details className="text-sm leading-relaxed text-zinc-300">

@@ -1,3 +1,12 @@
+const NEUTRALS: Array<[string, string]> = [
+  ['Stone Golem', 'STR, 2 HP. Immune, and a Shield. Hits Position 1.'],
+  ['Thunderhide', 'AGI, 2 HP. Haste. Hits every hero and applies Slow. Thunder Clap: 1 magic to each unit.'],
+  ['Ice Shaman', 'INT, 2 HP. Silences the camp. Hits each Position 1. Freezing Blast: 1 magic to each Position 1.'],
+  ['Black Dragon', 'UNI, 2 HP. Curses the camp. Hits every unit. Fire Pit: 1 magic to each unit.'],
+  ['Roshan', 'UNI, 3 HP, from round 4. Ignores the first damage. Hits every unit. Roar: Disarm and 1 damage to each. Pays 3 Gold, 3 XP, a rune, and the Aegis.'],
+  ['Tormentor', 'UNI, 2 HP. Never attacks. A Shield each turn. Reflection returns the damage to the attacker and to each contesting Position 1. Break or Silence turns it off. Pays 2 Gold, 2 XP, a rune, and a Refresher Shard.'],
+]
+
 const STATUSES: Array<[string, string]> = [
   ['Stun', 'No cast, attack, or move'],
   ['Silence', 'No cast, and the passive is off'],
@@ -24,7 +33,7 @@ const STATUSES: Array<[string, string]> = [
 
 export function RuleCards() {
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
+    <div className="grid gap-3 lg:grid-cols-2">
       <Card kicker="Card 1" title="Start and play">
         <Block title="Goal">Destroy the enemy Ancient (10). Strike Tier 1 (3), then Tier 2 (5), then the Ancient.</Block>
         <Block title="Opening">
@@ -76,6 +85,25 @@ export function RuleCards() {
             <li>Runes, tower cards, the Aegis, and the Shard are free. A cast that fizzles returns its XP.</li>
           </ul>
         </Block>
+      </Card>
+
+      <Card kicker="Card 4" title="Neutrals">
+        <p>
+          One camp in each jungle, from a deck of 15: Stone Golem, Thunderhide, Ice Shaman, and Black Dragon, three each, plus one Roshan and two Tormentors. A camp stays until it dies. An empty camp refills at the next Upkeep.
+        </p>
+        <p>
+          Assign into your own jungle. The enemy jungle is a rotation step. The side that arrived first holds the camp. A tie goes to that jungle's owner. The holder chooses the neutral or the enemy. A contesting hero must attack the holder.
+        </p>
+        <p>A neutral ultimate needs 2 living player units in the camp. Stun, Fear, or Banish skips the cast. Stun also skips the attack.</p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+          {NEUTRALS.map(([name, effect]) => (
+            <div key={name} className="contents">
+              <dt className="font-semibold text-zinc-100">{name}</dt>
+              <dd>{effect}</dd>
+            </div>
+          ))}
+        </dl>
+        <p>A camp pays 2 Gold, 2 XP, and a rune. A boss pays its bounty to the side that fought it. With both sides present, it goes to the side that still has a living hero, otherwise to the jungle's owner.</p>
       </Card>
     </div>
   )

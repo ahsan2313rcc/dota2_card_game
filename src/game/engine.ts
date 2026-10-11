@@ -2059,10 +2059,7 @@ function refreshNeutralAuras(s: GameState) {
   for (const camp of CAMPS) {
     const u = campNeutral(s, camp)
     if (!u) continue
-    if (u.cardId === 'golem') {
-      u.status.immune = true
-      u.status.shield = Math.max(u.status.shield, 1)
-    }
+    if (u.cardId === 'golem') u.status.immune = true
     if (u.cardId === 'thunderhide') u.status.haste = true
     if (u.cardId === 'dragon') {
       for (const p of PLAYERS) for (const id of lineup(s, p, camp)) applyStatus(s, 'neutral', s.units[id], 'cursed', 'Black Dragon', true)
@@ -2086,6 +2083,7 @@ function neutralUltName(u: Unit): string | null {
   if (u.cardId === 'thunderhide') return 'Thunder Clap'
   if (u.cardId === 'ice_shaman') return 'Freezing Blast'
   if (u.cardId === 'dragon') return 'Fire Pit'
+  if (u.cardId === 'golem') return 'Boulder'
   return null
 }
 
@@ -2096,7 +2094,7 @@ function neutralLock(u: Unit): string | null {
   return null
 }
 
-/** Neutral ultimates. They are not declared. They need 3 units in the camp, and a stun skips them. */
+/** Neutral ultimates. They are not declared. They need 2 units in the camp, and a stun skips them. */
 function contestStrikes(s: GameState) {
   for (const camp of CAMPS) {
     const u = campNeutral(s, camp)
@@ -2117,6 +2115,12 @@ function contestStrikes(s: GameState) {
       for (const p of PLAYERS) {
         const front = targetableLineup(s, p, camp)[0]
         if (front) dealDamage(s, u, front, 1, 'passive', { label: 'Freezing Blast' })
+      }
+    }
+    if (u.cardId === 'golem') {
+      for (const p of PLAYERS) {
+        const front = targetableLineup(s, p, camp)[0]
+        if (front) dealDamage(s, u, front, 1, 'passive', { label: 'Boulder', physical: true })
       }
     }
     if (u.cardId === 'dragon') {

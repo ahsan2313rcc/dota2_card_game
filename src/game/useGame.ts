@@ -57,7 +57,7 @@ export type Action =
 function respondAi(s: GameState): GameState {
   let guard = 0
   while (s.phase === 'response' && s.priority === AI && guard++ < 80) {
-    const next = aiOneResponse(s, AI)
+    const next = aiOneResponse(s, AI, opponentStyle(s))
     if (next === s) break
     s = next
   }
@@ -89,7 +89,7 @@ function reducer(s: GameState, a: Action): GameState {
     case 'swapTowers':
       return swapTowerCards(s, HUMAN, a.tier, a.a, a.b)
     case 'endDraw':
-      return endDraw(aiDraw(s, AI))
+      return endDraw(aiDraw(s, AI, opponentStyle(s)))
     case 'place': {
       const card = s.players[HUMAN].hand.find((c) => c.iid === a.handIid)
       if (card?.type === 'creep') return isLane(a.zone) ? placeCreep(s, HUMAN, a.handIid, a.zone) : s

@@ -68,7 +68,7 @@ export const REGULAR_CREEPS = 25
 export const SIEGE_CREEPS = 8
 
 export const NEUTRALS: NeutralCard[] = [
-  { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Immune. Gains 1 Shield. Attacks Position 1.' },
+  { id: 'golem', name: 'Stone Golem', attribute: 'STR', hp: 2, text: 'Immune. Ultimate, only with 2 or more units in the camp: 1 physical damage to each Position 1.' },
   { id: 'thunderhide', name: 'Thunderhide', attribute: 'AGI', hp: 2, text: 'Hasted. Ultimate, only with 2 or more units in the camp: 1 magical damage to every enemy there.' },
   { id: 'ice_shaman', name: 'Ice Shaman', attribute: 'INT', hp: 2, text: 'Silence every enemy in the camp. Ultimate, only with 2 or more units in the camp: 1 magical damage to both Position 1 units.' },
   { id: 'dragon', name: 'Black Dragon', attribute: 'UNI', hp: 2, text: 'Curse every enemy in the camp. Ultimate, only with 2 or more units in the camp: 1 damage to every enemy there.' },

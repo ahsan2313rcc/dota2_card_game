@@ -123,7 +123,7 @@ A hero has 2 health: Healthy, then Wounded, then slain. Health persists from rou
 
 A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card bonuses, minus Enfeeble, to a minimum of 0. It hits enemy Position 1. With no enemy left in the zone, a unit in a lane hits the next structure there. Siege creeps deal 2 to structures. Divine Rapier makes a hero's basic attacks kill enemy heroes. An ultimate hits the units named on its card. It damages a tower when the card names that tower, and that damage stops at the tower.
 
-**Attribute counter.** Agility counters Strength, Strength counters Intelligence, Intelligence counters Agility. Universal is outside the loop. A basic attack against the countered attribute is lethal: it deals the target's current health. Neutrals have attributes and can be countered. The lethal hit is only a basic attack. Magical damage, tower damage, and physical damage from an ultimate do not counter. After the lethal amount is chosen, a Stone Golem still takes at most 1 from that hit.
+**Attribute counter.** Agility counters Strength, Strength counters Intelligence, Intelligence counters Agility. Universal is outside the loop. A basic attack against the countered attribute is lethal: it deals the target's current health. Neutrals have attributes and can be countered. The lethal hit is only a basic attack. Magical damage, tower damage, and physical damage from an ultimate do not counter.
 
 **Order.** Hastened units attack first. Then Agility, Universal, Intelligence, Strength, then units with no attribute (creeps). Slowed units attack after everyone else, in that same order, unless they also have Haste. Ultimates resolve earlier: Strength, Intelligence, Universal, Agility. Ties use the lane and day/night priority above.
 
@@ -131,7 +131,7 @@ A basic attack deals 1 physical damage, plus Amplify, permanent attack, and card
 
 **Physical and magical.** Physical damage is basic attacks, towers, reflected damage, and ultimate or item damage printed as physical. Magical damage is ultimates, passives, and items that are not printed as physical. Immunity blocks magical damage and debuffs from enemies. Damage a card deals to itself still lands. Ethereal blocks physical damage and takes 1 extra magical damage. Invulnerable blocks all damage except self-damage. Banish is untargetable and invulnerable.
 
-**Stone Golem** is immune to magical ultimate damage, and every hit it does take is capped at 1. **Roshan** ignores the first damage each round.
+**Stone Golem** is Immune to magical damage and has no Shield. Boulder, when 2 or more units are in the camp, deals 1 physical damage to each side's Position 1. **Roshan** ignores the first damage each round.
 
 ## Jungle
 
@@ -141,7 +141,7 @@ The side that arrived first holds the camp. A tie goes to the owner of that jung
 
 Clearing a normal neutral pays 2 Gold, 2 XP, and one rune card to the killer's side.
 
-A neutral ultimate (Thunder Clap, Freezing Blast, Fire Pit, or Roshan's Roar) resolves only when 2 or more units are in that camp. The neutral itself does not count. A stunned neutral does not cast it.
+A neutral ultimate (Boulder, Thunder Clap, Freezing Blast, Fire Pit, or Roshan's Roar) resolves only when 2 or more units are in that camp. The neutral itself does not count. A stunned neutral does not cast it.
 
 **Roshan** is Universal, 3 health, and never attacks before round 4. If he would spawn earlier, he is shuffled back and another card is drawn. He hits every enemy in the camp. Roar, when the camp holds 2 or more units, Disarms them and deals 1 damage to each. His bounty is 3 Gold, 3 XP, a rune, and the Aegis.
 
@@ -277,7 +277,7 @@ An ultimate is aimed at the caster's own lane or zone unless the card names anot
 
 | Camp | Attribute | Health | Attack |
 | --- | --- | --- | --- |
-| Stone Golem | Strength | 2 | Position 1. Hits against it are capped at 1. Immune to magical ultimate damage. |
+| Stone Golem | Strength | 2 | Immune. No Shield. Hits Position 1. Boulder deals 1 physical damage to each Position 1 when 2 or more units are in the camp. |
 | Thunderhide | Agility | 2 | Haste. Hits every enemy hero and applies Slow. Thunder Clap needs 2 units in the camp. |
 | Ice Shaman | Intelligence | 2 | Silences the camp. Hits each Position 1 and Silences them. Freezing Blast needs 2 units in the camp. |
 | Black Dragon | Universal | 2 | Accuracy. Hits every unit in the camp. Fire Pit needs 2 units in the camp. |

@@ -8,6 +8,7 @@ const OPPONENTS: { value: AiStyle; label: string; blurb: string }[] = [
   { value: 'defender', label: 'Defender', blurb: 'Answers every threat' },
   { value: 'hunter', label: 'Hunter', blurb: 'Thin lanes, and never farms' },
   { value: 'carry', label: 'Carry', blurb: 'Holds a break, farms, spends the gold' },
+  { value: 'split', label: 'Split', blurb: 'One per lane, two in the jungles' },
 ]
 
 export function opponentLabel(style: AiStyle | undefined): string {

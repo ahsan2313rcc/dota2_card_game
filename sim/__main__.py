@@ -65,6 +65,8 @@ class Hero:
     silence_lock: bool = False
     # 1 XP, and the hit or Stun lands on the camp creep.
     camp_spell: bool = False
+    # Printed physical damage. A Stone Golem is Immune to the magical kind.
+    physical: bool = False
 
 
 def is_camp_spell(ult: str, kind: str, cost: int) -> bool:
@@ -130,6 +132,7 @@ def load_heroes() -> list[Hero]:
                 silence_scope=scope,
                 silence_lock="lock" in ult and scope != "",
                 camp_spell=is_camp_spell(ult, m.group("kind"), int(m.group("cost"))),
+                physical="pdmg" in ult,
             )
         )
     if len(heroes) != 127:
@@ -138,7 +141,7 @@ def load_heroes() -> list[Hero]:
 
 
 ENOUGH_HEROES = 5
-STYLES = ("balanced", "lane", "jungler", "defender", "hunter", "carry")
+STYLES = ("balanced", "lane", "jungler", "defender", "hunter", "carry", "split")
 
 
 @dataclass
@@ -281,13 +284,33 @@ def draw_and_deploy(g: Game) -> None:
     """A thin board draws while it can pay 1 Gold. No Gold left ends the step. Items wait for combat."""
     for p, side in g.sides.items():
         on_board = len(living(g, p))
-        if on_board < ENOUGH_HEROES:
+        if g.style[p] == "split":
+            # Heroes until hand + board is 7. Gold past that is kept for items.
+            while side.gold >= 1 and len(side.hand) + on_board < 7 and len(side.hand) < 10:
+                side.gold -= 1
+                side.hand.append(g.rng.choice(g.heroes))
+        elif on_board < ENOUGH_HEROES:
             while side.gold >= 1 and len(side.hand) < 10:
                 side.gold -= 1
                 side.hand.append(g.rng.choice(g.heroes))
         placed = 0
         side.hand.sort(key=lambda h: (h.kind != "active", -h.damage, h.cost))
         while side.hand and placed < 3 and board_size(g, p) < 5:
+            if g.style[p] == "split":
+                zone = split_next_zone(g, p)
+                if zone is None:
+                    break
+                camp = g.camps[p]
+                hero = split_pull(side.hand, zone == "jungle", camp is not None and camp.kind == "thunderhide")
+                unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive", fresh=True)
+                if zone == "jungle":
+                    g.jungle[p].append(unit)
+                    g.jungle_sent[p] += 1
+                else:
+                    g.board[p][zone].append(unit)
+                placed += 1
+                g.played[p] += 1
+                continue
             lane = best_lane(g, p)
             lane_score = lane_value(g, p, lane)
             jungle_score = jungle_value(g, p)
@@ -602,8 +625,8 @@ def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
         owner, camp = found
         if unit.hero.stun:
             camp.stunned = True
-        if unit.hero.damage > 0 and camp.hp > 0:
-            # Magical damage ignores the camp Shield.
+        if unit.hero.damage > 0 and camp.hp > 0 and not (camp.kind == "golem" and not unit.hero.physical):
+            # Magical damage ignores the camp Shield. Immune stops that damage on a Stone Golem.
             camp.hp -= unit.hero.damage
             if camp.hp <= 0:
                 claim_camp(g, p, camp, owner)
@@ -787,6 +810,9 @@ def interrupt(g: Game) -> None:
             priority = other(priority)
             continue
         shield = legal_shield(g, priority)
+        # Split keeps XP for a useful ultimate. A Shield waits until 6 XP is banked and no cast is legal.
+        if shield is not None and g.style[priority] == "split" and g.sides[priority].xp < 6:
+            shield = None
         if shield is not None:
             passed = 0
             buy_shield(g, priority, shield)
@@ -891,7 +917,7 @@ def spawn_camps(g: Game) -> None:
         camp = g.camps[p]
         if camp is not None and camp.hp > 0:
             camp.stunned = False
-            if camp.kind in ("golem", "tormentor"):
+            if camp.kind == "tormentor":
                 camp.shield = 1
             if camp.kind == "roshan":
                 camp.evade = 1
@@ -903,7 +929,7 @@ def spawn_camps(g: Game) -> None:
         g.camps[p] = Camp(
             kind,
             3 if kind == "roshan" else 2,
-            shield=1 if kind in ("golem", "tormentor") else 0,
+            shield=1 if kind == "tormentor" else 0,
             evade=1 if kind == "roshan" else 0,
         )
 
@@ -964,6 +990,11 @@ def fight_jungle(g: Game) -> None:
                     hurt(g, hero, 1, "neutral")
             elif camp.kind == "ice_shaman":
                 hurt(g, heroes[0], 1, "neutral")
+            elif camp.kind == "golem":
+                if home:
+                    physical(g, home[0], 1, "neutral")
+                if invaders:
+                    physical(g, invaders[0], 1, "neutral")
         for hero in heroes:
             if hero.hp <= 0 or hero.disarmed or camp.hp <= 0:
                 continue
@@ -989,6 +1020,220 @@ def fight_jungle(g: Game) -> None:
         for hero in targets:
             if hero.hp > 0:
                 physical(g, hero, 1, "neutral")
+
+
+def split_foes(g: Game, p: str, lane: str) -> int:
+    return sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0 and not unit.fresh)
+
+
+def split_have(g: Game, p: str, zone: str) -> int:
+    if zone == "jungle":
+        return sum(1 for unit in g.jungle[p] if unit.hp > 0)
+    return sum(1 for unit in g.board[p][zone] if unit.hp > 0)
+
+
+def split_lane_order(p: str) -> list[str]:
+    return sorted(LANES, key=lambda lane: RANK[p][lane])
+
+
+def split_steps(g: Game, p: str) -> list[tuple[str, int]]:
+    """Fill order. A later step can raise the same lane once the others are covered."""
+    side = g.sides[p]
+    order = split_lane_order(p)
+    if side.ancient < 6:
+        return [(split_threat(g, p), 5)]
+    attacked = [
+        lane
+        for lane in order
+        if side.towers[lane]["t1"] <= 0 and side.towers[lane]["t2"] <= 0 and split_foes(g, p, lane) > 0
+    ]
+    if attacked:
+        threat = max(attacked, key=lambda lane: (split_foes(g, p, lane), -RANK[p][lane]))
+        steps = [(threat, split_foes(g, p, threat))]
+        steps.extend((lane, 1) for lane in order if lane != threat)
+        steps.append((threat, 5))
+        return steps
+    bleed = [lane for lane in order if side.towers[lane]["t1"] <= 0 and 0 < side.towers[lane]["t2"] < 3]
+    if bleed:
+        lane = min(bleed, key=lambda name: (side.towers[name]["t2"], RANK[p][name]))
+        steps = [(lane, 1)]
+        steps.extend((name, 1) for name in order if name != lane)
+        camp = g.camps[p]
+        if camp is not None and camp.hp > 0:
+            steps.append(("jungle", 1))
+        steps.append((lane, 5))
+        return steps
+    steps = [(lane, 1) for lane in order]
+    if g.round < 2:
+        return steps
+    home = g.camps[p]
+    enemy = g.camps[other(p)]
+    home_alive = home is not None and home.hp > 0
+    enemy_alive = enemy is not None and enemy.hp > 0
+    if home_alive:
+        steps.append(("jungle", 1))
+    if enemy_alive:
+        steps.append(("mid", 2))
+    if not home_alive or not enemy_alive:
+        steps.append((order[0], 2))
+    return steps
+
+
+def split_next_zone(g: Game, p: str) -> str | None:
+    for zone, up_to in split_steps(g, p):
+        if split_have(g, p, zone) < up_to:
+            return zone
+    return None
+
+
+def split_pull(hand: list[Hero], jungle: bool, thunder: bool) -> Hero:
+    """Agility prefers the camp. A Thunderhide wants Silence, Stun, or damage ahead of that."""
+
+    def rank(hero: Hero) -> tuple[int, int]:
+        answer = 1 if thunder and (hero.stun or hero.silence_scope or hero.damage) else 0
+        agi = 1 if hero.attr == "AGI" else 0
+        return (answer, agi) if jungle else (-answer, -agi)
+
+    index = max(range(len(hand)), key=lambda i: rank(hand[i]))
+    return hand.pop(index)
+
+
+def split_threat(g: Game, p: str) -> str:
+    order = split_lane_order(p)
+    open_lanes = [lane for lane in order if g.sides[p].towers[lane]["t1"] <= 0 and g.sides[p].towers[lane]["t2"] <= 0]
+    pool = open_lanes or order
+    return max(pool, key=lambda lane: (split_foes(g, p, lane), -RANK[p][lane]))
+
+
+SPLIT_ADJ = {
+    "top": ("direJungle",),
+    "direJungle": ("top", "mid"),
+    "mid": ("direJungle", "radiantJungle"),
+    "radiantJungle": ("mid", "bot"),
+    "bot": ("radiantJungle",),
+}
+SPLIT_HOME = {"radiant": "radiantJungle", "dire": "direJungle"}
+SPLIT_ENEMY = {"radiant": "direJungle", "dire": "radiantJungle"}
+SPLIT_CHAIN = ["top", "direJungle", "mid", "radiantJungle", "bot"]
+
+
+def split_dist(a: str, b: str) -> int:
+    return abs(SPLIT_CHAIN.index(a) - SPLIT_CHAIN.index(b))
+
+
+def split_where(g: Game, p: str) -> list[tuple[Unit, str]]:
+    home = SPLIT_HOME[p]
+    enemy = SPLIT_ENEMY[p]
+    rows = [(unit, lane) for lane in LANES for unit in g.board[p][lane] if unit.hp > 0 and not unit.stunned]
+    rows.extend((unit, home) for unit in g.jungle[p] if unit.hp > 0 and not unit.stunned)
+    rows.extend((unit, enemy) for unit in g.invade[p] if unit.hp > 0 and not unit.stunned)
+    return rows
+
+
+def split_take(g: Game, p: str, unit: Unit, src: str, dest: str) -> None:
+    home = SPLIT_HOME[p]
+    enemy = SPLIT_ENEMY[p]
+
+    def bucket(zone: str) -> list[Unit]:
+        if zone == home:
+            return g.jungle[p]
+        if zone == enemy:
+            return g.invade[p]
+        return g.board[p][zone]
+
+    bucket(src).remove(unit)
+    bucket(dest).append(unit)
+
+
+def split_spare(g: Game, p: str, dest: str) -> tuple[Unit, str] | None:
+    for lane in LANES:
+        heroes = [unit for unit in g.board[p][lane] if unit.hp > 0 and not unit.stunned]
+        if len(heroes) >= 2 and dest in SPLIT_ADJ[lane]:
+            return heroes[-1], lane
+    return None
+
+
+def split_closer(g: Game, p: str, dest: str, keep: bool) -> tuple[Unit, str, str] | None:
+    best: tuple[int, int, Unit, str, str] | None = None
+    home = SPLIT_HOME[p]
+    for unit, src in split_where(g, p):
+        if src == dest:
+            continue
+        if keep:
+            if src == home and split_have(g, p, "jungle") <= 1:
+                continue
+            if src in LANES and split_have(g, p, src) <= 1:
+                continue
+        for nxt in SPLIT_ADJ[src]:
+            gain = split_dist(src, dest) - split_dist(nxt, dest)
+            if gain <= 0:
+                continue
+            jungle = 0 if src in LANES else 1
+            if best is None or (gain, jungle) > best[:2]:
+                best = (gain, jungle, unit, src, nxt)
+    if best is None:
+        return None
+    return best[2], best[3], best[4]
+
+
+def split_one_rotate(g: Game, p: str) -> tuple[Unit, str, str] | None:
+    side = g.sides[p]
+    home = SPLIT_HOME[p]
+    enemy = SPLIT_ENEMY[p]
+    if side.ancient < 6:
+        lane = split_threat(g, p)
+        if split_have(g, p, lane) >= 5:
+            return None
+        return split_closer(g, p, lane, False)
+    attacked = [
+        lane
+        for lane in LANES
+        if side.towers[lane]["t1"] <= 0 and side.towers[lane]["t2"] <= 0 and split_foes(g, p, lane) > 0
+    ]
+    if attacked:
+        lane = max(attacked, key=lambda name: (split_foes(g, p, name), -RANK[p][name]))
+        if split_have(g, p, lane) >= split_foes(g, p, lane):
+            return None
+        return split_closer(g, p, lane, False)
+    bleed = [lane for lane in LANES if side.towers[lane]["t1"] <= 0 and 0 < side.towers[lane]["t2"] < 3]
+    if bleed:
+        lane = min(bleed, key=lambda name: (side.towers[name]["t2"], RANK[p][name]))
+        camp = g.camps[p]
+        if (camp is not None and camp.hp > 0) and split_have(g, p, "jungle") == 0:
+            spare = split_spare(g, p, home)
+            if spare:
+                return spare[0], spare[1], home
+        if split_have(g, p, lane) >= 2:
+            return None
+        return split_closer(g, p, lane, True)
+    if g.round < 2:
+        return None
+    home_camp = g.camps[p]
+    enemy_camp = g.camps[other(p)]
+    if home_camp is not None and home_camp.hp > 0 and split_have(g, p, "jungle") == 0:
+        spare = split_spare(g, p, home)
+        if spare:
+            return spare[0], spare[1], home
+    if enemy_camp is not None and enemy_camp.hp > 0 and not any(unit.hp > 0 for unit in g.invade[p]):
+        spare = split_spare(g, p, enemy)
+        if spare:
+            return spare[0], spare[1], enemy
+    return None
+
+
+def split_rotate(g: Game) -> None:
+    """Up to two steps. The staged mid hero walks into the enemy camp. A falling Ancient pulls the board in."""
+    if g.winner is not None:
+        return
+    for p in ("radiant", "dire"):
+        if g.style[p] != "split":
+            continue
+        for _ in range(2):
+            move = split_one_rotate(g, p)
+            if move is None:
+                break
+            unit, src, dest = move
+            split_take(g, p, unit, src, dest)
 
 
 def jungler_rotate(g: Game) -> None:
@@ -1281,6 +1526,7 @@ def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
         combat(g)
         jungler_rotate(g)
         carry_rotate(g)
+        split_rotate(g)
         cleanup(g)
         trace[g.round] = end_of_turn(g)
         g.round += 1

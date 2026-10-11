@@ -1,5 +1,5 @@
 const NEUTRALS: Array<[string, string]> = [
-  ['Stone Golem', 'STR, 2 HP. Immune, and a Shield. Hits Position 1.'],
+  ['Stone Golem', 'STR, 2 HP. Immune. No Shield. Hits Position 1. Boulder: 1 physical damage to each Position 1.'],
   ['Thunderhide', 'AGI, 2 HP. Haste. Hits every hero and applies Slow. Thunder Clap: 1 magic to each unit.'],
   ['Ice Shaman', 'INT, 2 HP. Silences the camp. Hits each Position 1. Freezing Blast: 1 magic to each Position 1.'],
   ['Black Dragon', 'UNI, 2 HP. Curses the camp. Hits every unit. Fire Pit: 1 magic to each unit.'],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aiAssign, aiDraw, aiRotate, aiUlts, playAiRound } from './ai'
+import { aiAssign, aiDraw, aiOneResponse, aiRotate, aiUlts, playAiRound } from './ai'
 import { getHero, HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyShield,
@@ -1718,6 +1718,253 @@ describe('gold and xp sinks', () => {
     expect(rune.units[runeUid].persistentShield).toBeFalsy()
     rune = endRotation(resolveRound(rune))
     expect(rune.units[runeUid].status.shield).toBe(0)
+  })
+})
+
+describe('Stone Golem', () => {
+  it('has Immune and no Shield, and does not cast Boulder for a single hero', () => {
+    let s = setup(70, [hero('a', 'sven')])
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = fight(s)
+    const golem = campNeutral(s, 'radiantJungle')
+    expect(golem?.status.immune).toBe(true)
+    expect(golem?.status.shield).toBe(0)
+    expect(golem?.hp).toBe(1)
+    expect(logHas(s, 'Boulder')).toBe(false)
+  })
+
+  it('Boulder deals 1 physical damage to each side\'s Position 1 when two heroes are in the camp', () => {
+    let s = setup(71, [hero('a', 'juggernaut'), hero('c', 'sven')], [hero('b', 'axe')])
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
+    s = placeHero(s, 'dire', 'b', 'direJungle')
+    station(s, 'dire', heroesOnBoard(s, 'dire')[0].uid, 'radiantJungle')
+    s = fight(s)
+    expect(logHas(s, 'Boulder deals 1 to Radiant Juggernaut')).toBe(true)
+    expect(logHas(s, 'Boulder deals 1 to Dire Axe')).toBe(true)
+    expect(logHas(s, 'Boulder deals 1 to Radiant Sven')).toBe(false)
+    expect(campNeutral(s, 'radiantJungle')).toBeUndefined()
+  })
+})
+
+describe('split personality', () => {
+  it('deploys one hero in each lane during round 1', () => {
+    let s = setup(80, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge')])
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    for (const lane of LANES) expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === lane)).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+  })
+
+  it('fills the lanes before the jungle when only three heroes can be placed', () => {
+    let s = setup(81, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'lina'), hero('e', 'crystal_maiden')])
+    s.round = 2
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    for (const lane of LANES) expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === lane)).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+    expect(s.players.dire.hand.filter((c) => c.type === 'hero')).toHaveLength(2)
+  })
+
+  it('farms its own jungle and stages the second jungler on mid from round 2', () => {
+    let s = setup(82, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'lina'), hero('e', 'crystal_maiden')])
+    s.round = 2
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = placeHero(s, 'dire', 'c', 'bot')
+    s.players.dire.placedThisRound = 0
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
+  })
+
+  it('sends a Silence, Stun, or damage hero to a Thunderhide ahead of a plain Agility hero', () => {
+    let s = setup(83, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'anti_mage'), hero('e', 'chaos_knight')])
+    s.round = 2
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = placeHero(s, 'dire', 'c', 'bot')
+    s.players.dire.placedThisRound = 0
+    forceCamp(s, 'direJungle', 'neutral', 'thunderhide')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.zone === 'direJungle')?.cardId).toBe('chaos_knight')
+  })
+
+  it('prefers an Agility hero for a camp that is not a Thunderhide', () => {
+    let s = setup(84, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'anti_mage'), hero('e', 'tidehunter')])
+    s.round = 2
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = placeHero(s, 'dire', 'c', 'bot')
+    s.players.dire.placedThisRound = 0
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire').find((u) => u.zone === 'direJungle')?.cardId).toBe('anti_mage')
+  })
+
+  it('reinforces a Tier 2 under 3 HP and still farms its own jungle', () => {
+    let s = setup(85, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'lina'), hero('e', 'crystal_maiden')])
+    s.round = 3
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = placeHero(s, 'dire', 'c', 'bot')
+    s.players.dire.placedThisRound = 0
+    s.players.dire.structures.towers.top.t1 = 0
+    s.players.dire.structures.towers.top.t2 = 2
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'radiantJungle')).toHaveLength(0)
+  })
+
+  it('matches the attackers when a Tier 2 has fallen and does not farm', () => {
+    let s = setup(86, [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')], [hero('a', 'lina'), hero('b', 'tidehunter'), hero('c', 'crystal_maiden'), hero('d', 'zeus'), hero('e', 'sniper')])
+    s.round = 3
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = placeHero(s, 'dire', 'c', 'bot')
+    s.players.dire.placedThisRound = 0
+    s = placeHero(s, 'radiant', 'r1', 'top')
+    s = placeHero(s, 'radiant', 'r2', 'top')
+    s = placeHero(s, 'radiant', 'r3', 'top')
+    s.players.dire.structures.towers.top.t1 = 0
+    s.players.dire.structures.towers.top.t2 = 0
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    shown(s, 'radiant')
+    s = aiAssign(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(3)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+  })
+
+  it('puts new heroes on the Ancient\'s lane once it is below 6', () => {
+    let s = setup(87, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'lina'), hero('d', 'pudge')])
+    s.round = 4
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s.players.dire.placedThisRound = 0
+    s.players.dire.structures.ancient = 5
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.dire.structures.towers.bot.t2 = 0
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    s = aiAssign(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(2)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+  })
+
+  it('rotates the extra mid hero into the enemy jungle', () => {
+    let s = setup(88, [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'lina'), hero('e', 'crystal_maiden')])
+    s.round = 3
+    s = placeHero(s, 'radiant', 'a', 'bot')
+    s = placeHero(s, 'radiant', 'b', 'mid')
+    s = placeHero(s, 'radiant', 'c', 'top')
+    s.players.radiant.placedThisRound = 0
+    s = placeHero(s, 'radiant', 'd', 'mid')
+    s = placeHero(s, 'radiant', 'e', 'radiantJungle')
+    forceCamp(s, 'direJungle', 'neutral', 'golem')
+    forceCamp(s, 'radiantJungle', 'neutral', 'golem')
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'split')
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'mid')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(1)
+  })
+
+  it('steps toward the Ancient when it is below 6', () => {
+    let s = setup(89, [], [hero('a', 'sven')])
+    s.round = 4
+    s = placeHero(s, 'dire', 'a', 'mid')
+    s.players.dire.structures.ancient = 5
+    s.players.dire.structures.towers.bot.t1 = 0
+    s.players.dire.structures.towers.bot.t2 = 0
+    s.phase = 'rotate'
+    s = aiRotate(s, 'dire', 'split')
+    expect(heroesOnBoard(s, 'dire')[0].zone).toBe('radiantJungle')
+  })
+
+  it('draws heroes until seven, then items, and keeps 2 Gold to play them', () => {
+    let s = setup(90, [], [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge'), hero('d', 'lina'), hero('e', 'tidehunter')])
+    s = placeHero(s, 'dire', 'a', 'top')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = placeHero(s, 'dire', 'c', 'bot')
+    s.players.dire.placedThisRound = 0
+    s = placeHero(s, 'dire', 'd', 'top')
+    s = placeHero(s, 'dire', 'e', 'mid')
+    s.phase = 'draw'
+    s.players.dire.hand = []
+    s.players.dire.gold = 8
+    s.unitDeck = Array.from({ length: 8 }, () => ({ cardId: 'axe', buybackUsed: false }))
+    s = aiDraw(s, 'dire', 'split')
+    const heroes = s.players.dire.hand.filter((c) => c.type === 'hero')
+    const items = s.players.dire.hand.filter((c) => c.type === 'item')
+    expect(heroes).toHaveLength(2)
+    expect(items).toHaveLength(4)
+    expect(s.players.dire.gold).toBe(2)
+  })
+
+  it('glyphs a tower that would fall, teleports onto a wounded Ancient, and casts on a Thunderhide', () => {
+    let glyph = setup(91, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d', 'wraith_king')])
+    glyph.round = 2
+    glyph = placeHero(glyph, 'radiant', 'r1', 'top')
+    glyph = placeHero(glyph, 'radiant', 'r2', 'top')
+    glyph = placeHero(glyph, 'dire', 'd', 'bot')
+    glyph.players.dire.hand.push(item('g', 'glyph'))
+    glyph.players.dire.structures.towers.top.t1 = 1
+    glyph = reveal(glyph)
+    glyph = aiOneResponse(glyph, 'dire', 'split')
+    expect(glyph.players.dire.glyph).toBe(true)
+
+    let tp = setup(92, [], [hero('d', 'wraith_king')])
+    tp.round = 2
+    tp = placeHero(tp, 'dire', 'd', 'mid')
+    tp.players.dire.hand.push(item('scroll', 'tp'))
+    tp.players.dire.structures.ancient = 5
+    tp.players.dire.structures.towers.bot.t1 = 0
+    tp.players.dire.structures.towers.bot.t2 = 0
+    tp = reveal(tp)
+    tp = aiOneResponse(tp, 'dire', 'split')
+    expect(heroesOnBoard(tp, 'dire')[0].zone).toBe('bot')
+
+    let cast = setup(93, [], [hero('d', 'chaos_knight')])
+    cast.round = 2
+    cast = placeHero(cast, 'dire', 'd', 'direJungle')
+    forceCamp(cast, 'direJungle', 'neutral', 'thunderhide')
+    cast.players.dire.xp = 1
+    cast = reveal(cast)
+    cast = aiOneResponse(cast, 'dire', 'split')
+    expect(cast.ultDeclarations).toHaveLength(1)
+
+    let poor = setup(94, [], [hero('d', 'wraith_king')])
+    poor.round = 2
+    poor = placeHero(poor, 'dire', 'd', 'mid')
+    poor.players.dire.xp = 5
+    poor = reveal(poor)
+    poor = aiOneResponse(poor, 'dire', 'split')
+    expect(poor.players.dire.xp).toBe(5)
+    expect(heroesOnBoard(poor, 'dire')[0].status.shield).toBe(0)
+
+    let rich = setup(95, [], [hero('d', 'wraith_king')])
+    rich.round = 2
+    rich = placeHero(rich, 'dire', 'd', 'mid')
+    rich.players.dire.xp = 6
+    rich = reveal(rich)
+    rich = aiOneResponse(rich, 'dire', 'split')
+    expect(rich.players.dire.xp).toBe(3)
+    expect(heroesOnBoard(rich, 'dire')[0].status.shield).toBe(1)
   })
 })
 

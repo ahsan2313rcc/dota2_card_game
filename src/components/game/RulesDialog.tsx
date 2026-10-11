@@ -109,7 +109,7 @@ export function RulesDialog() {
             Dragon, three each, plus one Roshan and two Tormentors. A normal neutral kill pays 2 Gold, 2 XP, and a rune.
             Roshan pays 3 Gold, 3 XP, a rune, and the Aegis. He evades the first damage each turn. His Roar, and the other
             neutral ultimates, resolve only when 2 or more units are in the camp: Roar Disarms and deals 1 damage to every
-            enemy there. A stunned hero or neutral does not cast, move, or attack. Roshan never appears before round 4. The Tormentor pays 2 Gold, 2 XP,
+            enemy there. Stone Golem is Immune and has no Shield. Boulder deals 1 physical damage to each Position 1. A stunned hero or neutral does not cast, move, or attack. Roshan never appears before round 4. The Tormentor pays 2 Gold, 2 XP,
             a rune, and a Refresher Shard. It gains a Shield each turn and reflects damage to the attacker and to each
             contesting Position 1.
           </Section>

@@ -172,6 +172,11 @@ class Unit:
 class Side:
     gold: int = 1
     xp: int = 1
+    # The opening 1 Gold and 1 XP count as income, so left == in - out.
+    gold_in: int = 1
+    gold_out: int = 0
+    xp_in: int = 1
+    xp_out: int = 0
     hand: list[Hero] = field(default_factory=list)
     towers: dict[str, dict[str, int]] = field(default_factory=dict)
     ancient: int = ANCIENT
@@ -190,6 +195,34 @@ def tier_counts(side: Side) -> tuple[int, int]:
     t1 = sum(1 for lane in LANES if side.towers[lane]["t1"] > 0)
     t2 = sum(1 for lane in LANES if side.towers[lane]["t2"] > 0)
     return t1, t2
+
+
+def gain_gold(side: Side, n: int) -> None:
+    if n <= 0:
+        return
+    side.gold += n
+    side.gold_in += n
+
+
+def spend_gold(side: Side, n: int) -> None:
+    if n <= 0:
+        return
+    side.gold -= n
+    side.gold_out += n
+
+
+def gain_xp(side: Side, n: int) -> None:
+    if n <= 0:
+        return
+    side.xp += n
+    side.xp_in += n
+
+
+def spend_xp(side: Side, n: int) -> None:
+    if n <= 0:
+        return
+    side.xp -= n
+    side.xp_out += n
 
 
 @dataclass
@@ -263,8 +296,8 @@ def opened_lanes(side: Side) -> int:
 def upkeep(g: Game) -> None:
     for p, side in g.sides.items():
         # Base 1, plus 1 for each enemy lane with both towers down. Three open lanes pay 4.
-        side.gold += 1 + opened_lanes(g.sides[other(p)])
-        side.xp += 1
+        gain_gold(side, 1 + opened_lanes(g.sides[other(p)]))
+        gain_xp(side, 1)
 
 
 def living(g: Game, p: str) -> list[tuple[str, Unit]]:
@@ -289,11 +322,11 @@ def draw_and_deploy(g: Game) -> None:
         if g.style[p] == "split":
             # Heroes until hand + board is 7. Gold past that is kept for items.
             while side.gold >= 1 and len(side.hand) + on_board < 7 and len(side.hand) < 10:
-                side.gold -= 1
+                spend_gold(side, 1)
                 side.hand.append(g.rng.choice(g.heroes))
         elif on_board < ENOUGH_HEROES:
             while side.gold >= 1 and len(side.hand) < 10:
-                side.gold -= 1
+                spend_gold(side, 1)
                 side.hand.append(g.rng.choice(g.heroes))
         placed = 0
         side.hand.sort(key=lambda h: (h.kind != "active", -h.damage, h.cost))
@@ -618,7 +651,7 @@ def cast_power(hero: Hero, foes: list[Unit], standing: bool, silenced: list[Unit
 def resolve_cast(g: Game, p: str, lane: str, unit: Unit) -> None:
     cost = 0 if unit.casts else unit.hero.cost
     unit.casts += 1
-    g.sides[p].xp -= cost
+    spend_xp(g.sides[p], cost)
     g.casts[p] += 1
     if lane in ("jungle", "invade"):
         found = camp_of(g, p, lane)
@@ -676,7 +709,7 @@ def legal_shield(g: Game, p: str) -> Unit | None:
 
 
 def buy_shield(g: Game, p: str, unit: Unit) -> None:
-    g.sides[p].xp -= 3
+    spend_xp(g.sides[p], 3)
     unit.shield = 1
     unit.persist_shield = True
     g.shields[p] += 1
@@ -732,11 +765,11 @@ def play_rune(g: Game, p: str) -> bool:
         return True
     if "wisdom" in side.runes:
         take_rune(side, "wisdom")
-        side.xp += 1
+        gain_xp(side, 1)
         return True
     if "gold" in side.runes:
         take_rune(side, "gold")
-        side.gold += 1
+        gain_gold(side, 1)
         return True
     return False
 
@@ -770,7 +803,7 @@ def play_item(g: Game, p: str) -> bool:
         if unit.hero.kind == "active" and not unit.refresher and unit.casts < 2 and not unit.stunned and not unit.silenced
     ]
     if side.gold >= 2 and casters:
-        side.gold -= 2
+        spend_gold(side, 2)
         casters[0].refresher = True
         g.items[p] += 1
         return True
@@ -778,7 +811,7 @@ def play_item(g: Game, p: str) -> bool:
     if not fighters:
         return False
     if side.gold >= 1:
-        side.gold -= 1
+        spend_gold(side, 1)
         fighters[0][1].amplify += 1
         g.items[p] += 1
         return True
@@ -953,14 +986,14 @@ def claim_camp(g: Game, p: str, camp: Camp, owner: str | None = None) -> None:
     g.neutral_kills[p] += 1
     g.neutral_discard.append(camp.kind)
     if camp.kind == "roshan":
-        g.sides[p].gold += 3
-        g.sides[p].xp += 3
+        gain_gold(g.sides[p], 3)
+        gain_xp(g.sides[p], 3)
         g.aegis[p] += 1
         gain_rune(g, p)
     else:
         # A normal camp and a Tormentor both pay 2 Gold, 2 XP, and a rune. The Tormentor also leaves a Refresher.
-        g.sides[p].gold += 2
-        g.sides[p].xp += 2
+        gain_gold(g.sides[p], 2)
+        gain_xp(g.sides[p], 2)
         gain_rune(g, p)
         if camp.kind == "tormentor":
             g.sides[p].shards += 1
@@ -1407,13 +1440,13 @@ def hit_structure(g: Game, defender: str, lane: str, dmg: int, attacker: str, *,
         tw["t1"] = max(0, tw["t1"] - dmg)
         if tw["t1"] == 0:
             if g.tower_gold:
-                g.sides[attacker].gold += TOWER_GOLD["t1"]
+                gain_gold(g.sides[attacker], TOWER_GOLD["t1"])
             g.towers_fallen += 1
     elif tw["t2"] > 0:
         tw["t2"] = max(0, tw["t2"] - dmg)
         if tw["t2"] == 0:
             if g.tower_gold:
-                g.sides[attacker].gold += TOWER_GOLD["t2"]
+                gain_gold(g.sides[attacker], TOWER_GOLD["t2"])
             g.towers_fallen += 1
     elif ancient:
         side.ancient = max(0, side.ancient - dmg)
@@ -1477,8 +1510,8 @@ def cleanup(g: Game) -> None:
                 g.board[p][lane] = alive
         lanes_held = sum(1 for lane in LANES if g.board[p][lane])
         side = g.sides[p]
-        side.gold += side.kills
-        side.xp += side.kills + lanes_held
+        gain_gold(side, side.kills)
+        gain_xp(side, side.kills + lanes_held)
         side.kills = 0
         for lane in LANES:
             tw = side.towers[lane]
@@ -1491,19 +1524,23 @@ def cleanup(g: Game) -> None:
             side.hand.pop()
 
 
-# t1 standing, t2 standing, gold, xp, heroes, abilities, items, neutrals, shields, buybacks
-Snap = tuple[int, int, int, int, int, int, int, int, int, int]
-SNAP_LEN = 10
-ACTION_AT = 4
+# t1, t2, gold in, gold out, xp in, xp out, heroes, abilities, items, neutrals, shields, buybacks
+Snap = tuple[int, int, int, int, int, int, int, int, int, int, int, int]
+SNAP_LEN = 12
+# Fields from here reset each round. play() folds them into a running total.
+ACTION_AT = 6
+FLOW_ROUNDS = (1, 5, 10, 15)
 
 
 def end_of_turn(g: Game) -> dict[str, Snap]:
-    """Tier 1, Tier 2, gold, and XP are the bank. The last six fields are this round only."""
+    """Gold and XP are cumulative income and expense. The last six fields are this round only."""
     return {
         p: (
             *tier_counts(g.sides[p]),
-            g.sides[p].gold,
-            g.sides[p].xp,
+            g.sides[p].gold_in,
+            g.sides[p].gold_out,
+            g.sides[p].xp_in,
+            g.sides[p].xp_out,
             g.played[p],
             g.casts[p],
             g.items[p],
@@ -1544,7 +1581,20 @@ def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
             for i in range(ACTION_AT, SNAP_LEN):
                 running[p][i - ACTION_AT] += row[i]
                 row[i] = running[p][i - ACTION_AT]
-            folded[p] = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
+            folded[p] = (
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+                row[6],
+                row[7],
+                row[8],
+                row[9],
+                row[10],
+                row[11],
+            )
         trace[g.round] = folded
         g.round += 1
     return trace
@@ -1552,6 +1602,48 @@ def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
 
 def rd(a: float, b: float) -> str:
     return f"{a:.2f}/{b:.2f}"
+
+
+def print_flow(title: str, headers: list[str], columns: list[list[int]], games: list[int]) -> None:
+    """One row per stat. Each column is a personality in a seat. `columns` are sums."""
+    label_w = 10
+    col_w = max(7, *(len(header) for header in headers))
+    print(title)
+    print(f"{'':{label_w}}  " + "  ".join(f"{header:>{col_w}}" for header in headers))
+    specs: tuple[tuple[str, str | int], ...] = (
+        ("games", "n"),
+        ("T1", 0),
+        ("T2", 1),
+        ("Gold in", 2),
+        ("Gold out", 3),
+        ("Gold left", "g"),
+        ("XP in", 4),
+        ("XP out", 5),
+        ("XP left", "x"),
+        ("Hero", 6),
+        ("Ability", 7),
+        ("Item", 8),
+        ("Neutral", 9),
+        ("Shield", 10),
+    )
+    for label, spec in specs:
+        cells: list[str] = []
+        for col, n in zip(columns, games, strict=True):
+            if spec == "n":
+                cells.append(f"{n:{col_w}d}")
+                continue
+            if n == 0:
+                cells.append(f"{'—':>{col_w}}")
+                continue
+            if spec == "g":
+                value = (col[2] - col[3]) / n
+            elif spec == "x":
+                value = (col[4] - col[5]) / n
+            else:
+                value = col[spec] / n
+            cells.append(f"{value:{col_w}.2f}")
+        print(f"{label:<{label_w}}  " + "  ".join(cells))
+    print()
 
 
 def simulate(
@@ -1566,16 +1658,16 @@ def simulate(
     wins: Counter[str] = Counter()
     lengths: list[int] = []
     win_lengths: dict[str, list[int]] = {"radiant": [], "dire": []}
-    gold: list[int] = []
-    xp: list[int] = []
     towers: list[int] = []
     unfinished = 0
     neutral_games = 0
     jungle_sent: list[dict[str, int]] = []
-    # round -> sums of (t1, t2, gold, xp, heroes, abilities, items, neutrals, shields, buybacks)
+    # round -> sums of the snap. Gold and XP slots are cumulative income and expense.
     reached: Counter[int] = Counter()
     totals: dict[int, dict[str, list[int]]] = {}
     lifetime = {"radiant": [0, 0, 0, 0, 0, 0], "dire": [0, 0, 0, 0, 0, 0]}
+    final_sums = {"radiant": [0] * SNAP_LEN, "dire": [0] * SNAP_LEN}
+    final_n = 0
     marks = [5, 10, 15]
     ahead: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
     held: dict[int, Counter[str]] = {mark: Counter() for mark in marks}
@@ -1615,13 +1707,13 @@ def simulate(
         if g.neutral_kills["radiant"] or g.neutral_kills["dire"]:
             neutral_games += 1
         jungle_sent.append(dict(g.jungle_sent))
-        for side in g.sides.values():
-            gold.append(side.gold)
-            xp.append(side.xp)
         towers.append(g.towers_fallen)
         if trace:
             last = trace[max(trace)]
+            final_n += 1
             for p in ("radiant", "dire"):
+                for i in range(SNAP_LEN):
+                    final_sums[p][i] += last[p][i]
                 for i in range(SNAP_LEN - ACTION_AT):
                     lifetime[p][i] += last[p][ACTION_AT + i]
         for rnd, snap in trace.items():
@@ -1664,8 +1756,33 @@ def simulate(
     radiant_when = f"{avg(win_lengths['radiant']):.1f}" if win_lengths["radiant"] else "—"
     dire_when = f"{avg(win_lengths['dire']):.1f}" if win_lengths["dire"] else "—"
     print(f"mean rounds to win  radiant {radiant_when}  dire {dire_when}")
-    print(f"mean gold left {avg(gold):.1f}  mean xp left {avg(xp):.1f}")
     print(f"mean towers destroyed {avg(towers):.1f}")
+    if games and final_n:
+        def booked(inn: int, out: int) -> str:
+            return rd(inn / final_n, out / final_n)
+
+        print(
+            "mean gold in "
+            + booked(final_sums["radiant"][2], final_sums["dire"][2])
+            + "  out "
+            + booked(final_sums["radiant"][3], final_sums["dire"][3])
+            + "  left "
+            + rd(
+                (final_sums["radiant"][2] - final_sums["radiant"][3]) / final_n,
+                (final_sums["dire"][2] - final_sums["dire"][3]) / final_n,
+            )
+        )
+        print(
+            "mean xp in "
+            + booked(final_sums["radiant"][4], final_sums["dire"][4])
+            + "  out "
+            + booked(final_sums["radiant"][5], final_sums["dire"][5])
+            + "  left "
+            + rd(
+                (final_sums["radiant"][4] - final_sums["radiant"][5]) / final_n,
+                (final_sums["dire"][4] - final_sums["dire"][5]) / final_n,
+            )
+        )
     if games:
         names = ("heroes", "abilities", "items", "neutrals", "shields", "buybacks")
         parts = []
@@ -1678,15 +1795,25 @@ def simulate(
         sent_d = sum(g_sent["dire"] for g_sent in jungle_sent) / games
         print(f"mean heroes sent to the home jungle  radiant {sent_r:.2f}  dire {sent_d:.2f}")
     print()
-    print("end of turn, games still going. Each cell is Radiant/Dire.")
-    print("Hero, Ability, Item, Neutral, Shield, and Buyback are the sum of rounds 1 through this round.")
-    labels = ("T1", "T2", "Gold", "XP", "Hero", "Ability", "Item", "Neutral", "Shield", "Buyback")
-    print(f"{'rnd':>3} {'games':>5}  " + "  ".join(f"{label:>9}" for label in labels))
-    for rnd in sorted(totals):
+    print("Stats are rows. Each column is that personality in that seat.")
+    print("Opening 1 Gold and 1 XP count as income. Left is the bank (in − out).")
+    print("Hero, Ability, Item, Neutral, and Shield are the sum of rounds 1 through this round.")
+    print("T1 and T2 are standing towers.")
+    headers = [f"{radiant} R", f"{dire} D"]
+    for rnd in FLOW_ROUNDS:
         n = reached[rnd]
-        cells = [rd(totals[rnd]["radiant"][i] / n, totals[rnd]["dire"][i] / n) for i in range(SNAP_LEN)]
-        print(f"{rnd:3d} {n:5d}  " + "  ".join(f"{cell:>9}" for cell in cells))
-    print()
+        if n == 0 or rnd not in totals:
+            print(f"Round {rnd}: no games still going")
+            print()
+            continue
+        print_flow(f"Round {rnd}", headers, [totals[rnd]["radiant"], totals[rnd]["dire"]], [n, n])
+    if final_n:
+        print_flow(
+            "End of game. Mean through the round each game ended.",
+            headers,
+            [final_sums["radiant"], final_sums["dire"]],
+            [final_n, final_n],
+        )
     print("Advantage is more standing towers (Tier 1 + Tier 2). Lead held is how often that side then wins.")
     print("Comeback is fewer towers, and that side still wins. Even is a tower tie.")
     print(f"{'rnd':>3} {'games':>5}  {'ahead R/D':>11}  {'lead held':>13}  {'even':>5}  {'comeback R':>14}  {'comeback D':>14}")
@@ -1755,6 +1882,19 @@ def simulate(
             sum(sent["radiant"] for sent in jungle_sent) / games if games else 0,
             sum(sent["dire"] for sent in jungle_sent) / games if games else 0,
         ),
+        "flow": {
+            rnd: {
+                "n": reached[rnd],
+                "radiant": totals[rnd]["radiant"][:] if rnd in totals else [0] * SNAP_LEN,
+                "dire": totals[rnd]["dire"][:] if rnd in totals else [0] * SNAP_LEN,
+            }
+            for rnd in FLOW_ROUNDS
+        },
+        "final_flow": {
+            "n": final_n,
+            "radiant": final_sums["radiant"],
+            "dire": final_sums["dire"],
+        },
     }
 
 
@@ -1861,6 +2001,115 @@ def tourney(games: int, seed: int, limit: int, styles: tuple[str, ...] = STYLES,
         total, count = won_rounds[name]
         rounds = total / count if count else 0
         print(f"{name:10}  {sum(rates) / len(rates):10.1%}  {rounds:8.1f}")
+
+    short = {
+        "balanced": "Bal",
+        "lane": "Lane",
+        "jungler": "Jung",
+        "defender": "Def",
+        "hunter": "Hunt",
+        "carry": "Carry",
+        "split": "Split",
+    }
+    headers = [f"{short[style]} {seat}" for style in styles for seat in ("R", "D")]
+    marks: tuple[int | str, ...] = (*FLOW_ROUNDS, "end")
+    buckets: dict[int | str, dict[str, dict[str, tuple[int, list[int]]]]] = {
+        mark: {style: {"R": (0, [0] * SNAP_LEN), "D": (0, [0] * SNAP_LEN)} for style in styles} for mark in marks
+    }
+    seat_wins = {style: {"R": [0, 0], "D": [0, 0]} for style in styles}
+    seat_when = {style: {"R": [0.0, 0], "D": [0.0, 0]} for style in styles}
+
+    def absorb(mark: int | str, style: str, seat: str, n: int, sums: list[int]) -> None:
+        held_n, held_sums = buckets[mark][style][seat]
+        for i, value in enumerate(sums):
+            held_sums[i] += value
+        buckets[mark][style][seat] = (held_n + n, held_sums)
+
+    for row in rows:
+        radiant_name = row["radiant"]
+        dire_name = row["dire"]
+        assert isinstance(radiant_name, str) and isinstance(dire_name, str)
+        wins = row["wins"]
+        assert isinstance(wins, dict)
+        seat_wins[radiant_name]["R"][0] += int(wins.get("radiant", 0))
+        seat_wins[radiant_name]["R"][1] += games
+        seat_wins[dire_name]["D"][0] += int(wins.get("dire", 0))
+        seat_wins[dire_name]["D"][1] += games
+        r_sum, d_sum = row["win_rounds"]
+        r_n, d_n = row["win_n"]
+        assert isinstance(r_sum, (int, float)) and isinstance(d_sum, (int, float))
+        assert isinstance(r_n, int) and isinstance(d_n, int)
+        seat_when[radiant_name]["R"][0] += float(r_sum)
+        seat_when[radiant_name]["R"][1] += r_n
+        seat_when[dire_name]["D"][0] += float(d_sum)
+        seat_when[dire_name]["D"][1] += d_n
+        flow = row["flow"]
+        assert isinstance(flow, dict)
+        for rnd in FLOW_ROUNDS:
+            block = flow[rnd]
+            assert isinstance(block, dict)
+            n = block["n"]
+            radiant_sums = block["radiant"]
+            dire_sums = block["dire"]
+            assert isinstance(n, int)
+            assert isinstance(radiant_sums, list) and isinstance(dire_sums, list)
+            absorb(rnd, radiant_name, "R", n, radiant_sums)
+            absorb(rnd, dire_name, "D", n, dire_sums)
+        final = row["final_flow"]
+        assert isinstance(final, dict)
+        final_n = final["n"]
+        assert isinstance(final_n, int)
+        final_r = final["radiant"]
+        final_d = final["dire"]
+        assert isinstance(final_r, list) and isinstance(final_d, list)
+        absorb("end", radiant_name, "R", final_n, final_r)
+        absorb("end", dire_name, "D", final_n, final_d)
+
+    def flow_columns(mark: int | str) -> tuple[list[list[int]], list[int]]:
+        columns: list[list[int]] = []
+        counts: list[int] = []
+        for style in styles:
+            for seat in ("R", "D"):
+                n, sums = buckets[mark][style][seat]
+                counts.append(n)
+                columns.append(sums)
+        return columns, counts
+
+    print()
+    print("Win rate in that seat, over every opponent. Unfinished games count for neither side.")
+    print("Rounds count only games that personality won in that seat.")
+    label_w = 10
+    col_w = max(7, *(len(header) for header in headers))
+    print(f"{'':{label_w}}  " + "  ".join(f"{header:>{col_w}}" for header in headers))
+    rate_cells: list[str] = []
+    round_cells: list[str] = []
+    for style in styles:
+        for seat in ("R", "D"):
+            won, played = seat_wins[style][seat]
+            rate_cells.append(f"{(won / played if played else 0):{col_w}.1%}")
+            total, count = seat_when[style][seat]
+            round_cells.append(f"{(total / count if count else 0):{col_w}.1f}")
+    print(f"{'win rate':<{label_w}}  " + "  ".join(rate_cells))
+    print(f"{'rounds':<{label_w}}  " + "  ".join(round_cells))
+    print()
+    print("Each column is that personality in that seat, averaged over every opponent.")
+    print("Games still going weight the average. Opening 1 Gold and 1 XP count as income.")
+    print("Left is the bank (in − out). Hero through Shield are the sum of rounds 1 through this round.")
+    print("T1 and T2 are standing towers.")
+    print(
+        f"Tower gold is {'on' if tower_gold else 'off'}. "
+        "This sim has no lane creeps, so creep-kill gold is not in the income."
+    )
+    titles = {
+        1: "Round 1",
+        5: "Round 5",
+        10: "Round 10",
+        15: "Round 15",
+        "end": "End of game. Mean through the round each game ended.",
+    }
+    for mark in marks:
+        columns, counts = flow_columns(mark)
+        print_flow(titles[mark], headers, columns, counts)
 
 
 def main() -> None:

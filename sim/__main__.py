@@ -1498,7 +1498,7 @@ ACTION_AT = 4
 
 
 def end_of_turn(g: Game) -> dict[str, Snap]:
-    """Tier 1, Tier 2, gold, XP, heroes, abilities, items, neutrals killed, Shields, and buybacks."""
+    """Tier 1, Tier 2, gold, and XP are the bank. The last six fields are this round only."""
     return {
         p: (
             *tier_counts(g.sides[p]),
@@ -1516,7 +1516,12 @@ def end_of_turn(g: Game) -> dict[str, Snap]:
 
 
 def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
+    """Action columns in the trace are the sum of rounds 1 through this round.
+
+    The per-round counters still reset, because item spending reads this round's count.
+    """
     trace: dict[int, dict[str, Snap]] = {}
+    running = {p: [0] * (SNAP_LEN - ACTION_AT) for p in ("radiant", "dire")}
     while g.winner is None and g.round <= limit:
         g.played = {p: 0 for p in ("radiant", "dire")}
         g.casts = {p: 0 for p in ("radiant", "dire")}
@@ -1532,7 +1537,15 @@ def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
         carry_rotate(g)
         split_rotate(g)
         cleanup(g)
-        trace[g.round] = end_of_turn(g)
+        snap = end_of_turn(g)
+        folded: dict[str, Snap] = {}
+        for p in ("radiant", "dire"):
+            row = list(snap[p])
+            for i in range(ACTION_AT, SNAP_LEN):
+                running[p][i - ACTION_AT] += row[i]
+                row[i] = running[p][i - ACTION_AT]
+            folded[p] = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
+        trace[g.round] = folded
         g.round += 1
     return trace
 
@@ -1606,14 +1619,17 @@ def simulate(
             gold.append(side.gold)
             xp.append(side.xp)
         towers.append(g.towers_fallen)
+        if trace:
+            last = trace[max(trace)]
+            for p in ("radiant", "dire"):
+                for i in range(SNAP_LEN - ACTION_AT):
+                    lifetime[p][i] += last[p][ACTION_AT + i]
         for rnd, snap in trace.items():
             reached[rnd] += 1
             bucket = totals.setdefault(rnd, {"radiant": [0] * SNAP_LEN, "dire": [0] * SNAP_LEN})
             for p in ("radiant", "dire"):
                 for i, value in enumerate(snap[p]):
                     bucket[p][i] += value
-                    if i >= ACTION_AT:
-                        lifetime[p][i - ACTION_AT] += value
         record_falls(trace, map_fall, side_fall, first_t2_took, first_t2_won, first_t2_round, g.winner)
         for mark in marks:
             snap = trace.get(mark)
@@ -1663,7 +1679,7 @@ def simulate(
         print(f"mean heroes sent to the home jungle  radiant {sent_r:.2f}  dire {sent_d:.2f}")
     print()
     print("end of turn, games still going. Each cell is Radiant/Dire.")
-    print("Hero, Ability, Item, Neutral, Shield, and Buyback are counts for that round.")
+    print("Hero, Ability, Item, Neutral, Shield, and Buyback are the sum of rounds 1 through this round.")
     labels = ("T1", "T2", "Gold", "XP", "Hero", "Ability", "Item", "Neutral", "Shield", "Buyback")
     print(f"{'rnd':>3} {'games':>5}  " + "  ".join(f"{label:>9}" for label in labels))
     for rnd in sorted(totals):

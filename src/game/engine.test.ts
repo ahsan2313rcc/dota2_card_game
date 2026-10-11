@@ -1063,6 +1063,34 @@ describe('opponent decisions', () => {
     expect(full.players.dire.gold).toBeLessThan(4)
   })
 
+  it('a carry keeps drawing heroes until five are on the board', () => {
+    let s = setup(70, [], [hero('0', 'axe'), hero('1', 'sven'), hero('2', 'pudge')])
+    s = placeHero(s, 'dire', '0', 'top')
+    s = placeHero(s, 'dire', '1', 'top')
+    s = placeHero(s, 'dire', '2', 'direJungle')
+    s.phase = 'draw'
+    s.round = 4
+    s.players.dire.gold = 3
+    s.players.dire.hand = []
+    s = aiDraw(s, 'dire', 'carry')
+    expect(s.players.dire.hand.some((c) => c.type === 'hero' || c.type === 'creep')).toBe(true)
+    expect(s.players.dire.hand.some((c) => c.type === 'item')).toBe(false)
+  })
+
+  it('a carry sends one of a stack of three to the camp and leaves two on the tower', () => {
+    let s = setup(71, [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge')])
+    s = placeHero(s, 'radiant', 'a', 'bot')
+    s = placeHero(s, 'radiant', 'b', 'bot')
+    s = placeHero(s, 'radiant', 'c', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 4
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'carry')
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'bot')).toHaveLength(2)
+  })
+
   it('the same ability can be cast again next round, and only a Refresher allows a second cast this turn', () => {
     let s = setup(3, [hero('a', 'tidehunter')], [hero('b', 'axe')])
     s = placeHero(s, 'radiant', 'a', 'top')

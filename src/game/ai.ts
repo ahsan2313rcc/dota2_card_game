@@ -64,7 +64,7 @@ export type { AiStyle }
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
-/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. carry holds a tower that would break, farms one camp, and spends the gold. split keeps one hero in each lane and two in the jungles. */
+/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. carry holds a tower that would break, farms once two heroes are already hitting, and spends that gold as attack damage on those heroes. split keeps one hero in each lane and two in the jungles. */
 
 const HARMFUL = new Set([
   'stun',
@@ -740,6 +740,22 @@ function splitResponse(state: GameState, p: PlayerId): GameState {
 
 /** Items are bought only once the board is full. Until then, gold draws heroes to defend lanes. */
 
+/** The lane where this carry's heroes already stand. Deployment prefers an empty lane, so the shop must not follow that. */
+function carryFightLane(s: GameState, p: PlayerId): LaneId | undefined {
+  const lanes = LANES.filter((lane) => heroesIn(s, p, lane) > 0)
+  if (!lanes.length) return undefined
+  const pressure = (lane: LaneId) => {
+    const tw = s.players[other(p)].structures.towers[lane]
+    return towerPressure(tw.t1, tw.t2)
+  }
+  return [...lanes].sort(
+    (a, b) =>
+      heroesIn(s, p, b) - heroesIn(s, p, a) ||
+      pressure(b) - pressure(a) ||
+      ZONE_PRIORITY[p].indexOf(a) - ZONE_PRIORITY[p].indexOf(b),
+  )[0]
+}
+
 /**
  * Draw until the gold is gone. A thin board takes hero and creep cards from the shared deck.
  * A stocked board takes item cards, which combat then plays one at a time.
@@ -818,8 +834,13 @@ function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
     const cap = junglerCap(neutral)
     if (mine >= cap) return -999
     const boss = neutral.kind === 'roshan' || neutral.kind === 'tormentor'
-    // Carry's camp beats a healthy Tier 1, including one with a single defender, and loses to an open Tier 2.
-    if (style === 'carry') return boss ? 21 : 20
+    if (style === 'carry') {
+      // Once two heroes are already hitting, the camp is worth more than stacking a third on that Tier 2.
+      // The gold comes back as an item on those two before they swing. An open Ancient still outranks it.
+      const fight = carryFightLane(s, p)
+      if (fight && heroesIn(s, p, fight) >= 2) return boss ? 32 : 30
+      return boss ? 21 : 20
+    }
     // A jungler's boss beats a one-hero lane. A creep ties that lane and stays in it.
     return boss ? 19 : 18
   }
@@ -896,10 +917,14 @@ function threat(u: Unit) {
   return (u.hp < u.maxHp ? 2 : 0) + (u.kind === 'hero' ? 5 : 0) + (u.kind === 'roshan' ? 3 : 0)
 }
 
-function playRank(cardId: string): number {
+const CARRY_DAMAGE = new Set(['desolator', 'rapier', 'dagon', 'mkb', 'bloodthorn', 'assault'])
+
+function playRank(cardId: string, style: AiStyle = 'balanced'): number {
   if (cardId === 'rune_gold') return -100
   const item = getItem(cardId)
   if (item.kind === 'Rune' || item.kind === 'Tower') return -50
+  // Carry spends tower gold and camp gold as attack damage on the heroes already hitting.
+  if (style === 'carry' && CARRY_DAMAGE.has(cardId)) return -(item.cost ?? 0) - 3
   // Spend the gold we held on the strongest shop item before a cheaper one uses it up.
   return -(item.cost ?? 0)
 }
@@ -918,9 +943,9 @@ function busiestContested(s: GameState, p: PlayerId): LaneId | undefined {
   return [...lanes].sort((a, b) => lineup(s, p, b).length - lineup(s, p, a).length)[0]
 }
 
-function pickBuff(s: GameState, p: PlayerId, targets: Unit[]): Unit | undefined {
+function pickBuff(s: GameState, p: PlayerId, targets: Unit[], style: AiStyle = 'balanced'): Unit | undefined {
   if (!targets.length) return undefined
-  const hot = pickLane(s, p, undefined, 'balanced')
+  const hot = (style === 'carry' ? carryFightLane(s, p) : undefined) ?? pickLane(s, p, undefined, 'balanced')
   const inHot = targets.filter((t) => t.zone === hot)
   const fighting = targets.filter((t) => enemyHeroes(s, p, t.zone).length > 0 || !!campNeutral(s, t.zone))
   const pool = inHot.length ? inHot : fighting.length ? fighting : targets
@@ -962,12 +987,12 @@ function soleDefender(s: GameState, p: PlayerId, u: Unit): boolean {
   return heroes.length === 1 && heroes[0].uid === u.uid
 }
 
-function aiOneItem(state: GameState, p: PlayerId): GameState {
-  const cards = state.players[p].hand.filter((c) => c.type === 'item').sort((a, b) => playRank(a.cardId) - playRank(b.cardId))
+function aiOneItem(state: GameState, p: PlayerId, style: AiStyle = 'balanced'): GameState {
+  const cards = state.players[p].hand.filter((c) => c.type === 'item').sort((a, b) => playRank(a.cardId, style) - playRank(b.cardId, style))
   for (const card of cards) {
     if (itemBlockReason(state, p, card)) continue
     const item = getItem(card.cardId)
-    const next = item.kind === 'Tower' ? aiTowerCard(state, p, card.iid, card.cardId) : playAiItem(state, p, card.iid, item)
+    const next = item.kind === 'Tower' ? aiTowerCard(state, p, card.iid, card.cardId) : playAiItem(state, p, card.iid, item, style)
     if (next !== state) return next
   }
   return state
@@ -978,7 +1003,7 @@ export function aiItems(state: GameState, p: PlayerId): GameState {
   return aiOneItem(state, p)
 }
 
-function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard): GameState {
+function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard, style: AiStyle = 'balanced'): GameState {
   if (item.target === 'none') {
     if (item.id === 'greaves') {
       const wounded = heroesOnBoard(s, p).some((u) => isLane(u.zone) && u.hp < u.maxHp)
@@ -1011,7 +1036,7 @@ function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard): Gam
   }
   if (item.id === 'rapier' || item.id === 'refresher') {
     const fighters = targets.filter((t) => enemyHeroes(s, p, t.zone).length > 0)
-    const pick = pickBuff(s, p, fighters)
+    const pick = pickBuff(s, p, fighters, style)
     return pick ? playItem(s, p, iid, pick.uid) : s
   }
   if (item.target === 'enemyHero' || item.target === 'enemyUnit') {
@@ -1020,7 +1045,7 @@ function playAiItem(s: GameState, p: PlayerId, iid: string, item: ItemCard): Gam
   }
   const wounded = targets.filter((t) => t.hp < t.maxHp)
   const healFirst = item.id === 'rune_regen' || item.target === 'allyWoundedHero'
-  const pick = healFirst ? pickWounded(targets) : pickBuff(s, p, wounded.length && item.id === 'heart' ? wounded : targets)
+  const pick = healFirst ? pickWounded(targets) : pickBuff(s, p, wounded.length && item.id === 'heart' ? wounded : targets, style)
   return pick ? playItem(s, p, iid, pick.uid) : s
 }
 
@@ -1075,7 +1100,9 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
       u.zone === homeJungle(p) &&
       heroesIn(s, p, u.zone) <= junglerCap(camp)
     ) {
-      stay += 18
+      const fight = style === 'carry' ? carryFightLane(s, p) : undefined
+      // The stack is already on the tower. Stay until this camp pays, then walk back.
+      stay += fight && heroesIn(s, p, fight) >= 2 ? 40 : 18
     }
     return stay
   }
@@ -1104,7 +1131,11 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle, from
       if (!junglerFarming(s.round) || !camp) return score
       const home = campNeutral(s, homeJungle(p))
       const homeReady = !home || heroesIn(s, p, homeJungle(p)) >= junglerCap(home)
-      if (zone === homeJungle(p) && mine < junglerCap(camp)) score += 20
+      if (zone === homeJungle(p) && mine < junglerCap(camp)) {
+        const fight = style === 'carry' ? carryFightLane(s, p) : undefined
+        // A third hero on an open Tier 2 would rather take the camp. The pair that remains keeps hitting.
+        score += style === 'carry' && fight && heroesIn(s, p, fight) >= 3 ? 30 : 20
+      }
       // The enemy camp is one step from mid. A carry farms at home and walks back, so the invade stays a jungler step.
       if (style === 'jungler' && zone === enemyJungle(p) && from === 'mid' && mine < junglerCap(camp) && homeReady) score += 20
       return score
@@ -1200,15 +1231,24 @@ function zoneUltScore(s: GameState, p: PlayerId, zone: ZoneId): number {
   return score
 }
 
-export function aiUlts(state: GameState, p: PlayerId): GameState {
+export function aiUlts(state: GameState, p: PlayerId, style: AiStyle = 'balanced'): GameState {
   let s = state
   for (const camp of CAMPS) {
     const focus = enemyHeroes(s, p, camp).length > 0 ? 'enemy' : 'neutral'
     if (s.players[p].campFocus[camp] !== focus) s = setCampFocus(s, p, camp, focus)
   }
-  const casters = heroesOnBoard(s, p).sort(
-    (a, b) => ultCost(a, s) - ultCost(b, s) || Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a)),
-  )
+  const push = style === 'carry' ? carryFightLane(s, p) : undefined
+  const casters = heroesOnBoard(s, p).sort((a, b) => {
+    if (push) {
+      const rank = (u: Unit) => {
+        // The camp spell has to land before the swing, or the camp lives and the gold arrives late.
+        if (u.zone === homeJungle(p) && campNeutral(s, u.zone) && u.cardId && campSpell(u.cardId)) return -1
+        return u.zone === push ? 0 : isLane(u.zone) ? 1 : 2
+      }
+      return rank(a) - rank(b) || ultCost(b, s) - ultCost(a, s)
+    }
+    return ultCost(a, s) - ultCost(b, s) || Number(ultNeedsTarget(b)) - Number(ultNeedsTarget(a))
+  })
   const before = s.ultDeclarations.length
   for (const caster of casters) {
     const u = s.units[caster.uid]
@@ -1230,11 +1270,11 @@ export function aiUlts(state: GameState, p: PlayerId): GameState {
       if (kind === 'allyHero' || kind === 'allyHeroAny') {
         const wounded = targets.filter((t) => t.hp < t.maxHp)
         if (shape.healOnly && wounded.length === 0) continue
-        pick = wounded.length && (shape.healOnly || shape.buff) ? pickWounded(wounded) : pickBuff(s, p, targets)
+        pick = wounded.length && (shape.healOnly || shape.buff) ? pickWounded(wounded) : pickBuff(s, p, targets, style)
       } else if (kind === 'heroInLane') {
         const enemies = targets.filter((t) => t.owner !== p)
         const allies = targets.filter((t) => t.owner === p)
-        pick = shape.hitsEnemy && enemies.length ? pickEnemy(s, p, u, enemies) : pickBuff(s, p, allies.length ? allies : enemies)
+        pick = shape.hitsEnemy && enemies.length ? pickEnemy(s, p, u, enemies) : pickBuff(s, p, allies.length ? allies : enemies, style)
       } else if (kind === 'enemyCreep') {
         pick = targets[0]
       } else {
@@ -1271,9 +1311,9 @@ function aiBuyShield(state: GameState, p: PlayerId): GameState {
 export function aiOneResponse(state: GameState, p: PlayerId, style: AiStyle = 'balanced'): GameState {
   if (state.phase !== 'response' || state.priority !== p) return state
   if (style === 'split') return splitResponse(state, p)
-  const item = aiOneItem(state, p)
+  const item = aiOneItem(state, p, style)
   if (item !== state) return item
-  const cast = aiUlts(state, p)
+  const cast = aiUlts(state, p, style)
   if (cast.ultDeclarations.length > state.ultDeclarations.length) return cast
   const shielded = aiBuyShield(cast, p)
   if (shielded !== cast) return shielded

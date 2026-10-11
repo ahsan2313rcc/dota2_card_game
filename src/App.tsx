@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Coins, Footprints, RotateCcw, ScrollText, Skull, Swords, Trophy } from 'lucide-react'
 import { toast } from 'sonner'
 import { CombatLog, LogLines } from '@/components/game/CombatLog'
@@ -21,6 +21,8 @@ import {
   buybackBlockReason,
   buybackCost,
   buybackWindow,
+  canInterrupt,
+  canSpendGold,
   countsTowardHand,
   discardBlockReason,
   drawBlockReason,
@@ -43,6 +45,8 @@ import {
 import { HUMAN, useGame } from '@/game/useGame'
 import { BUYBACK_WINDOW, DRAW_CAP, HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
 
+const INTERRUPT_MS = 5000
+
 export default function App() {
   const [s, dispatch] = useGame()
   const [selectedHand, setSelectedHand] = useState<string | null>(null)
@@ -52,7 +56,9 @@ export default function App() {
   const [inspected, setInspected] = useState<string>()
   const [reportOpen, setReportOpen] = useState(false)
   const stepKey = `${s.round}:${s.phase}`
+  const aimKey = `${s.round}:${s.phase}:${s.priority}:${s.passes}:${s.log.length}`
   const [lastStepKey, setLastStepKey] = useState(stepKey)
+  const [lastAimKey, setLastAimKey] = useState(aimKey)
   if (stepKey !== lastStepKey) {
     setLastStepKey(stepKey)
     setSelectedHand(null)
@@ -61,6 +67,44 @@ export default function App() {
     setRotator(null)
     setReportOpen((s.phase === 'report' && excessHand(s.players[HUMAN]) === 0) || s.phase === 'gameover')
   }
+  if (aimKey !== lastAimKey) {
+    setLastAimKey(aimKey)
+    setSelectedHand(null)
+    setUltCaster(null)
+    setTpHero(null)
+    setRotator(null)
+  }
+
+  const yourReply = s.phase === 'response' && s.priority === HUMAN && s.reply && !s.winner && canInterrupt(s, HUMAN)
+  const nothingToPlay = s.phase === 'response' && s.priority === HUMAN && !s.winner && !canInterrupt(s, HUMAN)
+  const nothingToBuy = s.phase === 'draw' && !s.winner && !canSpendGold(s, HUMAN)
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+  const flowKey = `${s.round}:${s.phase}:${s.priority}:${s.reply}:${s.passes}:${s.log.length}:${yourReply}:${nothingToPlay}:${nothingToBuy}`
+  useEffect(() => {
+    if (nothingToBuy) {
+      const id = window.setTimeout(() => dispatch({ type: 'endDraw' }), 0)
+      return () => window.clearTimeout(id)
+    }
+    if (nothingToPlay) {
+      const id = window.setTimeout(() => dispatch({ type: 'pass' }), 0)
+      return () => window.clearTimeout(id)
+    }
+    if (!yourReply) {
+      setSecondsLeft(null)
+      return
+    }
+    const started = Date.now()
+    setSecondsLeft(5)
+    const tick = window.setInterval(() => {
+      const left = INTERRUPT_MS - (Date.now() - started)
+      setSecondsLeft(Math.max(1, Math.ceil(left / 1000)))
+    }, 200)
+    const done = window.setTimeout(() => dispatch({ type: 'pass' }), INTERRUPT_MS)
+    return () => {
+      window.clearInterval(tick)
+      window.clearTimeout(done)
+    }
+  }, [flowKey, dispatch, nothingToBuy, nothingToPlay, yourReply])
 
   const me = s.players[HUMAN]
   const selectedCard = me.hand.find((c) => c.iid === selectedHand)
@@ -213,7 +257,7 @@ export default function App() {
             <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
               Runes {s.runeDeck.length}
             </span>
-            <span className="text-zinc-500" title="Version 3. Items, runes, rewards, and abilities are interrupts. Odd rounds Radiant plays first; even rounds Dire plays first. Each card resolves immediately, and either side can interrupt between swings and after the towers fire.">
+            <span className="text-zinc-500" title="Version 3. Items, runes, rewards, and abilities are interrupts. After a card, the other side has 5 seconds to counter or pass. A side with nothing to play passes on its own. Odd rounds Radiant plays first; even rounds Dire plays first.">
               v3
             </span>
           </div>
@@ -252,6 +296,7 @@ export default function App() {
             rotator={rotator}
             onDraw={(card) => dispatch({ type: 'draw', card })}
             onBuyback={(heroId) => dispatch({ type: 'buyback', heroId })}
+            secondsLeft={secondsLeft}
             onAdvance={() => {
               if (s.phase === 'draw') dispatch({ type: 'endDraw' })
               else if (s.phase === 'assign') dispatch({ type: 'endAssign' })
@@ -403,6 +448,7 @@ function ActionBar({
   onBuyback,
   onAdvance,
   onShowReport,
+  secondsLeft,
 }: {
   s: GameState
   selectedCard?: HandCardT
@@ -413,6 +459,7 @@ function ActionBar({
   onBuyback: (heroId: string) => void
   onAdvance: () => void
   onShowReport: () => void
+  secondsLeft: number | null
 }) {
   const me = s.players[HUMAN]
   let title = ''
@@ -445,10 +492,12 @@ function ActionBar({
                 ? `Click a green + to teleport ${getHero(s.units[tpHero].cardId!).name}.`
                 : 'Choose a highlighted hero to teleport.'
               : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
-          : s.priority === HUMAN
-            ? `Play one item, rune, reward, ability, or a 3 XP Shield. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A Shield lasts until it blocks a hit and does not stack.`
-            : 'Dire is answering.'
-      cta = 'Pass'
+          : secondsLeft !== null
+            ? `Dire played a card. ${secondsLeft}s to counter with an item, rune, ability, or Shield, or to pass.`
+            : s.priority === HUMAN
+              ? `Play one item, rune, reward, ability, or a 3 XP Shield. It resolves immediately, then Dire answers. ${s.round % 2 === 1 ? 'You start odd rounds.' : 'Dire starts even rounds.'} A Shield lasts until it blocks a hit and does not stack.`
+              : 'Dire is answering.'
+      cta = secondsLeft !== null ? `Pass · ${secondsLeft}s` : 'Pass'
       break
     case 'rotate': {
       title = 'Rotation'

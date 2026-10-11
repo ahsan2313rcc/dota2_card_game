@@ -46,7 +46,7 @@ The engine is deterministic. Each action clones the state, and randomness comes 
 ## Implemented rules
 
 - **Version 3.** Version 2.0 is the git tag `v2.0`.
-- **Round steps:** Upkeep (+1 Gold, +1 XP, and +1 Gold for each enemy lane with both towers down), Draw (1 Gold, up to 10 counting cards, discard to 7 at end of turn; or Buyback), Assign, Reveal, Combat. Items, runes, rewards, and abilities are interrupts: one at a time, resolving immediately. Odd rounds Radiant plays first, even rounds Dire. Two passes resolve the next swing, and either side can interrupt between swings. A standing tower fires as soon as the swing that hit it resolves. Then Rotation, Cleanup, Income.
+- **Round steps:** Upkeep (+1 Gold, +1 XP, and +1 Gold for each enemy lane with both towers down), Draw (1 Gold, up to 10 counting cards, discard to 7 at end of turn; or Buyback), Assign, Reveal, Combat. Items, runes, rewards, and abilities are interrupts: one at a time, resolving immediately, with 5 seconds for the other side to counter or pass. A side with nothing to play passes on its own, and a Draw step with no Gold left ends on its own. Odd rounds Radiant plays first, even rounds Dire. Two passes resolve the next swing, and either side can interrupt between swings. A standing tower fires as soon as the swing that hit it resolves. Then Rotation, Cleanup, Income.
 - **Starting hand:** 5 cards dealt from the top of the shared deck.
 - **Combat:** Basic attacks resolve Haste, then AGI → UNI → INT → STR, then creeps. Slowed units attack last. A true tie means both attacks happen together. There is no day/night cycle and no attribute instakill.
 - **Abilities:** Each of the 127 heroes has one ability, passive or active. Active abilities cost their printed 1, 2 or 3 XP.

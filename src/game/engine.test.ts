@@ -21,6 +21,8 @@ import {
   itemTargets,
   lineup,
   newGame,
+  canInterrupt,
+  canSpendGold,
   nextCombatAction,
   nextRound,
   passResponse,
@@ -583,6 +585,31 @@ describe('items, runes and statuses', () => {
     s = playItem(s, 'radiant', 'r', tide)
     expect(s.units[tide].status.echoUlt).toBe(true)
     expect(ultCost(s.units[tide])).toBe(2)
+  })
+
+  it('a played card opens a reply, and a side with nothing to spend passes', () => {
+    let s = setup(44, [hero('a', 'axe'), item('dust', 'dust')], [hero('b', 'sven')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'mid')
+    s = reveal(s)
+    expect(s.reply).toBe(false)
+    expect(canInterrupt(s, 'radiant')).toBe(true)
+    s.players.radiant.gold = 0
+    s.players.radiant.xp = 0
+    s.players.radiant.hand = s.players.radiant.hand.filter((c) => c.type !== 'item')
+    expect(canInterrupt(s, 'radiant')).toBe(false)
+    s.players.radiant.hand.push(item('dust', 'dust'))
+    s.players.radiant.gold = 1
+    s = playItem(s, 'radiant', 'dust', undefined, 'mid')
+    expect(s.reply).toBe(true)
+    expect(s.priority).toBe('dire')
+    s = passResponse(s, 'dire')
+    expect(s.reply).toBe(false)
+    expect(s.priority).toBe('radiant')
+    const drawing = newGame(undefined, 44)
+    expect(canSpendGold(drawing, 'radiant')).toBe(true)
+    drawing.players.radiant.gold = 0
+    expect(canSpendGold(drawing, 'radiant')).toBe(false)
   })
 
   it('refuses a second ability in the same turn, and a Refresher allows one more at no extra XP', () => {

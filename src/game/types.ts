@@ -380,6 +380,8 @@ export interface GameState {
   priority: PlayerId
   /** Passes in a row. Two closes the window and resolves the next swing. */
   passes: number
+  /** The side with priority is answering a card that just resolved. */
+  reply: boolean
   /** before the first swing, between swings, or after the attack step. */
   combat: 'before' | 'attacks' | 'towers'
   /** Units that have already taken their swing this round. */

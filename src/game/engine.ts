@@ -448,6 +448,7 @@ export function newGame(settings: Settings = {}, seed = Date.now()): GameState {
     ultDeclarations: [],
     priority: 'radiant',
     passes: 0,
+    reply: false,
     combat: 'before',
     attacked: [],
     towersHit: [],
@@ -654,6 +655,7 @@ function startRound(s: GameState) {
   s.phase = 'draw'
   s.ultDeclarations = []
   s.passes = 0
+  s.reply = false
   s.combat = 'before'
   s.attacked = []
   s.bossKills = []
@@ -1013,6 +1015,7 @@ export function reveal(state: GameState): GameState {
 function openWindow(s: GameState, fresh: boolean) {
   s.phase = 'response'
   s.passes = 0
+  s.reply = false
   s.priority = firstPlayer(s.round)
   if (fresh) {
     log(s, `Interrupts — ${PLAYER_LABEL[s.priority]} plays first. One item, rune, reward, or ability, then the other side answers.`, 'phase')
@@ -1027,8 +1030,23 @@ function tookPriority(s: GameState, p: PlayerId) {
     return
   }
   s.passes = 0
+  s.reply = true
   s.priority = other(p)
   log(s, `${PLAYER_LABEL[s.priority]} has priority.`, 'phase')
+}
+
+/** True when this side can still play an item, rune, reward, ability, or Shield. */
+export function canInterrupt(s: GameState, p: PlayerId): boolean {
+  if (s.phase !== 'response' || s.priority !== p || s.winner) return false
+  if (s.players[p].hand.some((c) => c.type === 'item' && !itemBlockReason(s, p, c))) return true
+  return heroesOnBoard(s, p).some((u) => !ultBlockReason(s, u.uid) || !shieldBlockReason(s, p, u.uid))
+}
+
+/** True when this side can still spend Gold on a draw or a buyback. */
+export function canSpendGold(s: GameState, p: PlayerId): boolean {
+  if (s.phase !== 'draw' || s.winner) return false
+  if (!drawBlockReason(s, p, 'unit') || !drawBlockReason(s, p, 'item')) return true
+  return buybackWindow(s).some((h) => !buybackBlockReason(s, p, h.cardId))
 }
 
 // ---------- status ----------
@@ -2635,6 +2653,7 @@ export function passResponse(state: GameState, p: PlayerId): GameState {
   if (state.phase !== 'response' || state.priority !== p) return state
   const s = clone(state)
   s.passes += 1
+  s.reply = false
   log(s, `${PLAYER_LABEL[p]} passes.`, tone(p))
   if (s.passes >= 2) advanceCombat(s)
   else {

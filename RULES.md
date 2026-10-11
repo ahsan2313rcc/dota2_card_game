@@ -52,7 +52,7 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 2. **Draw.** Spend Gold to draw, and buy any of the last 10 heroes back from the shared discard.
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
 4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
-5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side plays one. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next action, and the board names that action before you pass. Either side can interrupt again between swings. A tower shoots as soon as the swing that hit it resolves. Passives are already on.
+5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side has 5 seconds to counter or pass. A side with nothing it can play passes on its own. A Draw step with no Gold left ends on its own. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next action, and the board names that action before you pass. Either side can interrupt again between swings. A tower shoots as soon as the swing that hit it resolves. Passives are already on.
 6. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
 7. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
 8. **Income.** Hero-kill Gold and XP, and lane XP.
@@ -101,7 +101,7 @@ Anti-Mage's attacks lower the opponent's XP by 1. XP does not go below 0.
 
 ### XP out
 
-Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be cast once per turn. A Refresher Orb allows one more cast that turn. Items, runes, rewards, abilities, and a 3 XP Shield are interrupts: one action, then the other player, resolving as they are played. Odd rounds Radiant starts. Even rounds Dire starts. Two passes resolve the next swing. Spending 3 XP puts one Shield on an allied hero. It lasts until that Shield blocks a hit, and a hero cannot hold a second one.
+Active abilities. Each hero has one printed ability. A passive cannot be cast. An active ability costs its printed XP, 1, 2 or 3. That cost does not increase, and the ability can be cast once per turn. A Refresher Orb allows one more cast that turn. Items, runes, rewards, abilities, and a 3 XP Shield are interrupts: one action, then the other player has 5 seconds to counter or pass. A side with nothing it can play passes on its own. Odd rounds Radiant starts. Even rounds Dire starts. Two passes resolve the next swing. Spending 3 XP puts one Shield on an allied hero. It lasts until that Shield blocks a hit, and a hero cannot hold a second one.
 
 If Keeper of the Light is in the lane and this hero is Position 1, the cost is 1 lower, to a minimum of 1. An Arcane Rune reduces one allied hero's cost by 1 XP, to a minimum of 0. A Refresher Shard makes that hero's ability cost 0. Refresher Orb lets the ability be played again later in the round as another interrupt, and that cast can choose a new target. If it is never played again, the same cast repeats when attacks begin.
 

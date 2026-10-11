@@ -64,9 +64,10 @@ export function RulesDialog() {
               <li>Reveal: both sides flip.</li>
               <li>
                 Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards,
-                abilities, and a 3 XP Shield are interrupts. Play one, it resolves immediately, then the other side plays one. Odd rounds
-                Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next action, and the bar names that
-                action before you pass. You can interrupt again between swings and after the towers fire.
+                abilities, and a 3 XP Shield are interrupts. Play one and it resolves immediately. The other side then has 5 seconds
+                to counter with a card or pass. A side with nothing it can play passes on its own, and a Draw step with no Gold
+                left ends on its own. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next
+                action, and the bar names that action before you pass. You can interrupt again between swings and after the towers fire.
               </li>
               <li>
                 Abilities: each hero has one printed ability. Passives are always on. An active ability costs its printed XP

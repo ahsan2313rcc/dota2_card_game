@@ -978,11 +978,11 @@ export function reveal(state: GameState): GameState {
     if (placed.length) {
       log(
         s,
-        `Reveal: ${PLAYER_LABEL[p]} assigns ${placed.map((u) => `${unitName(u)} (${ZONE_LABEL[u.zone]})`).join(', ')}.`,
+        `Show: ${PLAYER_LABEL[p]} assigns ${placed.map((u) => `${unitName(u)} (${ZONE_LABEL[u.zone]})`).join(', ')}.`,
         tone(p),
       )
     } else {
-      log(s, `Reveal: ${PLAYER_LABEL[p]} assigns nothing new.`, tone(p))
+      log(s, `Show: ${PLAYER_LABEL[p]} assigns nothing new.`, tone(p))
     }
     const pl = s.players[p]
     for (const lane of pl.smoke) {

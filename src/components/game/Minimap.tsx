@@ -195,19 +195,24 @@ export function Minimap({ s, ia, viewer }: { s: GameState; ia: MapInteraction; v
 
       {ZONES.flatMap((zone) =>
         PLAYERS.flatMap((p) =>
-          lineup(s, p, zone).map((uid, i) => (
-            <UnitToken
-              key={uid}
-              unit={s.units[uid]}
-              pos={slotPos(zone, p, i)}
-              labelSide={statusAnchor(zone, p, i)}
-              position={i + 1}
-              targetable={ia.targetable.has(uid)}
-              selected={ia.inspected === uid}
-              declared={ia.declared.has(uid)}
-              onClick={() => ia.onUnitClick(uid)}
-            />
-          )),
+          lineup(s, p, zone).map((uid, i) => {
+            const unit = s.units[uid]
+            // The other side's heroes placed this round stay face down until Show.
+            if (s.phase === 'assign' && unit.owner !== viewer && unit.owner !== 'neutral' && unit.placedRound === s.round) return null
+            return (
+              <UnitToken
+                key={uid}
+                unit={unit}
+                pos={slotPos(zone, p, i)}
+                labelSide={statusAnchor(zone, p, i)}
+                position={i + 1}
+                targetable={ia.targetable.has(uid)}
+                selected={ia.inspected === uid}
+                declared={ia.declared.has(uid)}
+                onClick={() => ia.onUnitClick(uid)}
+              />
+            )
+          }),
         ),
       )}
 

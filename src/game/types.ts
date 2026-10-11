@@ -294,9 +294,9 @@ export interface PlayerState {
   rotationsUsed: number
   /** Heroes that already rotated this round. Each hero moves at most once. */
   rotatedUids: string[]
-  /** Ward: enemy heroes here are revealed at the next Reveal. */
+  /** Ward: enemy heroes here are face-up at the next Show. */
   ward: LaneId[]
-  /** Smoke: allied heroes placed here stay hidden at the next Reveal. */
+  /** Smoke: allied heroes placed here stay hidden at the next Show. */
   smoke: LaneId[]
 }
 

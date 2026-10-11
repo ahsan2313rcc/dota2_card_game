@@ -38,6 +38,13 @@ import {
 } from './engine'
 import { BOARD_LIMIT, CAMPS, DRAW_CAP, HAND_LIMIT, LANES, PLAYERS, STARTING_HEROES, ZONES, type CampId, type GameState, type HandCard } from './types'
 
+/** These heroes were shown on an earlier round, so the other side can see them while assigning. */
+function shown(s: GameState, owner: 'radiant' | 'dire') {
+  for (const u of Object.values(s.units)) {
+    if (u.owner === owner) u.placedRound = s.round - 1
+  }
+}
+
 /** Fresh game in the assign step with chosen hands. */
 function setup(seed: number, radiant: HandCard[], dire: HandCard[] = []): GameState {
   const s = endDraw(newGame(undefined, seed))
@@ -459,13 +466,23 @@ describe('setup and core rules', () => {
 })
 
 describe('items, runes and statuses', () => {
+  it('Show flips both sides and names the step', () => {
+    let s = setup(81, [hero('a', 'sven')], [hero('b', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'mid')
+    s = placeHero(s, 'dire', 'b', 'bot')
+    s = reveal(s)
+    expect(logHas(s, 'Show: Radiant assigns')).toBe(true)
+    expect(logHas(s, 'Show: Dire assigns')).toBe(true)
+    expect(s.log.some((l) => l.text.startsWith('Reveal:'))).toBe(false)
+  })
+
   it('shop items cost gold and are single use', () => {
     let s = setup(11, [hero('a', 'sven'), item('i', 'desolator')])
     s = placeHero(s, 'radiant', 'a', 'bot')
     s = reveal(s)
     s.players.radiant.gold = 4
     s = playItem(s, 'radiant', 'i', heroesOnBoard(s, 'radiant')[0].uid)
-    expect(s.players.radiant.gold).toBe(2)
+    expect(s.players.radiant.gold).toBe(3)
     expect(s.players.radiant.hand).toHaveLength(0)
     expect(heroesOnBoard(s, 'radiant')[0].status.bonusDamage).toBe(1)
   })
@@ -487,7 +504,7 @@ describe('items, runes and statuses', () => {
     s = reveal(s)
     const riki = heroesOnBoard(s, 'dire')[0]
     riki.status.invisible = true
-    s.players.radiant.gold = 1
+    s.players.radiant.gold = 0
     s = playItem(s, 'radiant', 'g', undefined, 'mid')
     expect(s.units[riki.uid].status.invisible).toBe(false)
     expect(s.units[riki.uid].status.revealed).toBe(true)
@@ -1002,6 +1019,7 @@ describe('opponent decisions', () => {
   it('assigns a counter into the lane that already holds the countered hero', () => {
     let s = setup(1, [hero('sv', 'sven')], [hero('pa', 'phantom_assassin')])
     s = placeHero(s, 'radiant', 'sv', 'mid')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire')
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'phantom_assassin')?.zone).toBe('mid')
   })
@@ -1011,6 +1029,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r1', 'mid')
     s = placeHero(s, 'radiant', 'r2', 'mid')
     s.players.dire.structures.towers.mid.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
   })
@@ -1026,6 +1045,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r3', 'bot')
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.dire.structures.towers.bot.t2 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(3)
   })
@@ -1037,6 +1057,7 @@ describe('opponent decisions', () => {
     s.players.dire.placedThisRound = 0
     s = placeHero(s, 'radiant', 'r1', 'mid')
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire')
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('direJungle')
   })
@@ -1045,6 +1066,7 @@ describe('opponent decisions', () => {
     let s = setup(15, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.players.radiant.structures.towers.top.t1 = 0
     s.players.radiant.structures.towers.mid.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'lane')
     const zones = heroesOnBoard(s, 'dire').map((u) => u.zone)
     expect(zones).toEqual(['top', 'top', 'top'])
@@ -1054,6 +1076,7 @@ describe('opponent decisions', () => {
     let s = setup(16, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.players.radiant.structures.towers.top.t1 = 0
     s.players.radiant.structures.towers.mid.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire')
     const zones = heroesOnBoard(s, 'dire').map((u) => u.zone)
     expect(new Set(zones).size).toBeGreaterThan(1)
@@ -1064,7 +1087,8 @@ describe('opponent decisions', () => {
       let s = setup(17, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
       s.round = round
       forceCamp(s, 'direJungle', 'neutral')
-      s = aiAssign(s, 'dire', 'jungler')
+      shown(s, 'radiant')
+    s = aiAssign(s, 'dire', 'jungler')
       expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
       expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
     }
@@ -1074,6 +1098,7 @@ describe('opponent decisions', () => {
     let s = setup(17, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 3
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
@@ -1083,6 +1108,7 @@ describe('opponent decisions', () => {
     let s = setup(47, [], [hero('d1', 'axe'), hero('d2', 'sven'), hero('d3', 'chaos_knight')])
     s.round = 3
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'chaos_knight')?.zone).toBe('direJungle')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
@@ -1092,6 +1118,7 @@ describe('opponent decisions', () => {
     let s = setup(30, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 4
     forceCamp(s, 'direJungle', 'tormentor')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(2)
@@ -1101,8 +1128,17 @@ describe('opponent decisions', () => {
     let s = setup(26, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s = placeHero(s, 'radiant', 'r1', 'mid')
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'mid')).toBe(true)
+  })
+
+  it('a jungler does not see a hero the other side placed this round', () => {
+    let s = setup(26, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'r1', 'mid')
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'jungler')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
 
   it('a jungler stages in mid once one hero is already farming', () => {
@@ -1111,6 +1147,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'dire', 'd1', 'direJungle')
     s.players.dire.placedThisRound = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     const fresh = heroesOnBoard(s, 'dire').filter((u) => u.zone !== 'direJungle')
     expect(fresh).toHaveLength(3)
@@ -1130,6 +1167,7 @@ describe('opponent decisions', () => {
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.dire.structures.towers.bot.t2 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'bot')).toBe(true)
   })
@@ -1138,6 +1176,7 @@ describe('opponent decisions', () => {
     let s = setup(22, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s = placeHero(s, 'radiant', 'r1', 'mid')
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'lane')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
@@ -1152,6 +1191,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r2', 'mid')
     s = placeHero(s, 'radiant', 'r3', 'mid')
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'lane')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
@@ -1164,6 +1204,7 @@ describe('opponent decisions', () => {
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.dire.structures.towers.bot.t2 = 0
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'lane')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
@@ -1175,6 +1216,7 @@ describe('opponent decisions', () => {
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.dire.structures.towers.bot.t2 = 0
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'lane')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
@@ -1186,6 +1228,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r2', 'mid')
     s.players.dire.structures.towers.mid.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'mid')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
@@ -1203,6 +1246,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r3', 'bot')
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'lane')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
@@ -1221,6 +1265,7 @@ describe('opponent decisions', () => {
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.radiant.structures.towers.top.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'jungler')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(2)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
@@ -1232,6 +1277,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r2', 'bot')
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'defender')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(3)
   })
@@ -1243,6 +1289,7 @@ describe('opponent decisions', () => {
     s.players.dire.placedThisRound = 0
     s = placeHero(s, 'radiant', 'r1', 'mid')
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'defender')
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('mid')
   })
@@ -1258,6 +1305,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r3', 'bot')
     s.players.dire.structures.towers.bot.t1 = 0
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(2)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
@@ -1267,6 +1315,7 @@ describe('opponent decisions', () => {
     let s = setup(47, [hero('r1', 'axe'), hero('r2', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s = placeHero(s, 'radiant', 'r1', 'bot')
     s = placeHero(s, 'radiant', 'r2', 'bot')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
@@ -1275,6 +1324,7 @@ describe('opponent decisions', () => {
     let s = setup(41, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s = placeHero(s, 'radiant', 'r1', 'mid')
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
   })
@@ -1287,6 +1337,7 @@ describe('opponent decisions', () => {
     s.players.dire.placedThisRound = 0
     s.players.radiant.structures.towers.top.t1 = 0
     s.players.radiant.structures.towers.mid.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     const fresh = heroesOnBoard(s, 'dire').filter((u) => u.cardId === 'axe' || u.cardId === 'sven')
     expect(fresh).toHaveLength(2)
@@ -1298,6 +1349,7 @@ describe('opponent decisions', () => {
     s.players.radiant.structures.towers.bot.t1 = 0
     s.players.radiant.structures.towers.bot.t2 = 0
     s.players.radiant.structures.towers.top.t1 = 0
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'bot')).toBe(true)
   })
@@ -1307,6 +1359,7 @@ describe('opponent decisions', () => {
     s.round = 3
     s.players.radiant.structures.towers.top.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
@@ -1321,6 +1374,7 @@ describe('opponent decisions', () => {
     s.players.dire.placedThisRound = 0
     s.players.radiant.structures.towers.top.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'axe')?.zone).toBe('top')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
@@ -1330,6 +1384,7 @@ describe('opponent decisions', () => {
     let s = setup(46, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 3
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'hunter')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'top')).toBe(true)
@@ -1419,7 +1474,8 @@ describe('opponent decisions', () => {
       let s = setup(61, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
       s.round = round
       forceCamp(s, 'direJungle', 'neutral')
-      s = aiAssign(s, 'dire', 'carry')
+      shown(s, 'radiant')
+    s = aiAssign(s, 'dire', 'carry')
       expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
     }
   })
@@ -1428,6 +1484,7 @@ describe('opponent decisions', () => {
     let s = setup(62, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s.round = 3
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'carry')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
@@ -1440,8 +1497,21 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r2', 'top')
     s = placeHero(s, 'radiant', 'r3', 'top')
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'carry')
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+  })
+
+  it('a carry does not soak a Tier 1 stack placed this round', () => {
+    let s = setup(63, [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')])
+    s.round = 3
+    s = placeHero(s, 'radiant', 'r1', 'top')
+    s = placeHero(s, 'radiant', 'r2', 'top')
+    s = placeHero(s, 'radiant', 'r3', 'top')
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'carry')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
     expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
   })
 
@@ -1453,6 +1523,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r3', 'bot')
     s.players.dire.structures.towers.bot.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire', 'carry')
     expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'bot')).toBe(true)
   })
@@ -1499,6 +1570,7 @@ describe('opponent decisions', () => {
     s = placeHero(s, 'radiant', 'r1', 'mid')
     s.players.dire.structures.towers.mid.t1 = 0
     forceCamp(s, 'direJungle', 'neutral')
+    shown(s, 'radiant')
     s = aiAssign(s, 'dire')
     expect(heroesOnBoard(s, 'dire').find((u) => u.cardId === 'pudge')?.zone).toBe('mid')
   })

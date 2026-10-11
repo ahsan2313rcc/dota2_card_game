@@ -51,7 +51,7 @@ Heroes are assigned to a lane or to your own jungle. Creeps are assigned to lane
 1. **Upkeep.** Fountain, then income, then empty camps refill.
 2. **Draw.** Spend Gold to draw, and buy any of the last 10 heroes back from the shared discard.
 3. **Assign.** Place heroes and creeps. This round's placements stay hidden.
-4. **Reveal.** Both sides flip. Ward and Smoke from the previous round apply, then expire.
+4. **Show.** Both sides flip together. Ward and Smoke from the previous round apply, then expire. Neither side sees what the other placed this round until this step.
 5. **Combat.** Items, runes, tower cards, boss rewards, and abilities are interrupts. There is no item step and no ability step. Play one card, it resolves immediately, then the other side has 5 seconds to counter or pass. A side with nothing it can play passes on its own. A Draw step with no Gold left ends on its own. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next action, and the board names that action before you pass. Either side can interrupt again between swings. A tower shoots as soon as the swing that hit it resolves. Passives are already on.
 6. **Rotation.** Each side may move up to 2 heroes. Radiant moves, then Dire.
 7. **Cleanup.** End-of-round effects, poison, deaths, and status reset. Statuses last this turn unless a card says otherwise. Doom's Mute, Silence and Curse stay. Wraith King revives once. Necrophos blocks buyback.
@@ -80,7 +80,7 @@ Gold and XP are not reset between rounds. Whatever you do not spend is still the
 | Sink | Cost |
 | --- | --- |
 | Draw the top card of the unit deck, or draw a shop card | 1 each, until you stop, run out of Gold, hit 10 counting cards, or empty that deck. Discard back to 7 at the end of the turn. |
-| Play a shop card | 1, 2, or 3, printed on the card. Single use. |
+| Play a shop card | 0, 1, or 2, printed on the card. Single use. Drawing the card is still 1. |
 | Buyback | 4, or 5 if you have more towers standing than the enemy. Once per hero. Draw step only. The hero can belong to either side, as long as it is among the last 10 in the shared discard. |
 
 Runes, tower cards, the Aegis, and the Refresher Shard cost no Gold.
@@ -199,39 +199,39 @@ Shop cards cost Gold and are single use. Runes drop from normal neutral kills on
 
 | Card | Cost | Copies | Effect |
 | --- | --- | --- | --- |
-| Town Portal Scroll | 1 | 6 | Teleport an allied hero who is not Rooted to any lane. |
-| Ward | 1 | 3 | Enemy heroes who enter this lane are face-up at the next Reveal. |
-| Smoke | 1 | 2 | Allied heroes placed in this lane stay hidden at the next Reveal. |
-| Dust | 1 | 2 | Mute every enemy hero in the lane. |
-| Gem of True Sight | 1 | 2 | Reveal every enemy hero in a lane and remove Invisible. |
-| Healing Salve | 1 | 4 | Heal an allied hero to Healthy. |
-| Clarity | 1 | 3 | Gain 1 XP. |
-| Gloves of Haste | 1 | 3 | An allied hero gains Haste. |
-| Vanguard | 2 | 2 | Gain 1 Shield. It lasts until it blocks a hit. |
-| Blade Mail | 2 | 2 | Reflect 1 physical damage back to the attacker. |
-| Ghost Scepter | 2 | 2 | An allied hero becomes Ethereal. |
-| Force Staff | 2 | 2 | Move an enemy hero to the back of their line. |
-| Shadow Blade | 2 | 2 | An allied hero becomes Invisible. |
-| Blink Dagger | 2 | 2 | An allied hero gains Haste and moves to Position 1. |
-| Eul's Scepter | 2 | 2 | Banish an enemy hero. |
-| Heaven's Halberd | 2 | 2 | Disarm an enemy hero. |
-| Orchid Malevolence | 2 | 2 | Silence an enemy hero. |
-| Desolator | 2 | 2 | An allied hero is Amplified. |
-| Black King Bar | 3 | 1 | An allied hero becomes Immune, and current disable effects on them end. |
-| Guardian Greaves | 3 | 1 | Heal all allied heroes in lanes. |
-| Assault Cuirass | 3 | 1 | Haste all allied heroes in lanes. |
-| Shiva's Guard | 3 | 1 | Slow all enemy heroes in a lane. |
-| Refresher Orb | 3 | 1 | That hero's ultimate is cast twice, both times on the chosen target. |
-| Satanic | 3 | 1 | An allied hero cannot die, and their basic attacks heal them. |
-| Bloodthorn | 3 | 1 | Silence an enemy hero. They take +1 physical damage from attacks. |
-| Scythe of Vyse | 3 | 1 | Hex an enemy hero. |
-| Abyssal Blade | 3 | 1 | Stun an enemy hero. |
-| Butterfly | 3 | 1 | An allied hero Evades the next attack. |
-| Heart of Tarrasque | 3 | 1 | An allied hero heals at the end of the turn. |
-| Eye of Skadi | 3 | 1 | An allied hero's basic attacks apply Slow and Curse. |
-| Divine Rapier | 3 | 1 | An allied hero's basic attacks kill enemy heroes. |
-| Dagon | 3 | 1 | Deal 2 magical damage to an enemy hero. |
-| Monkey King Bar | 3 | 1 | Accuracy, and basic attacks deal +1 magical damage. |
+| Town Portal Scroll | 0 | 6 | Teleport an allied hero who is not Rooted to any lane. |
+| Ward | 0 | 3 | Enemy heroes who enter this lane are face-up at the next Show. |
+| Smoke | 0 | 2 | Allied heroes placed in this lane stay hidden at the next Show. |
+| Dust | 0 | 2 | Mute every enemy hero in the lane. |
+| Gem of True Sight | 0 | 2 | Reveal every enemy hero in a lane and remove Invisible. |
+| Healing Salve | 0 | 4 | Heal an allied hero to Healthy. |
+| Clarity | 0 | 3 | Gain 1 XP. |
+| Gloves of Haste | 0 | 3 | An allied hero gains Haste. |
+| Vanguard | 1 | 2 | Gain 1 Shield. It lasts until it blocks a hit. |
+| Blade Mail | 1 | 2 | Reflect 1 physical damage back to the attacker. |
+| Ghost Scepter | 1 | 2 | An allied hero becomes Ethereal. |
+| Force Staff | 1 | 2 | Move an enemy hero to the back of their line. |
+| Shadow Blade | 1 | 2 | An allied hero becomes Invisible. |
+| Blink Dagger | 1 | 2 | An allied hero gains Haste and moves to Position 1. |
+| Eul's Scepter | 1 | 2 | Banish an enemy hero. |
+| Heaven's Halberd | 1 | 2 | Disarm an enemy hero. |
+| Orchid Malevolence | 1 | 2 | Silence an enemy hero. |
+| Desolator | 1 | 2 | An allied hero is Amplified. |
+| Black King Bar | 2 | 1 | An allied hero becomes Immune, and current disable effects on them end. |
+| Guardian Greaves | 2 | 1 | Heal all allied heroes in lanes. |
+| Assault Cuirass | 2 | 1 | Haste all allied heroes in lanes. |
+| Shiva's Guard | 2 | 1 | Slow all enemy heroes in a lane. |
+| Refresher Orb | 2 | 1 | That hero's ultimate is cast twice, both times on the chosen target. |
+| Satanic | 2 | 1 | An allied hero cannot die, and their basic attacks heal them. |
+| Bloodthorn | 2 | 1 | Silence an enemy hero. They take +1 physical damage from attacks. |
+| Scythe of Vyse | 2 | 1 | Hex an enemy hero. |
+| Abyssal Blade | 2 | 1 | Stun an enemy hero. |
+| Butterfly | 2 | 1 | An allied hero Evades the next attack. |
+| Heart of Tarrasque | 2 | 1 | An allied hero heals at the end of the turn. |
+| Eye of Skadi | 2 | 1 | An allied hero's basic attacks apply Slow and Curse. |
+| Divine Rapier | 2 | 1 | An allied hero's basic attacks kill enemy heroes. |
+| Dagon | 2 | 1 | Deal 2 magical damage to an enemy hero. |
+| Monkey King Bar | 2 | 1 | Accuracy, and basic attacks deal +1 magical damage. |
 
 ### Runes
 

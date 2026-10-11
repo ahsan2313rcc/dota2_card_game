@@ -252,8 +252,13 @@ function unitsIn(s: GameState, p: PlayerId, zone: ZoneId): Unit[] {
   return lineup(s, p, zone).map((uid) => s.units[uid])
 }
 
+/** Heroes placed this round stay face down until Show. Earlier rounds are public. */
+function visibleEnemy(s: GameState, u: Unit): boolean {
+  return s.phase !== 'assign' || u.placedRound !== s.round
+}
+
 function enemyHeroes(s: GameState, p: PlayerId, zone: ZoneId): Unit[] {
-  return unitsIn(s, other(p), zone).filter((u) => u.kind === 'hero')
+  return unitsIn(s, other(p), zone).filter((u) => u.kind === 'hero' && visibleEnemy(s, u))
 }
 
 function heroCount(s: GameState, p: PlayerId): number {

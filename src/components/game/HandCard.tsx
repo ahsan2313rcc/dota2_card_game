@@ -91,7 +91,7 @@ function ItemFace({ id }: { id: string }) {
       </div>
       <div className="flex items-center gap-1 px-2 pt-1.5 text-[10px] text-zinc-400">
         <Package className="size-3" />
-        {it.kind === 'Shop' && it.cost ? `${it.cost} Gold · single use` : ITEM_NOTE[it.kind]}
+        {it.kind === 'Shop' ? `${it.cost ?? 0} Gold · single use` : ITEM_NOTE[it.kind]}
       </div>
       <p className="flex-1 px-2 py-1.5 text-[11px] leading-snug text-zinc-300">{it.text}</p>
     </>

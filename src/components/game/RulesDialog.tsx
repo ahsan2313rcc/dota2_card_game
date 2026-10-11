@@ -54,7 +54,7 @@ export function RulesDialog() {
                 shared item deck. You may draw up to 10 counting cards. At the end of the turn, discard counting cards until 7 remain.
                 Runes and tower cards do not count and are not discarded for this. The hero deck is 160 cards shuffled
                 together: all 127 heroes, 25 lane creeps and 8 siege creeps. You start with 5 cards from that deck. The
-                item deck is 60 shop cards. Playing one costs 1, 2, or 3 Gold. Gem of True Sight costs 1 Gold and reveals
+                item deck is 60 shop cards. Drawing one costs 1 Gold. Playing one costs 0, 1, or 2 Gold. Gem of True Sight costs 0 Gold and reveals
                 every enemy hero in a lane. The rune deck is 20 cards (10 runes, two
                 copies). Runes are free and do not count toward the hand limit.
                 Dead heroes from both sides go into one shared discard. Buyback returns any hero from the last 10 in that
@@ -62,10 +62,10 @@ export function RulesDialog() {
                 can be bought back only once.
               </li>
               <li>
-                Assign: place up to 3 heroes (board limit 5) into lanes or your own jungle, and creep cards into lanes. The enemy jungle is not an assign target. Position 1
+                Assign: both sides place at the same time, up to 3 heroes (board limit 5) into lanes or your own jungle, and creep cards into lanes. The enemy jungle is not an assign target. Heroes placed this round stay hidden from the other side. Position 1
                 defends first.
               </li>
-              <li>Reveal: both sides flip.</li>
+              <li>Show: both sides flip.</li>
               <li>
                 Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards,
                 abilities, and a 3 XP Shield are interrupts. Play one and it resolves immediately. The other side then has 5 seconds

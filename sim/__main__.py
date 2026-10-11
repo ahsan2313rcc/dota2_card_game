@@ -161,6 +161,8 @@ class Unit:
     # One Shield. A bought Shield stays through cleanup. A rune Shield does not.
     shield: int = 0
     persist_shield: bool = False
+    # Placed during this deploy. The other side cannot count it until both sides have assigned.
+    fresh: bool = False
 
 
 @dataclass
@@ -292,7 +294,7 @@ def draw_and_deploy(g: Game) -> None:
             invade_score = invade_value(g, p)
             to_jungle = jungle_score > lane_score and jungle_score >= invade_score
             hero = pull_hero(side.hand, to_jungle and g.style[p] in ("jungler", "carry"))
-            unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
+            unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive", fresh=True)
             if to_jungle:
                 g.jungle[p].append(unit)
                 g.jungle_sent[p] += 1
@@ -303,6 +305,11 @@ def draw_and_deploy(g: Game) -> None:
                 g.board[p][lane].append(unit)
             placed += 1
             g.played[p] += 1
+    # Show. Combat and rotation can see every hero that just deployed.
+    for board in (*g.board.values(), g.jungle, g.invade):
+        for row in board.values():
+            for unit in row:
+                unit.fresh = False
 
 
 def tower_pressure(t1: int, t2: int) -> int:
@@ -387,7 +394,7 @@ def lane_value(g: Game, p: str, lane: str) -> int:
     style = g.style[p]
     foe = g.sides[other(p)].towers[lane]
     own = g.sides[p].towers[lane]
-    foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0)
+    foes = sum(1 for unit in g.board[other(p)][lane] if unit.hp > 0 and not unit.fresh)
     mine = sum(1 for unit in g.board[p][lane] if unit.hp > 0)
     ancient_open = foe["t1"] <= 0 and foe["t2"] <= 0
     if style == "jungler":
@@ -727,33 +734,32 @@ def play_shard(g: Game, p: str) -> bool:
 
 
 def play_item(g: Game, p: str) -> bool:
-    """One shop effect, paid with Gold. A full board buys these. A thin board keeps Gold for the next draw."""
+    """One shop effect. A full board buys these. Printed play costs are 2, 1, and 0. The draw is separate."""
     side = g.sides[p]
     heroes = living(g, p)
-    if len(heroes) < ENOUGH_HEROES or side.gold < 1 or g.items[p] >= len(heroes):
+    if len(heroes) < ENOUGH_HEROES or g.items[p] >= len(heroes):
         return False
     casters = [
         unit
         for _lane, unit in heroes
         if unit.hero.kind == "active" and not unit.refresher and unit.casts < 2 and not unit.stunned and not unit.silenced
     ]
-    if side.gold >= 3 and casters:
-        side.gold -= 3
+    if side.gold >= 2 and casters:
+        side.gold -= 2
         casters[0].refresher = True
         g.items[p] += 1
         return True
     fighters = swinging(g, p)
     if not fighters:
         return False
-    if side.gold >= 2:
-        side.gold -= 2
+    if side.gold >= 1:
+        side.gold -= 1
         fighters[0][1].amplify += 1
         g.items[p] += 1
         return True
     target = next((unit for _lane, unit in fighters if not unit.haste), None)
     if target is None:
         return False
-    side.gold -= 1
     target.haste = True
     g.items[p] += 1
     return True

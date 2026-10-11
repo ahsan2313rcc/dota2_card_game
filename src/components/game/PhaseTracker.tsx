@@ -1,7 +1,7 @@
 import type { Phase } from '@/game/types'
 import { cn } from '@/lib/utils'
 
-const STEPS = ['Upkeep', 'Draw', 'Assign', 'Reveal', 'Combat', 'Rotation', 'Cleanup', 'Income'] as const
+const STEPS = ['Upkeep', 'Draw', 'Assign', 'Show', 'Combat', 'Rotation', 'Cleanup', 'Income'] as const
 
 const ACTIVE: Record<Phase, number> = {
   draw: 1,

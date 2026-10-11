@@ -40,9 +40,9 @@ export function RuleCards() {
           One deck of 160: 127 heroes, 25 creeps, 8 siege. Deal 5 each. Both camps are up, and each side has 1 Gold and 1 XP.
           Glyph, Lotus, and Twin Gate sit under every tower. In round 1, swap two hidden cards of the same tier.
         </Block>
-        <Block title="Round">Upkeep, Draw, Assign, Reveal, Combat, Rotate, Cleanup, Income.</Block>
+        <Block title="Round">Upkeep, Draw, Assign, Show, Combat, Rotate, Cleanup, Income.</Block>
         <ul className="list-disc space-y-1 pl-3.5">
-          <li>Place up to 3 heroes a round, 5 on the board. Creeps are extra. Your own jungle only.</li>
+          <li>Place up to 3 heroes a round, 5 on the board. Creeps are extra. Your own jungle only. Both sides assign together. New heroes stay hidden until Show.</li>
           <li>Play one card. The other side has 5 seconds to answer or pass. With nothing legal, the pass happens on its own. Two passes resolve the next swing. Odd rounds you start.</li>
           <li>Attacks go Haste, AGI, UNI, INT, STR, then creeps. Slow goes last. A tower fires when the hit lands, once a round.</li>
           <li>Move up to 2 heroes, one step: Top – Dire Jungle – Mid – Radiant Jungle – Bot. You move, then Dire.</li>
@@ -77,7 +77,7 @@ export function RuleCards() {
         <Block title="Spend">
           <ul className="list-disc space-y-0.5 pl-3.5">
             <li>Draw a unit or a shop card: 1 Gold.</li>
-            <li>Play a shop card: the printed 1, 2, or 3 Gold.</li>
+            <li>Play a shop card: the printed 0, 1, or 2 Gold. Drawing it is still 1 Gold.</li>
             <li>Buyback: 4 Gold, or 5 if you have more towers. Once per hero, from the last 10 in the shared discard, during Draw.</li>
             <li>An ability costs its printed 1, 2, or 3 XP, once a turn.</li>
             <li>Shield: 3 XP. One per hero, until it blocks a hit.</li>

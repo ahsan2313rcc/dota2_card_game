@@ -145,7 +145,7 @@ export default function App() {
       }
       return setSelectedHand(card.iid)
     }
-    if (card.type === 'item') toast.message(s.phase === 'response' ? 'Wait for priority.' : 'Items are interrupts once both sides have revealed.')
+    if (card.type === 'item') toast.message(s.phase === 'response' ? 'Wait for priority.' : 'Items are interrupts once both sides have shown.')
     else toast.message(`${card.type === 'hero' ? 'Heroes' : 'Creeps'} are placed during the Assign step.`)
   }
 
@@ -251,7 +251,7 @@ export default function App() {
             >
               Deck {s.unitDeck.length}
             </span>
-            <span className="text-zinc-400" title="Both players draw from this shop deck. 60 cards. Playing one costs 1, 2 or 3 Gold. Runes and tower cards stay free.">
+            <span className="text-zinc-400" title="Both players draw from this shop deck. 60 cards. Drawing one costs 1 Gold. Playing one costs 0, 1, or 2 Gold. Runes and tower cards stay free.">
               Items {s.itemDeck.length}
             </span>
             <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
@@ -475,8 +475,8 @@ function ActionBar({
       title = 'Assign'
       hint = selectedCard
         ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes or your own jungle)'}.`
-        : `Select a hero or creep card, then a green + on the map. Heroes go to a lane or your jungle. Creeps go to lanes. Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round.`
-      cta = 'Lock in & reveal'
+        : `Select a hero or creep card, then a green + on the map. Heroes go to a lane or your jungle. Creeps go to lanes. Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round. Dire assigns at the same time, and those heroes stay hidden until Show.`
+      cta = 'Lock in & show'
       break
     case 'response':
       title = s.priority === HUMAN ? 'Your interrupt' : 'Dire has priority'

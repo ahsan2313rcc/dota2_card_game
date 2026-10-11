@@ -1,6 +1,7 @@
 import { BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { RuleCards } from '@/components/game/RuleCards'
 
 const STATUSES: Array<[string, string]> = [
   ['Stun', 'Cannot cast, attack, or move.'],
@@ -17,7 +18,7 @@ const STATUSES: Array<[string, string]> = [
   ['Invisible', 'Untargetable until Revealed.'],
   ['Mute', 'Cannot use items.'],
   ['Curse', 'Cannot heal.'],
-  ['Taunt', 'Must attack the taunting unit and cannot cast or use items.'],
+  ['Taunt', 'Must attack the taunting unit.'],
   ['Amplify', 'Attack +1.'],
   ['Hex', 'Becomes a 1 HP decoy with no attack.'],
 ]
@@ -29,12 +30,15 @@ export function RulesDialog() {
         <BookOpen />
         Rules
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent initialFocus={false} className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Dota: The Ancient's Duel — quick rules</DialogTitle>
-          <DialogDescription>How this prototype plays. Rules marked “prototype” are placeholders to tune.</DialogDescription>
+          <DialogDescription>Three reference cards. The card on a hero, item, rune, or neutral still wins.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 text-sm leading-relaxed text-zinc-300">
+        <RuleCards />
+        <details className="text-sm leading-relaxed text-zinc-300">
+          <summary className="cursor-pointer text-xs font-semibold tracking-wider text-zinc-400 uppercase">Full rules</summary>
+          <div className="mt-3 space-y-3">
           <Section title="Goal">
             Destroy the enemy Ancient (10 hits). Each lane has a Tier 1 tower (3 hits, deals 1, worth 3 Gold) and a Tier 2
             tower (5 hits, deals 1 to the first 3 units, creeps first, worth 5 Gold). The attacker is paid. The defender still
@@ -131,7 +135,8 @@ export function RulesDialog() {
             resolves first.
           </Section>
           <Section title="Not in the prototype yet">Map cards, hot-seat or online multiplayer.</Section>
-        </div>
+          </div>
+        </details>
       </DialogContent>
     </Dialog>
   )

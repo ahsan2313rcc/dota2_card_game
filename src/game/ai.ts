@@ -64,7 +64,7 @@ export type { AiStyle }
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
-/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. */
+/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. carry holds a tower that would break, farms one camp, and spends the gold. */
 
 const HARMFUL = new Set([
   'stun',
@@ -192,17 +192,20 @@ function junglerFarming(round: number): boolean {
 function garrison(t1: number, t2: number, foes: number, style: AiStyle): number {
   if (foes <= 0) return 0
   if (t1 <= 0 && t2 <= 0) {
-    if (style === 'jungler' || style === 'hunter') return BOARD_LIMIT
+    if (style === 'jungler' || style === 'hunter' || style === 'carry') return BOARD_LIMIT
     if (style === 'lane') return Math.max(0, foes - 1)
     return Math.min(BOARD_LIMIT, foes + (style === 'defender' ? 2 : 1))
   }
   if (t1 <= 0) {
     if (style === 'lane') return 1
     if (style === 'defender') return Math.min(BOARD_LIMIT, foes + 1)
+    if (style === 'carry') return Math.min(BOARD_LIMIT, foes)
     if (style === 'jungler' || style === 'hunter') return Math.min(BOARD_LIMIT, Math.max(0, foes - 1))
     return foes
   }
   if (style === 'jungler' || style === 'hunter') return 0
+  // A chip is ignored. One hero soaks a stack. The last hit of a Tier 1 pulls a second hero off the camp.
+  if (style === 'carry') return t1 <= 1 ? Math.min(foes, 2) : t1 <= foes ? 1 : 0
   if (style === 'lane') return t1 <= foes ? 1 : 0
   if (style === 'defender') return foes
   const matching = Math.max(0, foes - 1)
@@ -218,13 +221,13 @@ function garrison(t1: number, t2: number, foes: number, style: AiStyle): number 
  */
 function defendValue(t1: number, t2: number, foes: number, mine: number, style: AiStyle): number {
   if (mine >= garrison(t1, t2, foes, style)) return 0
-  if (t1 <= 0 && t2 <= 0) return style === 'jungler' || style === 'hunter' ? 70 : 50 + foes
+  if (t1 <= 0 && t2 <= 0) return style === 'jungler' || style === 'hunter' || style === 'carry' ? 70 : 50 + foes
   if (t1 <= 0) {
-    if (style === 'lane' || style === 'jungler' || style === 'defender' || style === 'hunter') return 40
+    if (style === 'lane' || style === 'jungler' || style === 'defender' || style === 'hunter' || style === 'carry') return 40
     const raw = 2 + 2 * Math.max(t2, 0) + 3
     return mine > 0 ? raw - 4 : raw
   }
-  if (style === 'lane') return 30
+  if (style === 'lane' || style === 'carry') return 30
   return mine === 0 && foes >= t1 ? 8 : 4
 }
 
@@ -299,7 +302,7 @@ function laneValue(s: GameState, p: PlayerId, lane: LaneId, attr: Attribute | un
   const bodies = lineup(s, p, lane).length
   const ancientOpen = enemyTw.t1 <= 0 && enemyTw.t2 <= 0
   let attack = 0
-  if (style === 'jungler' || style === 'hunter') {
+  if (style === 'jungler' || style === 'hunter' || style === 'carry') {
     attack = junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), foes.length, bodies, ancientOpen)
     if (lane === 'mid' && midDoor(s, p, style)) attack += 1
   } else {
@@ -332,12 +335,15 @@ function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
   const neutral = campNeutral(s, home)
   if (!neutral) return -999
   const mine = heroesIn(s, p, home)
-  if (style === 'jungler') {
+  if (style === 'jungler' || style === 'carry') {
     if (!junglerFarming(s.round)) return -999
     const cap = junglerCap(neutral)
     if (mine >= cap) return -999
-    // A boss beats a one-hero lane. A creep ties that lane and stays in it.
-    return neutral.kind === 'roshan' || neutral.kind === 'tormentor' ? 19 : 18
+    const boss = neutral.kind === 'roshan' || neutral.kind === 'tormentor'
+    // Carry's camp beats a healthy Tier 1, including one with a single defender, and loses to an open Tier 2.
+    if (style === 'carry') return boss ? 21 : 20
+    // A jungler's boss beats a one-hero lane. A creep ties that lane and stays in it.
+    return boss ? 19 : 18
   }
   const laneHeroes = LANES.reduce((sum, lane) => sum + heroesIn(s, p, lane), 0)
   if (laneHeroes < 2) return -999
@@ -583,7 +589,13 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
   if (!isLane(u.zone)) {
     // Farmers stay for a healthy Tier 1 (16) and still leave for an exposed Tier 2 (24).
     const camp = campNeutral(s, u.zone)
-    if (style === 'jungler' && junglerFarming(s.round) && camp && u.zone === homeJungle(p) && heroesIn(s, p, u.zone) <= junglerCap(camp)) {
+    if (
+      (style === 'jungler' || style === 'carry') &&
+      junglerFarming(s.round) &&
+      camp &&
+      u.zone === homeJungle(p) &&
+      heroesIn(s, p, u.zone) <= junglerCap(camp)
+    ) {
       stay += 18
     }
     return stay
@@ -593,7 +605,7 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
   const mine = heroesIn(s, p, u.zone)
   const enemyTw = s.players[other(p)].structures.towers[u.zone]
   stay += defendValue(ownTw.t1, ownTw.t2, foes, Math.max(0, mine - 1), style)
-  if (style === 'jungler' || style === 'hunter') {
+  if (style === 'jungler' || style === 'hunter' || style === 'carry') {
     stay += junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), foes, lineup(s, p, u.zone).length, enemyTw.t1 <= 0 && enemyTw.t2 <= 0)
   } else {
     stay += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
@@ -609,13 +621,13 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle, from
   if (!isLane(zone)) {
     const camp = campNeutral(s, zone)
     const mine = heroesIn(s, p, zone)
-    if (style === 'jungler') {
+    if (style === 'jungler' || style === 'carry') {
       if (!junglerFarming(s.round) || !camp) return score
       const home = campNeutral(s, homeJungle(p))
       const homeReady = !home || heroesIn(s, p, homeJungle(p)) >= junglerCap(home)
       if (zone === homeJungle(p) && mine < junglerCap(camp)) score += 20
-      // The enemy camp is one step from mid. A healthy Tier 1 is 16, an open Tier 2 is 24.
-      if (zone === enemyJungle(p) && from === 'mid' && mine < junglerCap(camp) && homeReady) score += 20
+      // The enemy camp is one step from mid. A carry farms at home and walks back, so the invade stays a jungler step.
+      if (style === 'jungler' && zone === enemyJungle(p) && from === 'mid' && mine < junglerCap(camp) && homeReady) score += 20
       return score
     }
     // A hunter does not farm, so a camp is not a destination.
@@ -626,7 +638,7 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle, from
   const enemyTw = s.players[other(p)].structures.towers[zone]
   const ownTw = s.players[p].structures.towers[zone]
   const defenders = enemyHeroes(s, p, zone).length
-  if (style === 'jungler' || style === 'hunter') {
+  if (style === 'jungler' || style === 'hunter' || style === 'carry') {
     score += junglerPush(towerPressure(enemyTw.t1, enemyTw.t2), defenders, friends, enemyTw.t1 <= 0 && enemyTw.t2 <= 0)
   } else score += exposedBonus(towerPressure(enemyTw.t1, enemyTw.t2))
   score += defendValue(ownTw.t1, ownTw.t2, defenders, heroesIn(s, p, zone), style)

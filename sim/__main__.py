@@ -138,7 +138,7 @@ def load_heroes() -> list[Hero]:
 
 
 ENOUGH_HEROES = 5
-STYLES = ("balanced", "lane", "jungler", "defender", "hunter")
+STYLES = ("balanced", "lane", "jungler", "defender", "hunter", "carry")
 
 
 @dataclass
@@ -291,7 +291,7 @@ def draw_and_deploy(g: Game) -> None:
             jungle_score = jungle_value(g, p)
             invade_score = invade_value(g, p)
             to_jungle = jungle_score > lane_score and jungle_score >= invade_score
-            hero = pull_hero(side.hand, to_jungle and g.style[p] == "jungler")
+            hero = pull_hero(side.hand, to_jungle and g.style[p] in ("jungler", "carry"))
             unit = Unit(hero, owner=p, haste=hero.amp and hero.kind == "passive")
             if to_jungle:
                 g.jungle[p].append(unit)
@@ -322,11 +322,11 @@ NEUTRAL_KILL = 5
 
 
 def garrison(t1: int, t2: int, foes: int, style: str) -> int:
-    """Jungler and hunter hold the Ancient with all 5. Hunter meets a 3-stack Tier 2 with two heroes and a pair with one."""
+    """Jungler and hunter hold the Ancient with all 5. Carry matches a Tier 2 stack and puts two on a Tier 1 that would break."""
     if foes <= 0:
         return 0
     if t1 <= 0 and t2 <= 0:
-        if style in ("jungler", "hunter"):
+        if style in ("jungler", "hunter", "carry"):
             return 5
         if style == "lane":
             return max(0, foes - 1)
@@ -336,11 +336,17 @@ def garrison(t1: int, t2: int, foes: int, style: str) -> int:
             return 1
         if style == "defender":
             return min(5, foes + 1)
+        if style == "carry":
+            return min(5, foes)
         if style in ("jungler", "hunter"):
             return min(5, max(0, foes - 1))
         return foes
     if style in ("jungler", "hunter"):
         return 0
+    if style == "carry":
+        if t1 <= 1:
+            return min(foes, 2)
+        return 1 if t1 <= foes else 0
     if style == "lane":
         return 1 if t1 <= foes else 0
     if style == "defender":
@@ -354,13 +360,13 @@ def defend_value(t1: int, t2: int, foes: int, mine: int, style: str) -> int:
     if mine >= garrison(t1, t2, foes, style):
         return 0
     if t1 <= 0 and t2 <= 0:
-        return 70 if style in ("jungler", "hunter") else 50 + foes
+        return 70 if style in ("jungler", "hunter", "carry") else 50 + foes
     if t1 <= 0:
-        if style in ("lane", "jungler", "defender", "hunter"):
+        if style in ("lane", "jungler", "defender", "hunter", "carry"):
             return 40
         raw = 2 + 2 * max(t2, 0) + 3
         return raw - 4 if mine else raw
-    if style == "lane":
+    if style in ("lane", "carry"):
         return 30
     return 8 if mine == 0 and foes >= t1 else 4
 
@@ -388,8 +394,8 @@ def lane_value(g: Game, p: str, lane: str) -> int:
         attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
         if lane == "mid" and mid_door(g, p):
             attack += 1
-    elif style == "hunter":
-        # Same thin-lane stack as a jungler. The bodies a jungler would park in the camp stay on the map.
+    elif style in ("hunter", "carry"):
+        # Hunter never parks a body in the camp. Carry uses the same thin-lane push once the break is held.
         attack = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient_open)
     else:
         crowd = max(0, mine - 2) if style == "lane" else mine * 3
@@ -430,21 +436,23 @@ def mid_door(g: Game, p: str) -> bool:
 def jungle_value(g: Game, p: str) -> int:
     """Balanced farms for 5. A jungler waits until round 3, then sends one hero."""
     style = g.style[p]
-    if style in ("lane", "defender"):
+    if style in ("lane", "defender", "hunter"):
         return -999
     camp = g.camps[p]
     if camp is None or camp.hp <= 0:
         return -999
     mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
-    if style == "jungler":
+    if style in ("jungler", "carry"):
         if g.round <= 2:
             return -999
         cap = jungler_cap(camp.kind)
         if mine >= cap:
             return -999
-        return 19 if camp.kind in ("roshan", "tormentor") else 18
-    if style == "hunter":
-        return -999
+        boss = camp.kind in ("roshan", "tormentor")
+        # Carry's camp beats a healthy Tier 1 and loses to an open Tier 2.
+        if style == "carry":
+            return 21 if boss else 20
+        return 19 if boss else 18
     if lane_heroes(g, p) < 2:
         return -999
     cap = 2 if camp.kind == "roshan" else 3
@@ -1003,6 +1011,112 @@ def jungler_rotate(g: Game) -> None:
         g.invade[p].append(hero)
 
 
+# Top – Dire Jungle – Mid – Radiant Jungle – Bottom. A lane with no allied towers also touches its neighbor lanes.
+CARRY_CHAIN = {
+    "top": ("direJungle",),
+    "direJungle": ("top", "mid"),
+    "mid": ("direJungle", "radiantJungle"),
+    "radiantJungle": ("mid", "bot"),
+    "bot": ("radiantJungle",),
+}
+CARRY_HOME = {"radiant": "radiantJungle", "dire": "direJungle"}
+
+
+def carry_where(g: Game, p: str) -> list[tuple[Unit, str]]:
+    home = CARRY_HOME[p]
+    rows = [(unit, lane) for lane in LANES for unit in g.board[p][lane] if unit.hp > 0 and not unit.stunned]
+    rows.extend((unit, home) for unit in g.jungle[p] if unit.hp > 0 and not unit.stunned)
+    return rows
+
+
+def carry_neighbors(g: Game, p: str, zone: str) -> list[str]:
+    """One step along the chain. The enemy camp is not a carry destination."""
+    home = CARRY_HOME[p]
+    nxt = [spot for spot in CARRY_CHAIN[zone] if spot in LANES or spot == home]
+    if zone in LANES:
+        tw = g.sides[p].towers[zone]
+        if tw["t1"] <= 0 and tw["t2"] <= 0:
+            base = {"top": ("mid",), "mid": ("top", "bot"), "bot": ("mid",)}[zone]
+            nxt.extend(spot for spot in base if spot not in nxt)
+    return nxt
+
+
+def carry_stay(g: Game, p: str, zone: str) -> int:
+    if zone not in LANES:
+        camp = g.camps[p]
+        mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
+        if g.round > 2 and camp is not None and camp.hp > 0 and mine <= jungler_cap(camp.kind):
+            return 18
+        return 0
+    foe = g.sides[other(p)].towers[zone]
+    own = g.sides[p].towers[zone]
+    foes = sum(1 for unit in g.board[other(p)][zone] if unit.hp > 0)
+    mine = sum(1 for unit in g.board[p][zone] if unit.hp > 0)
+    ancient = foe["t1"] <= 0 and foe["t2"] <= 0
+    stay = jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, mine, ancient)
+    stay += defend_value(own["t1"], own["t2"], foes, max(0, mine - 1), "carry")
+    if mine == 1 and foes > 0 and (own["t1"] > 0 or own["t2"] > 0):
+        stay += 10
+    return stay
+
+
+def carry_dest(g: Game, p: str, zone: str) -> int:
+    home = CARRY_HOME[p]
+    if zone == home:
+        camp = g.camps[p]
+        mine = sum(1 for unit in g.jungle[p] if unit.hp > 0)
+        if g.round > 2 and camp is not None and camp.hp > 0 and mine < jungler_cap(camp.kind):
+            return 20
+        return 0
+    foe = g.sides[other(p)].towers[zone]
+    own = g.sides[p].towers[zone]
+    foes = sum(1 for unit in g.board[other(p)][zone] if unit.hp > 0)
+    friends = sum(1 for unit in g.board[p][zone] if unit.hp > 0)
+    ancient = foe["t1"] <= 0 and foe["t2"] <= 0
+    score = foes * 2 - friends
+    score += jungler_push(tower_pressure(foe["t1"], foe["t2"]), foes, friends, ancient)
+    score += defend_value(own["t1"], own["t2"], foes, friends, "carry")
+    return score
+
+
+def carry_move(g: Game, p: str, unit: Unit, src: str, dest: str) -> None:
+    home = CARRY_HOME[p]
+    if src == home:
+        g.jungle[p].remove(unit)
+    else:
+        g.board[p][src].remove(unit)
+    if dest == home:
+        g.jungle[p].append(unit)
+    else:
+        g.board[p][dest].append(unit)
+
+
+def carry_rotate(g: Game) -> None:
+    """Up to two steps. A farmer leaves for a breaking tower or an open Tier 2, and a spare steps into the camp."""
+    if g.winner is not None:
+        return
+    for p in ("radiant", "dire"):
+        if g.style[p] != "carry":
+            continue
+        moved: set[int] = set()
+        for _ in range(2):
+            best: tuple[int, Unit, str, str] | None = None
+            for unit, zone in carry_where(g, p):
+                if id(unit) in moved:
+                    continue
+                stay = carry_stay(g, p, zone)
+                for dest in carry_neighbors(g, p, zone):
+                    score = carry_dest(g, p, dest)
+                    margin = score - stay
+                    if score > stay and (best is None or margin > best[0]):
+                        best = (margin, unit, zone, dest)
+            if best is None:
+                break
+            _margin, unit, src, dest = best
+            carry_move(g, p, unit, src, dest)
+            moved.add(id(unit))
+
+
 def combat(g: Game) -> None:
     """A window, then the jungle, then a window, then one swing at a time. Two passes open the next step."""
     g.attacked_towers = set()
@@ -1160,6 +1274,7 @@ def play(g: Game, limit: int) -> dict[int, dict[str, Snap]]:
         draw_and_deploy(g)
         combat(g)
         jungler_rotate(g)
+        carry_rotate(g)
         cleanup(g)
         trace[g.round] = end_of_turn(g)
         g.round += 1

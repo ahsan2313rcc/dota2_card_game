@@ -1414,6 +1414,83 @@ describe('opponent decisions', () => {
     expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(1)
   })
 
+  it('a carry stays in lane through round 2', () => {
+    for (const round of [1, 2]) {
+      let s = setup(61, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+      s.round = round
+      forceCamp(s, 'direJungle', 'neutral')
+      s = aiAssign(s, 'dire', 'carry')
+      expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+    }
+  })
+
+  it('a carry farms one hero once the lanes are quiet', () => {
+    let s = setup(62, [], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s.round = 3
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'carry')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(2)
+  })
+
+  it('a carry soaks a Tier 1 stack with one hero and farms the next', () => {
+    let s = setup(63, [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')])
+    s.round = 3
+    s = placeHero(s, 'radiant', 'r1', 'top')
+    s = placeHero(s, 'radiant', 'r2', 'top')
+    s = placeHero(s, 'radiant', 'r3', 'top')
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'carry')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'top')).toHaveLength(1)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(1)
+  })
+
+  it('a carry matches a Tier 2 stack and does not farm through it', () => {
+    let s = setup(64, [hero('r1', 'axe'), hero('r2', 'sven'), hero('r3', 'pudge')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'crystal_maiden')])
+    s.round = 3
+    s = placeHero(s, 'radiant', 'r1', 'bot')
+    s = placeHero(s, 'radiant', 'r2', 'bot')
+    s = placeHero(s, 'radiant', 'r3', 'bot')
+    s.players.dire.structures.towers.bot.t1 = 0
+    forceCamp(s, 'direJungle', 'neutral')
+    s = aiAssign(s, 'dire', 'carry')
+    expect(heroesOnBoard(s, 'dire').every((u) => u.zone === 'bot')).toBe(true)
+  })
+
+  it('a carry leaves the camp for an open Tier 2', () => {
+    let s = setup(65, [hero('a', 'sven')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s.players.dire.structures.towers.bot.t1 = 0
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 3
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'carry')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('bot')
+  })
+
+  it('a carry stays on the camp while the only push is a healthy Tier 1', () => {
+    let s = setup(66, [hero('a', 'sven')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 3
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'carry')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('radiantJungle')
+  })
+
+  it('a carry steps off the camp to hold a Tier 1 a stack would break', () => {
+    let s = setup(67, [hero('a', 'sven')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
+    s = placeHero(s, 'radiant', 'a', 'radiantJungle')
+    s = placeHero(s, 'dire', 'd1', 'bot')
+    s = placeHero(s, 'dire', 'd2', 'bot')
+    s = placeHero(s, 'dire', 'd3', 'bot')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 3
+    s.phase = 'rotate'
+    s = aiRotate(s, 'radiant', 'carry')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('bot')
+  })
+
   it('defends a Tier 2 instead of farming when an attacker is on it', () => {
     let s = setup(14, [hero('r1', 'axe')], [hero('d1', 'lina'), hero('d2', 'tidehunter'), hero('d3', 'pudge')])
     s = placeHero(s, 'dire', 'd1', 'top')

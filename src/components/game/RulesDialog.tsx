@@ -32,7 +32,7 @@ export function RulesDialog() {
       </DialogTrigger>
       <DialogContent initialFocus={false} className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
-          <DialogTitle>Dota: The Ancient's Duel — quick rules</DialogTitle>
+          <DialogTitle>Dota2 Card Game: Ancient's Duel — quick rules</DialogTitle>
           <DialogDescription>Four reference cards. The card on a hero, item, rune, or neutral still wins.</DialogDescription>
         </DialogHeader>
         <RuleCards />

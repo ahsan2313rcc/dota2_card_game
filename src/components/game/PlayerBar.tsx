@@ -1,11 +1,13 @@
 import { Castle, Coins, Layers, Skull, Sparkles, Users } from 'lucide-react'
 import { PLAYER_LABEL, handCount, heroesOnBoard, openedLanes, other } from '@/game/engine'
+import { useTable } from '@/game/table'
 import { ANCIENT_HP, BOARD_LIMIT, HAND_LIMIT, type GameState, type PlayerId } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { CardBack } from './HandCard'
 import { SIDE_STYLE } from './styles'
 
 export function PlayerBar({ s, player, subtitle }: { s: GameState; player: PlayerId; subtitle: string }) {
+  const you = useTable().you
   const pl = s.players[player]
   const side = SIDE_STYLE[player]
   const ancientPct = (pl.structures.ancient / ANCIENT_HP) * 100
@@ -29,7 +31,7 @@ export function PlayerBar({ s, player, subtitle }: { s: GameState; player: Playe
         value={<span className={handCount(pl) > HAND_LIMIT ? 'text-amber-300' : undefined}>{handCount(pl)}/{HAND_LIMIT}</span>}
       />
       <Stat icon={<Skull className="size-4 text-zinc-400" />} label="Discard" value={s.heroDiscard.filter((h) => h.owner === player).length} />
-      {player === 'dire' && <CardBack count={pl.hand.length} />}
+      {player !== you && <CardBack count={pl.hand.length} />}
       <div className="flex min-w-40 flex-1 items-center gap-2">
         <Castle className="size-4 text-zinc-300" />
         <div className="flex-1">

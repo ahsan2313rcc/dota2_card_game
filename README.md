@@ -1,6 +1,6 @@
-# Dota: The Ancient's Duel
+# Dota2 Card Game: Ancient's Duel
 
-A browser prototype of a Dota 2–inspired lane-battle card game. You play Radiant against a simple Dire AI on a board that mirrors the Dota 2 minimap: three lanes and two jungles, linked by a rotation path. The goal is to destroy the enemy Ancient.
+A browser card game in the shape of a Dota 2 match. Play Radiant against a Dire AI, or host a room and play Dire against a friend. The board mirrors the Dota 2 minimap: three lanes and two jungles, linked by a rotation path. The goal is to destroy the enemy Ancient.
 
 Stack: React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui (Base UI), Vitest.
 
@@ -8,7 +8,8 @@ Stack: React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui (Base UI), Vitest.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5741
+npm run dev        # http://localhost:5741  (the page and the multiplayer socket)
+npm start          # serve dist/ and the socket on port 5741, after npm run build
 npm test           # engine tests, including simulated AI-vs-AI games
 npm run sim        # balance report: AI-vs-AI games per comeback rule set (GAMES=1000 by default)
 python3 -m sim     # Python viability sim, version 3 economy (python3 -m sim --games 200)
@@ -17,6 +18,14 @@ npm run lint
 ```
 
 Debugging: open `http://localhost:5741/?autoplay=6&seed=12` and the AI plays both sides for 6 rounds with a fixed seed. You can then inspect the board at that point.
+
+## Online
+
+`npm run dev` hosts the page and a WebSocket room at `/ws`. From the home screen choose **Play online**, create a room, and send the four-letter code (or the `?room=` link) to the other player. The host is Radiant and starts the match once Dire has joined. Both sides draw, assign, and rotate at the same time; interrupts still take turns, with a 5 second window.
+
+The hands, decks, face-down tower cards, and heroes placed this round stay on the server. Each browser only receives its own seat.
+
+`npm start` serves the production build and the same socket on port `5741` (override with `PORT`). A static host such as Vercel can serve the page, but the rooms need this process. Point the page at it with `VITE_WS_URL=wss://your-server.example/ws` before `npm run build`.
 
 ## Project layout
 

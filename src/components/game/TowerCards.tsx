@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowLeftRight } from 'lucide-react'
 import { getItem } from '@/game/cards'
 import { LANE_LABEL } from '@/game/engine'
-import { HUMAN } from '@/game/useGame'
+import { useTable } from '@/game/table'
 import { LANES, type GameState, type LaneId, type TowerTier } from '@/game/types'
 import { cn } from '@/lib/utils'
 
@@ -11,7 +11,7 @@ const TIERS: TowerTier[] = ['t1', 't2']
 /** The face-down card under each of your towers. Before the first reveal you may swap cards within a tier. */
 export function TowerCards({ s, onSwap }: { s: GameState; onSwap: (tier: TowerTier, a: LaneId, b: LaneId) => void }) {
   const [picked, setPicked] = useState<{ tier: TowerTier; lane: LaneId } | null>(null)
-  const pl = s.players[HUMAN]
+  const pl = s.players[useTable().you]
   const canSwap = s.round === 1 && (s.phase === 'draw' || s.phase === 'assign')
 
   function click(tier: TowerTier, lane: LaneId) {

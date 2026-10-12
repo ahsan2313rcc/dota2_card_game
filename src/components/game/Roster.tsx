@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { getHero } from '@/game/cards'
 import { ZONE_LABEL, campHolder, laneRole, lineup, shieldBlockReason, ultBlockReason, ultCost, unitName } from '@/game/engine'
-import { HUMAN } from '@/game/useGame'
+import { useTable } from '@/game/table'
 import { ZONES, isLane, type CampId, type GameState, type Unit } from '@/game/types'
 import { cn } from '@/lib/utils'
 import { activeStatuses } from './statuses'
@@ -21,21 +21,22 @@ export interface RosterActions {
 
 /** Your units grouped by zone, with the controls that don't fit on the minimap. */
 export function Roster({ s, actions }: { s: GameState; actions: RosterActions }) {
-  const zones = ZONES.filter((z) => lineup(s, HUMAN, z).length > 0)
+  const you = useTable().you
+  const zones = ZONES.filter((z) => lineup(s, you, z).length > 0)
   if (zones.length === 0) {
     return <p className="text-xs text-zinc-500">Nothing on the board yet. Place heroes and creeps during the Assign step.</p>
   }
   return (
     <div className="space-y-3">
       {zones.map((zone) => {
-        const ids = lineup(s, HUMAN, zone)
+        const ids = lineup(s, you, zone)
         const camp = !isLane(zone) ? (zone as CampId) : null
-        const holds = camp ? campHolder(s, camp) === HUMAN : false
+        const holds = camp ? campHolder(s, camp) === you : false
         return (
           <div key={zone}>
             <div className="mb-1 flex items-center justify-between text-[10px] tracking-wider text-zinc-500 uppercase">
               <span>
-                {ZONE_LABEL[zone]} · {laneRole(HUMAN, zone)}
+                {ZONE_LABEL[zone]} · {laneRole(you, zone)}
               </span>
               {camp && (
                 <span className="flex items-center gap-1 normal-case">
@@ -49,7 +50,7 @@ export function Roster({ s, actions }: { s: GameState; actions: RosterActions })
                           onClick={() => actions.onFocus(camp, f)}
                           className={cn(
                             'rounded px-1.5 py-0.5 text-[10px]',
-                            s.players[HUMAN].campFocus[camp] === f ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300',
+                            s.players[you].campFocus[camp] === f ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300',
                           )}
                         >
                           {f === 'neutral' ? 'Neutral' : 'Enemy'}

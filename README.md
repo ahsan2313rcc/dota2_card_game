@@ -21,7 +21,7 @@ Debugging: open `http://localhost:5741/?autoplay=6&seed=12` and the AI plays bot
 
 ## Online
 
-`npm run dev` hosts the page and a WebSocket room at `/ws`. From the home screen choose **Play online**, create a room, and send the four-letter code (or the `?room=` link) to the other player. The host is Radiant and starts the match once Dire has joined. Both sides draw, assign, and rotate at the same time; interrupts still take turns, with a 5 second window.
+`npm run dev` hosts the page and a WebSocket room at `/ws`. **Play online** opens a lobby of tables waiting for Dire. **Find a match** sits you at the oldest open table, or hosts one if the lobby is empty. The duel starts as soon as both seats are filled. You can still host a table and send the four-letter code. Both sides draw, assign, and rotate at the same time; interrupts still take turns, with a 5 second window.
 
 The hands, decks, face-down tower cards, and heroes placed this round stay on the server. Each browser only receives its own seat.
 

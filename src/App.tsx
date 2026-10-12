@@ -85,7 +85,7 @@ function Home({ onLocal, onOnline }: { onLocal: () => void; onOnline: () => void
           >
             <Users className="mb-3 size-5 text-emerald-300" />
             <div className="font-semibold">Play online</div>
-            <p className="mt-1 text-sm text-zinc-400">Host a four-letter room. A friend joins the link and takes Dire.</p>
+            <p className="mt-1 text-sm text-zinc-400">Find a match in the lobby, or host a table and wait for someone to sit down.</p>
           </button>
         </div>
       </div>

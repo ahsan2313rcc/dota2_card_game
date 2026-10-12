@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claimSeat, createRoom, applyAction, startMatch, viewFor } from './online'
+import { claimSeat, createRoom, applyAction, listOpenTables, startMatch, viewFor } from './online'
 
 function match() {
   const room = createRoom('TEST')
@@ -10,6 +10,31 @@ function match() {
 }
 
 describe('online rooms', () => {
+  it('lists open tables oldest first and skips full or started ones', () => {
+    const older = createRoom('AAAA')
+    older.openedAt = 1
+    claimSeat(older, 'radiant', 'Ada')
+    const newer = createRoom('BBBB')
+    newer.openedAt = 2
+    claimSeat(newer, 'radiant', 'Bea')
+    const started = createRoom('CCCC')
+    started.openedAt = 0
+    claimSeat(started, 'radiant', 'Cy')
+    started.started = true
+    const full = createRoom('DDDD')
+    full.openedAt = 3
+    claimSeat(full, 'radiant', 'Dee')
+    claimSeat(full, 'dire', 'Eve')
+    const offline = createRoom('EEEE')
+    offline.openedAt = 4
+    claimSeat(offline, 'radiant', 'Fay')
+    const tables = listOpenTables([started, newer, full, offline, older], (code) => code !== 'EEEE')
+    expect(tables).toEqual([
+      { code: 'AAAA', host: 'Ada', towerGold: true },
+      { code: 'BBBB', host: 'Bea', towerGold: true },
+    ])
+  })
+
   it('waits until both players lock the draw step', () => {
     const room = match()
     expect(room.state?.phase).toBe('draw')

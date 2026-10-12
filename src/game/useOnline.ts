@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { NetAction, TableMessage } from './online'
+import type { LobbyMessage, NetAction, TableMessage } from './online'
 import type { Action } from './useGame'
 
 export const SEAT_KEY = 'ancients-seat'
 
 type ClientMsg =
+  | { type: 'lobby' }
   | { type: 'create'; name: string }
   | { type: 'join'; code: string; name: string }
+  | { type: 'match'; name: string }
   | { type: 'resume'; code: string; token: string }
   | { type: 'start' }
   | { type: 'towerGold'; on: boolean }
@@ -23,7 +25,10 @@ export function useOnline() {
   const ws = useRef<WebSocket | null>(null)
   const resume = useRef<{ code: string; token: string } | null>(null)
   const retry = useRef<number | null>(null)
+  const browsing = useRef(false)
+  const seated = useRef(false)
   const [table, setTable] = useState<TableMessage | null>(null)
+  const [lobby, setLobby] = useState<LobbyMessage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'connecting' | 'open' | 'closed'>('idle')
 
@@ -34,6 +39,7 @@ export function useOnline() {
 
   const openSocket = useCallback(function open(first: ClientMsg) {
     clearRetry()
+    browsing.current = first.type === 'lobby'
     const previous = ws.current
     const socket = new WebSocket(socketUrl())
     ws.current = socket
@@ -48,12 +54,22 @@ export function useOnline() {
     }
     socket.onmessage = (ev) => {
       if (ws.current !== socket) return
-      const data = JSON.parse(String(ev.data)) as TableMessage | { type: 'error'; message: string }
+      const data = JSON.parse(String(ev.data)) as TableMessage | LobbyMessage | { type: 'error'; message: string }
       if (data.type === 'error') {
         setError(data.message)
+        if (!seated.current && !browsing.current && ws.current === socket) {
+          browsing.current = true
+          socket.send(JSON.stringify({ type: 'lobby' }))
+        }
+        return
+      }
+      if (data.type === 'lobby') {
+        setLobby(data)
         return
       }
       if (data.type === 'table') {
+        browsing.current = false
+        seated.current = true
         setError(null)
         setTable(data)
         const saved = { code: data.code, token: data.token }
@@ -67,23 +83,27 @@ export function useOnline() {
     socket.onclose = () => {
       if (ws.current !== socket) return
       setStatus('closed')
-      if (!resume.current) return
       const saved = resume.current
+      const stillBrowsing = browsing.current
+      if (!saved && !stillBrowsing) return
       retry.current = window.setTimeout(() => {
         if (ws.current !== socket) return
-        open({ type: 'resume', code: saved.code, token: saved.token })
+        open(saved ? { type: 'resume', code: saved.code, token: saved.token } : { type: 'lobby' })
       }, 1000)
     }
   }, [])
 
   function close() {
     clearRetry()
+    browsing.current = false
+    seated.current = false
     resume.current = null
     sessionStorage.removeItem(SEAT_KEY)
     const socket = ws.current
     ws.current = null
     socket?.close()
     setTable(null)
+    setLobby(null)
     setStatus('idle')
     setError(null)
   }
@@ -111,7 +131,7 @@ export function useOnline() {
     [],
   )
 
-  return { table, error, status, openSocket, close, sendAction, send }
+  return { table, lobby, error, status, openSocket, close, sendAction, send }
 }
 
 function toNet(action: Action): NetAction | null {

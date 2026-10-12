@@ -70,6 +70,20 @@ export interface Room {
   rematch: ReadyMap
   towerGold: boolean
   started: boolean
+  /** When the host opened the table. The lobby pairs the oldest open table first. */
+  openedAt: number
+}
+
+export interface OpenTable {
+  code: string
+  host: string
+  towerGold: boolean
+}
+
+export interface LobbyMessage {
+  type: 'lobby'
+  rooms: OpenTable[]
+  looking: number
 }
 
 export interface TableMessage {
@@ -126,7 +140,20 @@ export function createRoom(code: string): Room {
     rematch: blankReady(),
     towerGold: true,
     started: false,
+    openedAt: Date.now(),
   }
+}
+
+/** Tables a new player can sit at: host is online, Dire is empty, the match has not started. Oldest first. */
+export function listOpenTables(rooms: Iterable<Room>, hostOnline: (code: string) => boolean): OpenTable[] {
+  return [...rooms]
+    .filter((room) => !room.started && !room.tokens.dire && !!room.names.radiant && hostOnline(room.code))
+    .sort((a, b) => a.openedAt - b.openedAt)
+    .map((room) => ({
+      code: room.code,
+      host: room.names.radiant || 'Radiant',
+      towerGold: room.towerGold,
+    }))
 }
 
 export function seatToken(): string {

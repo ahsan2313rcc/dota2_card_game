@@ -7,6 +7,7 @@ import {
   isNetAction,
   setTowerGold,
   startMatch,
+  listOpenTables,
   viewFor,
   type Room,
   type TableMessage,
@@ -17,6 +18,7 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const rooms = new Map<string, Room>()
 const sockets = new Map<string, Partial<Record<PlayerId, WebSocket>>>()
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
+const lobby = new Set<WebSocket>()
 
 interface ClientMsg {
   type?: string
@@ -101,7 +103,29 @@ function fail(socket: WebSocket, message: string) {
   if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'error', message }))
 }
 
+function publishLobby() {
+  const payload = JSON.stringify({
+    type: 'lobby',
+    rooms: listOpenTables(rooms.values(), (code) => !!sockets.get(code)?.radiant),
+    looking: lobby.size,
+  })
+  for (const socket of lobby) {
+    if (socket.readyState === 1) socket.send(payload)
+  }
+}
+
+function leaveLobby(socket: WebSocket) {
+  lobby.delete(socket)
+}
+
+/** Dire sitting down starts the duel. The host can still press start if this has not run. */
+function beginIfReady(room: Room) {
+  if (room.started || !room.tokens.radiant || !room.tokens.dire) return null
+  return startMatch(room)
+}
+
 function takeSeat(socket: WebSocket, room: Room, seat: PlayerId) {
+  leaveLobby(socket)
   const seats = sockets.get(room.code) ?? {}
   const previous = seats[seat]
   if (previous && previous !== socket) previous.close()
@@ -109,6 +133,28 @@ function takeSeat(socket: WebSocket, room: Room, seat: PlayerId) {
   sockets.set(room.code, seats)
   socket.roomCode = room.code
   socket.seat = seat
+}
+
+function hostTable(socket: WebSocket, name: string) {
+  const room = createRoom(makeCode())
+  rooms.set(room.code, room)
+  const token = claimSeat(room, 'radiant', cleanName(name) || 'Radiant')
+  socket.token = token
+  takeSeat(socket, room, 'radiant')
+  broadcast(room)
+  publishLobby()
+}
+
+function sitDire(socket: WebSocket, room: Room, name: string) {
+  if (room.started) return fail(socket, 'That match has already started.')
+  if (room.tokens.dire && sockets.get(room.code)?.dire) return fail(socket, 'That room already has two players.')
+  const token = claimSeat(room, 'dire', cleanName(name) || 'Dire')
+  socket.token = token
+  takeSeat(socket, room, 'dire')
+  const error = beginIfReady(room)
+  if (error) fail(socket, error)
+  broadcast(room)
+  publishLobby()
 }
 
 function onMessage(socket: WebSocket, raw: RawData) {
@@ -119,24 +165,36 @@ function onMessage(socket: WebSocket, raw: RawData) {
     return fail(socket, 'That message was not valid.')
   }
 
+  if (msg.type === 'lobby') {
+    if (socket.roomCode) return
+    lobby.add(socket)
+    publishLobby()
+    return
+  }
+
   if (msg.type === 'create') {
-    const room = createRoom(makeCode())
-    rooms.set(room.code, room)
-    const token = claimSeat(room, 'radiant', cleanName(msg.name) || 'Radiant')
-    socket.token = token
-    takeSeat(socket, room, 'radiant')
-    broadcast(room)
+    if (socket.roomCode) return fail(socket, 'You are already in a match.')
+    hostTable(socket, msg.name ?? '')
+    return
+  }
+
+  if (msg.type === 'match') {
+    if (socket.roomCode) return fail(socket, 'You are already in a match.')
+    const open = listOpenTables(rooms.values(), (code) => !!sockets.get(code)?.radiant)[0]
+    const room = open ? rooms.get(open.code) : undefined
+    if (room && sockets.get(room.code)?.radiant !== socket) {
+      sitDire(socket, room, msg.name ?? '')
+      return
+    }
+    hostTable(socket, msg.name ?? '')
     return
   }
 
   if (msg.type === 'join') {
     const room = rooms.get(cleanCode(msg.code))
     if (!room) return fail(socket, 'No room with that code.')
-    if (room.tokens.dire && sockets.get(room.code)?.dire) return fail(socket, 'That room already has two players.')
-    const token = claimSeat(room, 'dire', cleanName(msg.name) || 'Dire')
-    socket.token = token
-    takeSeat(socket, room, 'dire')
-    broadcast(room)
+    if (socket.roomCode === room.code) return fail(socket, 'You are already in this room.')
+    sitDire(socket, room, msg.name ?? '')
     return
   }
 
@@ -147,7 +205,10 @@ function onMessage(socket: WebSocket, raw: RawData) {
     if (!seat) return fail(socket, 'This browser is not seated in that room.')
     socket.token = msg.token
     takeSeat(socket, room, seat)
+    const error = beginIfReady(room)
+    if (error) fail(socket, error)
     broadcast(room)
+    publishLobby()
     return
   }
 
@@ -160,6 +221,7 @@ function onMessage(socket: WebSocket, raw: RawData) {
     if (seat !== 'radiant') return fail(socket, 'Only the host can change tower gold.')
     setTowerGold(room, !!msg.on)
     broadcast(room)
+    publishLobby()
     return
   }
 
@@ -168,6 +230,7 @@ function onMessage(socket: WebSocket, raw: RawData) {
     const error = startMatch(room)
     if (error) return fail(socket, error)
     broadcast(room)
+    publishLobby()
     return
   }
 
@@ -194,14 +257,18 @@ export function attachMultiplayer(httpServer: Server) {
   wss.on('connection', (socket) => {
     socket.on('message', (data) => onMessage(socket, data))
     socket.on('close', () => {
+      const wasLooking = lobby.delete(socket)
       const code = socket.roomCode
       const seat = socket.seat
-      if (!code || !seat) return
-      const seats = sockets.get(code)
-      if (seats?.[seat] !== socket) return
-      delete seats[seat]
-      const room = rooms.get(code)
-      if (room) broadcast(room)
+      if (code && seat) {
+        const seats = sockets.get(code)
+        if (seats?.[seat] === socket) {
+          delete seats[seat]
+          const room = rooms.get(code)
+          if (room) broadcast(room)
+        }
+      }
+      if (wasLooking || code) publishLobby()
     })
   })
   return wss

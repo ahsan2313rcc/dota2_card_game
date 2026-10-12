@@ -788,9 +788,11 @@ function buybackIndex(s: GameState, heroId: string): number {
   return -1
 }
 
-export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string): string | null {
+export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string, lane?: LaneId): string | null {
   if (!rules(s).buyback) return 'Buyback is off'
-  if (s.phase !== 'draw') return 'Buyback happens during the Draw step'
+  const fighting = s.phase === 'response' && s.priority === p
+  if (s.phase !== 'draw' && !fighting) return 'Buyback happens during Draw, or after you call an interrupt'
+  if (heroesOnBoard(s, p).length >= BOARD_LIMIT) return 'Buyback needs fewer than 5 heroes on the board'
   const pl = s.players[p]
   if (buybackIndex(s, heroId) < 0) {
     if (!s.heroDiscard.some((h) => h.cardId === heroId)) return 'Not in the shared discard'
@@ -798,11 +800,12 @@ export function buybackBlockReason(s: GameState, p: PlayerId, heroId: string): s
     return 'This hero cannot be bought back'
   }
   if (pl.gold < buybackCost(s, p)) return `Need ${buybackCost(s, p)} Gold`
+  if (lane !== undefined && !isLane(lane)) return 'Buyback deploys to a lane'
   return null
 }
 
-export function buyback(state: GameState, p: PlayerId, heroId: string): GameState {
-  if (buybackBlockReason(state, p, heroId)) return state
+export function buyback(state: GameState, p: PlayerId, heroId: string, lane: LaneId): GameState {
+  if (buybackBlockReason(state, p, heroId, lane) || !isLane(lane)) return state
   const s = clone(state)
   const pl = s.players[p]
   const cost = buybackCost(s, p)
@@ -810,9 +813,15 @@ export function buyback(state: GameState, p: PlayerId, heroId: string): GameStat
   const fallen = s.heroDiscard[index]
   pl.gold -= cost
   s.heroDiscard.splice(index, 1)
-  pl.hand.push({ iid: newId(s, 'c'), type: 'hero', cardId: heroId, buybackUsed: true })
+  const hp = getHero(heroId).maxHp ?? 2
+  const u = makeUnit(s, { kind: 'hero', cardId: heroId, owner: p, zone: lane, hp, buybackUsed: true })
+  s.zones[lane][p].push(u.uid)
+  const api = kitApi(s)
+  onEnter(api, u)
+  enemyEntered(api, u)
   const whose = fallen.owner === p ? '' : `${PLAYER_LABEL[fallen.owner]}'s `
-  log(s, `${PLAYER_LABEL[p]} buys back ${whose}${getHero(heroId).name} for ${cost} Gold. It cannot be bought back again.`, tone(p))
+  log(s, `${PLAYER_LABEL[p]} buys back ${whose}${getHero(heroId).name} for ${cost} Gold and deploys them to ${ZONE_LABEL[lane]}. The hero cannot be bought back again.`, tone(p))
+  if (s.phase === 'response') tookPriority(s, p)
   return s
 }
 
@@ -1040,11 +1049,12 @@ function tookPriority(s: GameState, p: PlayerId) {
   log(s, `${PLAYER_LABEL[s.priority]} has priority.`, 'phase')
 }
 
-/** True when this side can still play an item, rune, reward, ability, or Shield. */
+/** True when this side can still play an item, rune, reward, ability, Shield, or buyback. */
 export function canInterrupt(s: GameState, p: PlayerId): boolean {
   if (s.phase !== 'response' || s.priority !== p || s.winner) return false
   if (s.players[p].hand.some((c) => c.type === 'item' && !itemBlockReason(s, p, c))) return true
-  return heroesOnBoard(s, p).some((u) => !ultBlockReason(s, u.uid) || !shieldBlockReason(s, p, u.uid))
+  if (heroesOnBoard(s, p).some((u) => !ultBlockReason(s, u.uid) || !shieldBlockReason(s, p, u.uid))) return true
+  return buybackWindow(s).some((h) => !buybackBlockReason(s, p, h.cardId))
 }
 
 /** True when this side can still spend Gold on a draw or a buyback. */
@@ -1175,9 +1185,15 @@ export function itemLanes(s: GameState, p: PlayerId, itemId: string, heroUid?: s
 }
 
 export function itemBlockReason(s: GameState, p: PlayerId, card: HandCard): string | null {
-  if (s.phase !== 'response') return 'Items are interrupts during combat'
-  if (s.priority !== p) return 'Wait for priority'
   const item = getItem(card.cardId)
+  const map = item.timing === 'map'
+  if (s.phase === 'assign') {
+    if (!map) return 'Map cards are played during Assign'
+  } else if (s.phase !== 'response') {
+    return map ? 'Map cards are played during Assign' : 'Items are interrupts during combat'
+  } else if (s.priority !== p) {
+    return 'Wait for priority'
+  }
   const cost = item.cost ?? 0
   if (cost > 0 && s.players[p].gold < cost) return `Needs ${cost} Gold`
   if (item.target === 'lane') return itemLanes(s, p, card.cardId).length ? null : 'No hero can move'
@@ -1187,7 +1203,7 @@ export function itemBlockReason(s: GameState, p: PlayerId, card: HandCard): stri
 
 function teleport(s: GameState, u: Unit, lane: LaneId) {
   relocate(s, u, lane, false, 'tp')
-  u.placedRound = s.round
+  if (s.phase !== 'assign') u.placedRound = s.round
 }
 
 export function playItem(state: GameState, p: PlayerId, handIid: string, targetUid?: string, lane?: LaneId): GameState {
@@ -1396,7 +1412,7 @@ export function playItem(state: GameState, p: PlayerId, handIid: string, targetU
     }
   }
   discardItem(s, item.id)
-  tookPriority(s, p)
+  if (s.phase === 'response') tookPriority(s, p)
   return s
 }
 

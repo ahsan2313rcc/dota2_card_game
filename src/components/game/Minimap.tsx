@@ -198,7 +198,7 @@ export function Minimap({ s, ia, viewer }: { s: GameState; ia: MapInteraction; v
           lineup(s, p, zone).map((uid, i) => {
             const unit = s.units[uid]
             // The other side's heroes placed this round stay face down until Show.
-            if (s.phase === 'assign' && unit.owner !== viewer && unit.owner !== 'neutral' && unit.placedRound === s.round) return null
+            if ((s.phase === 'assign' || s.phase === 'draw') && unit.owner !== viewer && unit.owner !== 'neutral' && unit.placedRound === s.round) return null
             return (
               <UnitToken
                 key={uid}

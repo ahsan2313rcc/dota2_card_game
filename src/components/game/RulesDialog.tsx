@@ -58,20 +58,22 @@ export function RulesDialog() {
                 every enemy hero in a lane. The rune deck is 20 cards (10 runes, two
                 copies). Runes are free and do not count toward the hand limit.
                 Dead heroes from both sides go into one shared discard. Buyback returns any hero from the last 10 in that
-                pile, whoever it belonged to, for 4 Gold, or 5 if you have more towers standing than the enemy. Each hero
-                can be bought back only once.
+                pile, whoever it belonged to, for 4 Gold, or 5 if you have more towers standing than the enemy. It is
+                allowed only while you have fewer than 5 heroes on the board, and the hero is deployed straight into a
+                lane. Each hero can be bought back only once.
               </li>
               <li>
-                Assign: both sides place at the same time, up to 3 heroes (board limit 5) into lanes or your own jungle, and creep cards into lanes. The enemy jungle is not an assign target. Heroes placed this round stay hidden from the other side. Position 1
+                Assign: both sides place at the same time, up to 3 heroes (board limit 5) into lanes or your own jungle, and creep cards into lanes. Town Portal Scroll, Ward, and Smoke are map cards: play them on a lane during Assign. The enemy jungle is not an assign target. Heroes placed this round stay hidden from the other side. Position 1
                 defends first.
               </li>
               <li>Show: both sides flip.</li>
               <li>
                 Combat is one window, not an item step and an ability step. Items, runes, tower cards, boss rewards,
-                abilities, and a 3 XP Shield are interrupts. Play one and it resolves immediately. The other side then has 5 seconds
-                to counter with a card or pass. A side with nothing it can play passes on its own, and a Draw step with no Gold
-                left ends on its own. Odd rounds Radiant starts. Even rounds Dire starts. Two passes in a row resolve the next
-                action, and the bar names that action before you pass. You can interrupt again between swings and after the towers fire.
+                abilities, a 3 XP Shield, and buyback are interrupts. Pass selects itself after 5 seconds. Press Interrupt
+                and you have 30 seconds to play an item, ability, Shield, or buyback. A side with nothing it can play passes
+                on its own, and a Draw step with no Gold left ends on its own. Odd rounds Radiant starts. Even rounds Dire
+                starts. Two passes in a row resolve the next action, and the bar names that action before you pass. You can
+                interrupt again between swings and after the towers fire.
               </li>
               <li>
                 Abilities: each hero has one printed ability. Passives are always on. An active ability costs its printed XP
@@ -134,7 +136,7 @@ export function RulesDialog() {
             still a tie, both basic attacks happen at the same time. Abilities do not use this order: the last one declared
             resolves first.
           </Section>
-          <Section title="Not in the prototype yet">Map cards, hot-seat or online multiplayer.</Section>
+          <Section title="Map cards">Town Portal Scroll, Ward, and Smoke are marked Assign phase · Map. Play them while both sides are assigning. Ward and Smoke resolve at the next Show.</Section>
           </div>
         </details>
       </DialogContent>

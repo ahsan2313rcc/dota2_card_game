@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aiAssign, aiDraw, aiOneResponse, aiRotate, aiUlts, playAiRound } from './ai'
-import { getHero, HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
+import { getHero, getItem, HEROES, REGULAR_CREEPS, SIEGE_CREEPS, TOWER_CARD_IDS } from './cards'
 import {
   buyShield,
   buyback,
@@ -18,6 +18,7 @@ import {
   endRotation,
   handCount,
   heroesOnBoard,
+  itemBlockReason,
   itemTargets,
   lineup,
   newGame,
@@ -946,10 +947,11 @@ describe('comeback rules and rotation', () => {
     expect(buybackCost(s, 'radiant')).toBe(4)
     s.players.dire.structures.towers.mid.t1 = 0
     expect(buybackCost(s, 'radiant')).toBe(5)
-    const after = buyback(s, 'radiant', 'axe')
+    const after = buyback(s, 'radiant', 'axe', 'mid')
     expect(after.players.radiant.gold).toBe(4)
     expect(after.heroDiscard).toHaveLength(0)
-    expect(after.players.radiant.hand.some((c) => c.cardId === 'axe' && c.buybackUsed)).toBe(true)
+    expect(after.players.radiant.hand.some((c) => c.cardId === 'axe')).toBe(false)
+    expect(heroesOnBoard(after, 'radiant').some((u) => u.cardId === 'axe' && u.zone === 'mid' && u.buybackUsed)).toBe(true)
   })
 
   it('buyback can take any of the last 10 heroes, from either side', () => {
@@ -963,9 +965,9 @@ describe('comeback rules and rotation', () => {
     s.players.radiant.gold = 8
     expect(buybackBlockReason(s, 'radiant', ids[0])).toMatch(/last 10/)
     expect(buybackBlockReason(s, 'radiant', ids[1])).toBeNull()
-    const stolen = buyback(s, 'radiant', ids[1])
+    const stolen = buyback(s, 'radiant', ids[1], 'bot')
     expect(stolen.heroDiscard.some((h) => h.cardId === ids[1])).toBe(false)
-    expect(stolen.players.radiant.hand.some((c) => c.cardId === ids[1] && c.buybackUsed)).toBe(true)
+    expect(heroesOnBoard(stolen, 'radiant').some((u) => u.cardId === ids[1] && u.zone === 'bot' && u.buybackUsed)).toBe(true)
     expect(stolen.players.radiant.gold).toBe(4)
     expect(stolen.log.some((l) => l.text.includes("Dire's") && l.text.includes('buys back'))).toBe(true)
   })
@@ -975,10 +977,7 @@ describe('comeback rules and rotation', () => {
     s.players.radiant.hand = []
     s.heroDiscard = [{ cardId: 'axe', owner: 'radiant', buybackUsed: false }]
     s.players.radiant.gold = 4
-    s = buyback(s, 'radiant', 'axe')
-    const card = s.players.radiant.hand.find((c) => c.cardId === 'axe')!
-    s.phase = 'assign'
-    s = placeHero(s, 'radiant', card.iid, 'mid')
+    s = buyback(s, 'radiant', 'axe', 'mid')
     heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'axe')!.dead = true
     s.phase = 'rotate'
     s = endRotation(s)
@@ -986,6 +985,39 @@ describe('comeback rules and rotation', () => {
     expect(s.unitDiscard.some((c) => c.cardId === 'axe')).toBe(false)
     s.phase = 'draw'
     expect(buybackBlockReason(s, 'radiant', 'axe')).toMatch(/cannot be bought back/)
+  })
+
+  it('refuses buyback at 5 heroes and deploys a legal buyback into the chosen lane', () => {
+    let s = setup(70, [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'tiny'), hero('d', 'pudge'), hero('e', 'wraith_king')])
+    for (const card of ['a', 'b', 'c', 'd', 'e']) {
+      s.players.radiant.placedThisRound = 0
+      s = placeHero(s, 'radiant', card, 'mid')
+    }
+    s.phase = 'draw'
+    s.heroDiscard = [{ cardId: 'lina', owner: 'dire', buybackUsed: false }]
+    s.players.radiant.gold = 8
+    expect(heroesOnBoard(s, 'radiant')).toHaveLength(BOARD_LIMIT)
+    expect(buybackBlockReason(s, 'radiant', 'lina')).toMatch(/fewer than 5/)
+    expect(buyback(s, 'radiant', 'lina', 'top')).toBe(s)
+  })
+
+  it('plays Ward and Smoke during Assign, and they resolve at Show', () => {
+    expect(getItem('smoke').timing).toBe('map')
+    expect(getItem('ward').timing).toBe('map')
+    expect(getItem('tp').timing).toBe('map')
+    let smoked = setup(80, [hero('a', 'sven'), item('sm', 'smoke')])
+    expect(itemBlockReason(smoked, 'radiant', item('x', 'clarity'))).toMatch(/Assign/)
+    smoked = placeHero(smoked, 'radiant', 'a', 'top')
+    smoked = playItem(smoked, 'radiant', 'sm', undefined, 'top')
+    expect(smoked.phase).toBe('assign')
+    smoked = reveal(smoked)
+    expect(heroesOnBoard(smoked, 'radiant')[0].status.invisible).toBe(true)
+
+    let warded = setup(81, [hero('a', 'sven')], [item('w', 'ward')])
+    warded = placeHero(warded, 'radiant', 'a', 'top')
+    warded = playItem(warded, 'dire', 'w', undefined, 'top')
+    warded = reveal(warded)
+    expect(heroesOnBoard(warded, 'radiant')[0].status.revealed).toBe(true)
   })
 
   it('rotation follows the map chain, with a base shortcut from a lane that lost both towers', () => {

@@ -108,6 +108,8 @@ export interface ItemCard {
   cost?: number
   /** How many copies go into the shared item deck. */
   copies?: number
+  /** Map cards are played on a lane during Assign. They can still be played as interrupts. */
+  timing?: 'map'
 }
 
 export interface NeutralCard {

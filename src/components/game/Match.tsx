@@ -46,7 +46,8 @@ import { useTable } from '@/game/table'
 import type { Action } from '@/game/useGame'
 import { BUYBACK_WINDOW, DRAW_CAP, HAND_LIMIT, LANES, PLACE_PER_ROUND, ROTATIONS_PER_ROUND, isLane, type GameState, type HandCard as HandCardT, type Unit, type ZoneId } from '@/game/types'
 
-const INTERRUPT_MS = 5000
+const PASS_MS = 5000
+const PLAY_MS = 30000
 
 export function MatchView({
   s,
@@ -63,6 +64,7 @@ export function MatchView({
   const foeName = table.live === 'online' ? (table.names[foe] ?? PLAYER_LABEL[foe]) : `AI · ${opponentLabel(s.settings.direStyle)}`
   const youName = table.live === 'online' ? (table.names[you] ?? 'You') : 'You'
   const [selectedHand, setSelectedHand] = useState<string | null>(null)
+  const [buybackHero, setBuybackHero] = useState<string | null>(null)
   const [ultCaster, setUltCaster] = useState<string | null>(null)
   const [tpHero, setTpHero] = useState<string | null>(null)
   const [rotator, setRotator] = useState<string | null>(null)
@@ -75,6 +77,7 @@ export function MatchView({
   if (stepKey !== lastStepKey) {
     setLastStepKey(stepKey)
     setSelectedHand(null)
+    setBuybackHero(null)
     setUltCaster(null)
     setTpHero(null)
     setRotator(null)
@@ -83,16 +86,23 @@ export function MatchView({
   if (aimKey !== lastAimKey) {
     setLastAimKey(aimKey)
     setSelectedHand(null)
+    setBuybackHero(null)
     setUltCaster(null)
     setTpHero(null)
     setRotator(null)
   }
 
-  const yourReply = s.phase === 'response' && s.priority === you && s.reply && !s.winner && canInterrupt(s, you)
+  const yourReply = s.phase === 'response' && s.priority === you && !s.winner && canInterrupt(s, you)
   const nothingToPlay = s.phase === 'response' && s.priority === you && !s.winner && !canInterrupt(s, you)
   const nothingToBuy = s.phase === 'draw' && !s.winner && !canSpendGold(s, you)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const flowKey = `${s.round}:${s.phase}:${s.priority}:${s.reply}:${s.passes}:${s.log.length}:${yourReply}:${nothingToPlay}:${nothingToBuy}`
+  const [clockKey, setClockKey] = useState(flowKey)
+  const [windowMs, setWindowMs] = useState(PASS_MS)
+  if (clockKey !== flowKey) {
+    setClockKey(flowKey)
+    setWindowMs(PASS_MS)
+  }
   useEffect(() => {
     if (nothingToBuy) {
       const id = window.setTimeout(() => dispatch({ type: 'endDraw' }), 0)
@@ -107,24 +117,30 @@ export function MatchView({
       return
     }
     const started = Date.now()
-    setSecondsLeft(5)
+    setSecondsLeft(Math.ceil(windowMs / 1000))
     const tick = window.setInterval(() => {
-      const left = INTERRUPT_MS - (Date.now() - started)
+      const left = windowMs - (Date.now() - started)
       setSecondsLeft(Math.max(1, Math.ceil(left / 1000)))
     }, 200)
-    const done = window.setTimeout(() => dispatch({ type: 'pass' }), INTERRUPT_MS)
+    const done = window.setTimeout(() => dispatch({ type: 'pass' }), windowMs)
     return () => {
       window.clearInterval(tick)
       window.clearTimeout(done)
     }
-  }, [flowKey, dispatch, nothingToBuy, nothingToPlay, yourReply])
+  }, [flowKey, windowMs, dispatch, nothingToBuy, nothingToPlay, yourReply])
+
+  function armPlay() {
+    if (!yourReply || windowMs === PLAY_MS) return
+    dispatch({ type: 'hold' })
+    setWindowMs(PLAY_MS)
+  }
 
   const me = s.players[you]
   const selectedCard = me.hand.find((c) => c.iid === selectedHand)
   const selectedItem = selectedCard?.type === 'item' ? getItem(selectedCard.cardId) : undefined
 
   const targetable = useMemo(() => {
-    if (s.phase === 'response' && selectedCard?.type === 'item' && !tpHero) return new Set(itemTargets(s, you, selectedCard.cardId))
+    if ((s.phase === 'response' || s.phase === 'assign') && selectedCard?.type === 'item' && !tpHero) return new Set(itemTargets(s, you, selectedCard.cardId))
     if (s.phase === 'response' && ultCaster) return new Set(ultTargets(s, ultCaster))
     if (s.phase === 'rotate' && !rotator) {
       return new Set(Object.values(s.units).filter((u) => u.owner === you && rotationTargets(s, u.uid).length).map((u) => u.uid))
@@ -142,6 +158,16 @@ export function MatchView({
       return
     }
     if (selectedHand === card.iid) return setSelectedHand(null)
+    if (s.phase === 'assign' && card.type === 'item' && getItem(card.cardId).timing === 'map') {
+      setTpHero(null)
+      const r = itemBlockReason(s, you, card)
+      if (r) return toast.error(`${getItem(card.cardId).name}: ${r}`)
+      if (getItem(card.cardId).target === 'none') {
+        dispatch({ type: 'playItem', handIid: card.iid })
+        return
+      }
+      return setSelectedHand(card.iid)
+    }
     if (s.phase === 'assign' && card.type === 'hero') {
       const r = placeBlockReason(s, you)
       if (r) return toast.error(r)
@@ -152,13 +178,14 @@ export function MatchView({
       setTpHero(null)
       const r = itemBlockReason(s, you, card)
       if (r) return toast.error(`${getItem(card.cardId).name}: ${r}`)
+      armPlay()
       if (getItem(card.cardId).target === 'none') {
         dispatch({ type: 'playItem', handIid: card.iid })
         return
       }
       return setSelectedHand(card.iid)
     }
-    if (card.type === 'item') toast.message(s.phase === 'response' ? 'Wait for priority.' : 'Items are interrupts once both sides have shown.')
+    if (card.type === 'item') toast.message(s.phase === 'response' ? 'Wait for priority.' : getItem(card.cardId).timing === 'map' ? 'Map cards are played during Assign.' : 'Items are interrupts once both sides have shown.')
     else toast.message(`${card.type === 'hero' ? 'Heroes' : 'Creeps'} are placed during the Assign step.`)
   }
 
@@ -168,7 +195,7 @@ export function MatchView({
         setRotator(uid)
       } else if (selectedItem?.target === 'allyHeroToLane') {
         setTpHero(uid)
-      } else if (selectedCard?.type === 'item') {
+      } else if (selectedCard?.type === 'item' && (s.phase === 'response' || s.phase === 'assign')) {
         dispatch({ type: 'playItem', handIid: selectedCard.iid, target: uid })
         setSelectedHand(null)
       } else if (ultCaster) {
@@ -184,12 +211,14 @@ export function MatchView({
   function onShield(u: Unit) {
     const r = shieldBlockReason(s, you, u.uid)
     if (r) return toast.error(r)
+    armPlay()
     dispatch({ type: 'buyShield', uid: u.uid })
   }
 
   function onUlt(u: Unit) {
     const r = ultBlockReason(s, u.uid)
     if (r) return toast.error(`${getHero(u.cardId!).ult.name}: ${r}`)
+    armPlay()
     if (ultNeedsTarget(u)) {
       setUltCaster(ultCaster === u.uid ? null : u.uid)
       return
@@ -199,9 +228,18 @@ export function MatchView({
 
   let dropZones: readonly ZoneId[] = []
   let dropLabel = 'Place in'
-  if (s.phase === 'assign' && selectedCard) {
+  const playing = yourReply && windowMs === PLAY_MS
+  if (buybackHero && (s.phase === 'draw' || playing)) {
+    dropZones = LANES
+    dropLabel = 'Buy back into'
+  } else if (s.phase === 'assign' && selectedCard) {
     if (selectedCard.type === 'creep') dropZones = LANES
     else if (selectedCard.type === 'hero' && !placeBlockReason(s, you)) dropZones = assignableZones(you)
+    else if (selectedCard.type === 'item' && selectedItem?.timing === 'map') {
+      if (selectedItem.target === 'lane') dropZones = itemLanes(s, you, selectedCard.cardId)
+      else if (selectedItem.target === 'allyHeroToLane' && tpHero) dropZones = itemLanes(s, you, selectedCard.cardId, tpHero)
+      dropLabel = selectedItem.target === 'lane' ? 'Ward or smoke' : 'Teleport to'
+    }
   } else if (s.phase === 'response' && selectedCard && selectedItem) {
     if (selectedItem.target === 'lane') dropZones = itemLanes(s, you, selectedCard.cardId)
     else if (selectedItem.target === 'allyHeroToLane' && tpHero) dropZones = itemLanes(s, you, selectedCard.cardId, tpHero)
@@ -232,11 +270,16 @@ export function MatchView({
         setRotator(null)
         return
       }
+      if (buybackHero && isLane(zone)) {
+        dispatch({ type: 'buyback', heroId: buybackHero, lane: zone })
+        setBuybackHero(null)
+        return
+      }
       if (!selectedCard) return
-      if (s.phase === 'response') {
-        if (isLane(zone)) dispatch({ type: 'playItem', handIid: selectedCard.iid, target: tpHero ?? undefined, lane: zone })
+      if ((s.phase === 'response' || (s.phase === 'assign' && selectedCard.type === 'item')) && isLane(zone)) {
+        dispatch({ type: 'playItem', handIid: selectedCard.iid, target: tpHero ?? undefined, lane: zone })
         setTpHero(null)
-      } else {
+      } else if (s.phase === 'assign') {
         dispatch({ type: 'place', handIid: selectedCard.iid, zone })
       }
       setSelectedHand(null)
@@ -269,7 +312,7 @@ export function MatchView({
             <span className="text-zinc-400" title="Both players draw runes from this deck. 10 runes, two copies each.">
               Runes {s.runeDeck.length}
             </span>
-            <span className="text-zinc-500" title="Version 3. Items, runes, rewards, and abilities are interrupts. After a card, the other side has 5 seconds to counter or pass. A side with nothing to play passes on its own. Odd rounds Radiant plays first; even rounds Dire plays first.">
+            <span className="text-zinc-500" title="Version 3. Items, runes, rewards, and abilities are interrupts. Pass auto-selects after 5 seconds. Interrupt gives 30 seconds to play an item, ability, Shield, or buyback. Odd rounds Radiant plays first; even rounds Dire plays first.">
               v3
             </span>
           </div>
@@ -326,7 +369,15 @@ export function MatchView({
             tpHero={tpHero}
             rotator={rotator}
             onDraw={(card) => dispatch({ type: 'draw', card })}
-            onBuyback={(heroId) => dispatch({ type: 'buyback', heroId })}
+            onBuyback={(heroId) => {
+              if (s.phase === 'response') armPlay()
+              setBuybackHero(heroId)
+              setSelectedHand(null)
+            }}
+            buybackHero={buybackHero}
+            onInterrupt={armPlay}
+            deciding={yourReply && windowMs === PASS_MS}
+            playing={playing}
             secondsLeft={secondsLeft}
             onAdvance={() => {
               if (s.phase === 'draw') dispatch({ type: 'endDraw' })
@@ -361,7 +412,8 @@ export function MatchView({
                     disabledReason={
                       s.phase === 'report'
                         ? discardBlockReason(s, you, c.iid)
-                        : s.phase === 'response' && s.priority === you && c.type === 'item'
+                        : (s.phase === 'response' && s.priority === you && c.type === 'item') ||
+                            (s.phase === 'assign' && c.type === 'item' && getItem(c.cardId).timing === 'map')
                           ? itemBlockReason(s, you, c)
                           : s.phase === 'assign' && c.type === 'hero'
                             ? placeBlockReason(s, you)
@@ -477,6 +529,10 @@ function ActionBar({
   rotator,
   onDraw,
   onBuyback,
+  buybackHero,
+  onInterrupt,
+  deciding,
+  playing,
   onAdvance,
   onShowReport,
   secondsLeft,
@@ -488,6 +544,10 @@ function ActionBar({
   rotator: string | null
   onDraw: (card: DrawType) => void
   onBuyback: (heroId: string) => void
+  buybackHero: string | null
+  onInterrupt: () => void
+  deciding: boolean
+  playing: boolean
   onAdvance: () => void
   onShowReport: () => void
   secondsLeft: number | null
@@ -505,14 +565,22 @@ function ActionBar({
   switch (s.phase) {
     case 'draw':
       title = 'Draw'
-      hint = `Spend 1 Gold to draw, up to ${DRAW_CAP} counting cards. Discard back to ${HAND_LIMIT} at the end of the turn. Runes and reward cards do not count. Buyback is ${buybackCost(s, you)} Gold for any of the last ${BUYBACK_WINDOW} discarded heroes.`
+      hint = buybackHero
+        ? `Click a green + to deploy ${getHero(buybackHero).name} straight into that lane. Buyback needs fewer than 5 heroes on the board.`
+        : `Spend 1 Gold to draw, up to ${DRAW_CAP} counting cards. Discard back to ${HAND_LIMIT} at the end of the turn. Runes and reward cards do not count. Buyback is ${buybackCost(s, you)} Gold and deploys the hero into a lane, only while you have fewer than 5 heroes out.`
       cta = 'Done drawing'
       break
     case 'assign':
       title = 'Assign'
-      hint = selectedCard
-        ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes or your own jungle)'}.`
-        : `Select a hero or creep card, then a green + on the map. Heroes go to a lane or your jungle. Creeps go to lanes. Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round. ${foeName} assigns at the same time, and those heroes stay hidden until Show.`
+      hint = selectedCard?.type === 'item'
+        ? getItem(selectedCard.cardId).target === 'allyHeroToLane'
+          ? tpHero
+            ? `Click a green + to teleport ${getHero(s.units[tpHero].cardId!).name}.`
+            : `Choose a highlighted hero for ${getItem(selectedCard.cardId).name}.`
+          : `Click a green + to play ${getItem(selectedCard.cardId).name} on that lane.`
+        : selectedCard
+          ? `Click a green + on the map to place ${selectedCard.type === 'hero' ? getHero(selectedCard.cardId).name : 'the creep'}${selectedCard.type === 'creep' ? ' (lanes only)' : ' (lanes or your own jungle)'}.`
+          : `Select a hero, creep, or map card, then a green + on the map. Town Portal, Ward, and Smoke are Assign-phase map cards. Heroes ${me.placedThisRound}/${PLACE_PER_ROUND} this round. ${foeName} assigns at the same time.`
       cta = 'Lock in & show'
       break
     case 'response':
@@ -521,7 +589,9 @@ function ActionBar({
         ? ultZones(s, ultCaster).length
           ? `Click a green + for ${getHero(s.units[ultCaster].cardId!).ult.name}. It resolves now.`
           : `Choose a highlighted target for ${getHero(s.units[ultCaster].cardId!).ult.name}. It resolves now.`
-        : selectedCard?.type === 'item'
+        : buybackHero
+          ? `Click a green + to deploy ${getHero(buybackHero).name} into that lane.`
+          : selectedCard?.type === 'item'
           ? getItem(selectedCard.cardId).target === 'lane'
             ? `Click a green + to choose the lane for ${getItem(selectedCard.cardId).name}.`
             : getItem(selectedCard.cardId).target === 'allyHeroToLane'
@@ -529,10 +599,12 @@ function ActionBar({
                 ? `Click a green + to teleport ${getHero(s.units[tpHero].cardId!).name}.`
                 : 'Choose a highlighted hero to teleport.'
               : `Choose a highlighted target for ${getItem(selectedCard.cardId).name}.`
-          : secondsLeft !== null
-            ? `${foeName} played a card. ${secondsLeft}s to counter with an item, rune, ability, or Shield, or to pass.`
+          : deciding
+            ? `${secondsLeft}s to press Interrupt, or Pass selects itself.`
+            : playing
+              ? `${secondsLeft}s to play an item, ability, Shield, or buyback. Pass selects itself when the clock ends.`
             : s.priority === you
-              ? `Play one item, rune, reward, ability, or a 3 XP Shield. It resolves immediately, then ${foeName} answers. ${s.round % 2 === 1 ? 'Radiant starts odd rounds.' : 'Dire starts even rounds.'} A Shield lasts until it blocks a hit and does not stack.`
+              ? `Play one item, rune, reward, ability, or a 3 XP Shield. It resolves immediately, then ${foeName} answers.`
               : `${foeName} is answering.`
       cta = secondsLeft !== null ? `Pass · ${secondsLeft}s` : 'Pass'
       break
@@ -580,6 +652,11 @@ function ActionBar({
             <ScrollText /> Round report
           </Button>
         )}
+        {deciding && (
+          <Button size="sm" variant="outline" onClick={onInterrupt}>
+            <Swords /> Interrupt · 30s
+          </Button>
+        )}
         <Button
           size="sm"
           disabled={waiting || (s.phase === 'report' && excessHand(me) > 0) || (s.phase === 'response' && s.priority !== you)}
@@ -590,7 +667,7 @@ function ActionBar({
           {waiting && s.phase !== 'gameover' ? 'Waiting for opponent' : cta}
         </Button>
       </div>
-      {s.phase === 'draw' && s.heroDiscard.length > 0 && (
+      {(s.phase === 'draw' || playing) && s.heroDiscard.length > 0 && (
         <div className="flex basis-full flex-wrap items-center gap-2 border-t border-amber-500/10 pt-2 sm:order-last">
           <span className="flex items-center gap-1 text-xs text-zinc-400">
             <Skull className="size-3.5" /> Last {Math.min(BUYBACK_WINDOW, s.heroDiscard.length)} discarded · buyback {buybackCost(s, you)} Gold
@@ -603,8 +680,9 @@ function ActionBar({
                 variant="outline"
                 size="xs"
                 disabled={!!reason}
-                title={reason ?? `${PLAYER_LABEL[h.owner]}'s hero`}
+                title={reason ?? `Deploy ${PLAYER_LABEL[h.owner]}'s hero into a lane`}
                 onClick={() => onBuyback(h.cardId)}
+                className={buybackHero === h.cardId ? 'ring-2 ring-sky-400' : undefined}
               >
                 {getHero(h.cardId).name}
               </Button>

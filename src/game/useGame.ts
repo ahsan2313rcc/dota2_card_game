@@ -34,7 +34,8 @@ export const AI = 'dire' as const
 export type Action =
   | { type: 'new'; settings?: Settings }
   | { type: 'draw'; card: DrawType }
-  | { type: 'buyback'; heroId: string }
+  | { type: 'buyback'; heroId: string; lane: LaneId }
+  | { type: 'hold' }
   | { type: 'discard'; handIid: string }
   | { type: 'buyShield'; uid: string }
   | { type: 'swapTowers'; tier: TowerTier; a: LaneId; b: LaneId }
@@ -80,8 +81,12 @@ function reducer(s: GameState, a: Action): GameState {
       return newGame(a.settings ?? s.settings)
     case 'draw':
       return drawCard(s, HUMAN, a.card)
-    case 'buyback':
-      return buyback(s, HUMAN, a.heroId)
+    case 'buyback': {
+      const next = buyback(s, HUMAN, a.heroId, a.lane)
+      return s.phase === 'response' ? respondAi(next) : next
+    }
+    case 'hold':
+      return s
     case 'discard':
       return discardFromHand(s, HUMAN, a.handIid)
     case 'buyShield':

@@ -7,9 +7,9 @@ export const HEROES: HeroCard[] = ROSTER.filter((h) => !h.summon)
 
 // Shop items cost gold and are single use. Runes, tower cards and boss rewards stay free.
 export const ITEMS: ItemCard[] = [
-  { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane', cost: 0, copies: 6 },
-  { id: 'ward', name: 'Ward', kind: 'Shop', text: 'Enemy heroes that enter this lane are face-up at the next Show.', target: 'lane', cost: 0, copies: 3 },
-  { id: 'smoke', name: 'Smoke', kind: 'Shop', text: 'Allied heroes placed in this lane stay hidden at the next Show.', target: 'lane', cost: 0, copies: 2 },
+  { id: 'tp', name: 'Town Portal Scroll', kind: 'Shop', text: 'Teleport an allied hero (not Rooted) to any lane.', target: 'allyHeroToLane', cost: 0, copies: 6, timing: 'map' },
+  { id: 'ward', name: 'Ward', kind: 'Shop', text: 'Enemy heroes that enter this lane are face-up at the next Show.', target: 'lane', cost: 0, copies: 3, timing: 'map' },
+  { id: 'smoke', name: 'Smoke', kind: 'Shop', text: 'Allied heroes placed in this lane stay hidden at the next Show.', target: 'lane', cost: 0, copies: 2, timing: 'map' },
   { id: 'dust', name: 'Dust', kind: 'Shop', text: 'Mute every enemy hero in the lane.', target: 'lane', cost: 0, copies: 2 },
   { id: 'gem', name: 'Gem of True Sight', kind: 'Shop', text: 'Reveal every enemy hero in a lane and remove Invisible.', target: 'lane', cost: 0, copies: 2 },
   { id: 'salve', name: 'Healing Salve', kind: 'Shop', text: 'Heal an allied hero.', target: 'allyWoundedHero', cost: 0, copies: 4 },

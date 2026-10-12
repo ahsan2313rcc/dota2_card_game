@@ -12,6 +12,7 @@ type ClientMsg =
   | { type: 'resume'; code: string; token: string }
   | { type: 'start' }
   | { type: 'towerGold'; on: boolean }
+  | { type: 'hold' }
   | { type: 'action'; action: NetAction }
 
 export function socketUrl() {
@@ -113,6 +114,10 @@ export function useOnline() {
   }
 
   function sendAction(action: Action) {
+    if (action.type === 'hold') {
+      send({ type: 'hold' })
+      return
+    }
     if (action.type === 'settings') {
       if (action.settings.towerGold !== undefined) send({ type: 'towerGold', on: action.settings.towerGold !== false })
       return
@@ -144,6 +149,7 @@ function toNet(action: Action): NetAction | null {
     case 'new':
       return { type: 'rematch' }
     case 'settings':
+    case 'hold':
       return null
     default:
       return action

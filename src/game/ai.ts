@@ -404,6 +404,7 @@ function splitAssign(state: GameState, p: PlayerId): GameState {
     s = placeCreep(s, p, card.iid, creepLane(s, p))
   }
   if (s === state) s = structuredClone(state)
+  s = aiMapCards(s, p)
   for (const lane of LANES) {
     s.zones[lane][p] = s.zones[lane][p].filter((uid) => s.units[uid])
     s.zones[lane][p].sort((a, b) => positionRank(s.units[a]) - positionRank(s.units[b]))
@@ -507,7 +508,7 @@ function splitBuyback(s: GameState, p: PlayerId): GameState {
   if (pl.hand.some((c) => c.type === 'item' && pl.gold >= (getItem(c.cardId).cost ?? 0))) return s
   const choice = [...buybackChoices(s)].reverse().find((h) => BUYBACK_IDS.has(h.cardId))
   if (!choice || buybackBlockReason(s, p, choice.cardId)) return s
-  return buyback(s, p, choice.cardId)
+  return buyback(s, p, choice.cardId, buybackLane(s, p))
 }
 
 function towerWouldFall(s: GameState, p: PlayerId, lane: LaneId): boolean {
@@ -799,7 +800,11 @@ export function aiDraw(state: GameState, p: PlayerId, style: AiStyle = 'balanced
   if (!drawBlockReason(s, p, 'unit')) return s
   const choice = buybackChoices(s).at(-1)
   if (!choice || buybackBlockReason(s, p, choice.cardId)) return s
-  return buyback(s, p, choice.cardId)
+  return buyback(s, p, choice.cardId, buybackLane(s, p))
+}
+
+function buybackLane(s: GameState, p: PlayerId): LaneId {
+  return [...LANES].sort((a, b) => heroesIn(s, p, a) - heroesIn(s, p, b) || ZONE_PRIORITY[p].indexOf(a) - ZONE_PRIORITY[p].indexOf(b))[0]
 }
 
 function counterScore(_attr: Attribute, _enemies: Unit[]): number {
@@ -903,11 +908,36 @@ export function aiAssign(state: GameState, p: PlayerId, style: AiStyle = 'balanc
     s = placeCreep(s, p, card.iid, creepLane(s, p))
   }
   if (s === state) s = structuredClone(state)
+  s = aiMapCards(s, p)
   for (const lane of LANES) {
     s.zones[lane][p] = s.zones[lane][p].filter((uid) => s.units[uid])
     s.zones[lane][p].sort((a, b) => positionRank(s.units[a]) - positionRank(s.units[b]))
   }
   return s
+}
+
+/** Ward and Smoke go down with the assignment, so Show can reveal or hide that lane. */
+function aiMapCards(state: GameState, p: PlayerId): GameState {
+  let s = state
+  for (const card of [...s.players[p].hand]) {
+    if (card.type !== 'item' || getItem(card.cardId).timing !== 'map' || card.cardId === 'tp') continue
+    if (itemBlockReason(s, p, card)) continue
+    const lane = card.cardId === 'smoke' ? smokedLane(s, p) : watchedLane(s, p)
+    if (!lane) continue
+    const next = playItem(s, p, card.iid, undefined, lane)
+    if (next !== s) s = next
+  }
+  return s
+}
+
+function smokedLane(s: GameState, p: PlayerId): LaneId | undefined {
+  const lanes = LANES.filter((lane) => lineup(s, p, lane).some((uid) => s.units[uid].kind === 'hero' && s.units[uid].placedRound === s.round))
+  if (!lanes.length) return undefined
+  return [...lanes].sort((a, b) => heroesIn(s, p, b) - heroesIn(s, p, a))[0]
+}
+
+function watchedLane(s: GameState, p: PlayerId): LaneId {
+  return [...LANES].sort((a, b) => enemyHeroes(s, p, b).length - enemyHeroes(s, p, a).length || heroesIn(s, p, b) - heroesIn(s, p, a))[0]
 }
 
 /** Creeps stand in the lane that already has our heroes and still has a tower to soak. */

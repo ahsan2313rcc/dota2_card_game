@@ -28,6 +28,7 @@ import {
   unplace,
   PLAYER_LABEL,
 } from './engine'
+import { getItem } from './cards'
 import {
   PLAYERS,
   ROTATIONS_PER_ROUND,
@@ -40,7 +41,7 @@ import {
 
 export type NetAction =
   | { type: 'draw'; card: 'unit' | 'item' }
-  | { type: 'buyback'; heroId: string }
+  | { type: 'buyback'; heroId: string; lane: 'top' | 'mid' | 'bot' }
   | { type: 'discard'; handIid: string }
   | { type: 'buyShield'; uid: string }
   | { type: 'swapTowers'; tier: 't1' | 't2'; a: 'top' | 'mid' | 'bot'; b: 'top' | 'mid' | 'bot' }
@@ -242,10 +243,12 @@ export function applyAction(room: Room, seat: PlayerId, action: NetAction): stri
       if (s.phase !== 'draw') return 'Not the draw step.'
       next = drawCard(s, seat, action.card)
       break
-    case 'buyback':
-      if (s.phase !== 'draw') return 'Not the draw step.'
-      next = buyback(s, seat, action.heroId)
+    case 'buyback': {
+      if (s.phase !== 'draw' && !(s.phase === 'response' && s.priority === seat)) return 'Not a time to buy back.'
+      if (!isLane(action.lane)) return 'Buyback deploys to a lane.'
+      next = buyback(s, seat, action.heroId, action.lane)
       break
+    }
     case 'discard':
       next = discardFromHand(s, seat, action.handIid)
       break
@@ -276,10 +279,15 @@ export function applyAction(room: Room, seat: PlayerId, action: NetAction): stri
       if (!owns(s, seat, action.uid)) return 'That unit is not yours.'
       next = moveInLineup(s, action.uid, action.dir)
       break
-    case 'playItem':
-      if (s.phase !== 'response' || s.priority !== seat) return 'Wait for priority.'
+    case 'playItem': {
+      const card = s.players[seat].hand.find((c) => c.iid === action.handIid)
+      if (!card || card.type !== 'item') return 'That card is not in your hand.'
+      if (s.phase === 'assign') {
+        if (getItem(card.cardId).timing !== 'map') return 'That card is played during combat.'
+      } else if (s.phase !== 'response' || s.priority !== seat) return 'Wait for priority.'
       next = playItem(s, seat, action.handIid, action.target, action.lane)
       break
+    }
     case 'declareUlt':
       if (s.phase !== 'response' || s.priority !== seat) return 'Wait for priority.'
       if (!owns(s, seat, action.uid)) return 'That hero is not yours.'
@@ -344,7 +352,7 @@ function lockSeat(room: Room, seat: PlayerId): string | null {
 
 function concealed(u: Unit, viewer: PlayerId, s: GameState) {
   if (u.owner === viewer || u.owner === 'neutral' || u.dead) return false
-  if (s.phase === 'assign' && u.placedRound === s.round) return true
+  if ((s.phase === 'assign' || s.phase === 'draw') && u.placedRound === s.round) return true
   if (u.status.revealed) return false
   return !!(u.status.invisible || u.status.banished)
 }

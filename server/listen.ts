@@ -81,7 +81,7 @@ function broadcast(room: Room) {
   armTimer(room)
 }
 
-function armTimer(room: Room) {
+function armTimer(room: Room, ms = 5000) {
   const existing = timers.get(room.code)
   if (existing) clearTimeout(existing)
   timers.delete(room.code)
@@ -95,7 +95,7 @@ function armTimer(room: Room) {
     if (`${current.round}:${current.passes}:${current.log.length}:${current.priority}` !== stamp) return
     applyAction(room, seat, { type: 'pass' })
     broadcast(room)
-  }, 5000)
+  }, ms)
   timers.set(room.code, timer)
 }
 
@@ -231,6 +231,12 @@ function onMessage(socket: WebSocket, raw: RawData) {
     if (error) return fail(socket, error)
     broadcast(room)
     publishLobby()
+    return
+  }
+
+  if (msg.type === 'hold') {
+    if (!room || !seat || room.tokens[seat] !== socket.token) return fail(socket, 'Join a room first.')
+    if (room.state?.phase === 'response' && room.state.priority === seat && !room.state.winner) armTimer(room, 30_000)
     return
   }
 

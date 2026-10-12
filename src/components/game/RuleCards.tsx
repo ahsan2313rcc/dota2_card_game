@@ -42,8 +42,8 @@ export function RuleCards() {
         </Block>
         <Block title="Round">Upkeep, Draw, Assign, Show, Combat, Rotate, Cleanup, Income.</Block>
         <ul className="list-disc space-y-1 pl-3.5">
-          <li>Place up to 3 heroes a round, 5 on the board. Creeps are extra. Your own jungle only. Both sides assign together. New heroes stay hidden until Show.</li>
-          <li>Play one card. The other side has 5 seconds to answer or pass. With nothing legal, the pass happens on its own. Two passes resolve the next swing. Odd rounds you start.</li>
+          <li>Place up to 3 heroes a round, 5 on the board. Creeps are extra. Your own jungle only. Both sides assign together. New heroes stay hidden until Show. Town Portal, Ward, and Smoke are map cards played in this step.</li>
+          <li>Pass auto-selects after 5 seconds. Interrupt opens 30 seconds for an item, ability, Shield, or buyback. Two passes resolve the next swing. Odd rounds you start.</li>
           <li>Attacks go Haste, AGI, UNI, INT, STR, then creeps. Slow goes last. A tower fires when the hit lands, once a round.</li>
           <li>Move up to 2 heroes, one step: Top – Dire Jungle – Mid – Radiant Jungle – Bot. You move, then Dire.</li>
           <li>Draw the hand up to 10. Discard down to 7. Runes and tower cards sit outside that count.</li>
@@ -79,7 +79,7 @@ export function RuleCards() {
           <ul className="list-disc space-y-0.5 pl-3.5">
             <li>Draw a unit or a shop card: 1 Gold.</li>
             <li>Play a shop card: the printed 0, 1, or 2 Gold. Drawing it is still 1 Gold.</li>
-            <li>Buyback: 4 Gold, or 5 if you have more towers. Once per hero, from the last 10 in the shared discard, during Draw.</li>
+            <li>Buyback: 4 Gold, or 5 if you have more towers. Once per hero, from the last 10 in the shared discard, only with fewer than 5 heroes out. The hero deploys straight into a lane.</li>
             <li>An ability costs its printed 1, 2, or 3 XP, once a turn.</li>
             <li>Shield: 3 XP. One per hero, until it blocks a hit.</li>
             <li>Keeper of the Light: Position 1 pays 1 less XP, minimum 1. Arcane rune: 1 less, minimum 0. Refresher Shard: that cast costs 0. Refresher Orb: one more cast this turn.</li>

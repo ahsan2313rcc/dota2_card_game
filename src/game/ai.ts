@@ -1,4 +1,4 @@
-import { getHero, getItem } from './cards'
+import { ATTACK_ORDER, getHero, getItem } from './cards'
 import {
   ZONE_PRIORITY,
   buyShield,
@@ -16,6 +16,7 @@ import {
   enemyJungle,
   heroesOnBoard,
   homeJungle,
+  attributeOf,
   isMelee,
   itemBlockReason,
   itemLanes,
@@ -64,7 +65,7 @@ export type { AiStyle }
 
 const FRONTLINERS = new Set(['axe', 'tidehunter', 'pudge', 'abaddon', 'wraith_king', 'sven'])
 
-/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. carry holds a tower that would break, farms once two heroes are already hitting, and spends that gold as attack damage on those heroes. split keeps one hero in each lane and two in the jungles. */
+/** balanced keeps the current garrison. lane stacks towers and defends one short. jungler farms, then stacks a thin lane. defender holds lanes. hunter stacks the thin lane and never leaves a hero in the camp. carry holds a tower that would break, farms once two heroes are hitting the building itself, and spends that gold as attack damage on the first hero to swing when an enemy is still standing there. split keeps one hero in each lane and two in the jungles. */
 
 const HARMFUL = new Set([
   'stun',
@@ -757,6 +758,23 @@ function carryFightLane(s: GameState, p: PlayerId): LaneId | undefined {
 }
 
 /**
+ * Two heroes are in the lane and an enemy hero is standing in front of the building.
+ * Those two hit that hero, not the tower. The next hero is the one that reaches the building after the body dies.
+ */
+function carryPushBlocked(s: GameState, p: PlayerId): boolean {
+  const fight = carryFightLane(s, p)
+  if (!fight || heroesIn(s, p, fight) < 2) return false
+  return enemyHeroes(s, p, fight).length > 0
+}
+
+/** Haste, then AGI, UNI, INT, STR. The earliest swinger is the one whose +1 damage kills a 2-health body. */
+function swingRank(u: Unit): number {
+  if (u.status.haste) return -1
+  const attr = attributeOf(u)
+  return attr ? ATTACK_ORDER.indexOf(attr) : ATTACK_ORDER.length
+}
+
+/**
  * Draw until the gold is gone. A thin board takes hero and creep cards from the shared deck.
  * A stocked board takes item cards, which combat then plays one at a time.
  * Buyback is only for a side that cannot draw and has no hero to play.
@@ -835,10 +853,10 @@ function jungleValue(s: GameState, p: PlayerId, style: AiStyle): number {
     if (mine >= cap) return -999
     const boss = neutral.kind === 'roshan' || neutral.kind === 'tormentor'
     if (style === 'carry') {
-      // Once two heroes are already hitting, the camp is worth more than stacking a third on that Tier 2.
-      // The gold comes back as an item on those two before they swing. An open Ancient still outranks it.
+      // Farm once two heroes are hitting the building. A hero standing in that lane means they are
+      // hitting the hero, so the next body stays and swings at the tower after that body dies.
       const fight = carryFightLane(s, p)
-      if (fight && heroesIn(s, p, fight) >= 2) return boss ? 32 : 30
+      if (fight && heroesIn(s, p, fight) >= 2) return carryPushBlocked(s, p) ? -999 : boss ? 32 : 30
       return boss ? 21 : 20
     }
     // A jungler's boss beats a one-hero lane. A creep ties that lane and stays in it.
@@ -949,7 +967,18 @@ function pickBuff(s: GameState, p: PlayerId, targets: Unit[], style: AiStyle = '
   const inHot = targets.filter((t) => t.zone === hot)
   const fighting = targets.filter((t) => enemyHeroes(s, p, t.zone).length > 0 || !!campNeutral(s, t.zone))
   const pool = inHot.length ? inHot : fighting.length ? fighting : targets
-  return [...pool].sort((a, b) => Number(lineup(s, p, b.zone)[0] === b.uid) - Number(lineup(s, p, a.zone)[0] === a.uid))[0]
+  const blocked = style === 'carry' && carryPushBlocked(s, p)
+  const amp = (u: Unit) => u.status.bonusDamage + (u.permanentAtk || 0)
+  return [...pool].sort((a, b) => {
+    // The first swing has to kill the body. Later swings then land on the tower.
+    if (blocked) {
+      const swing = swingRank(a) - swingRank(b)
+      if (swing) return swing
+      const spent = amp(a) - amp(b)
+      if (spent) return spent
+    }
+    return Number(lineup(s, p, b.zone)[0] === b.uid) - Number(lineup(s, p, a.zone)[0] === a.uid)
+  })[0]
 }
 
 function pickWounded(targets: Unit[]): Unit | undefined {
@@ -1101,8 +1130,10 @@ function stayValue(s: GameState, p: PlayerId, u: Unit, style: AiStyle): number {
       heroesIn(s, p, u.zone) <= junglerCap(camp)
     ) {
       const fight = style === 'carry' ? carryFightLane(s, p) : undefined
-      // The stack is already on the tower. Stay until this camp pays, then walk back.
-      stay += fight && heroesIn(s, p, fight) >= 2 ? 40 : 18
+      // Stay while the pair is hitting the building. Walk back when a hero is blocking it.
+      if (!(style === 'carry' && carryPushBlocked(s, p))) {
+        stay += fight && heroesIn(s, p, fight) >= 2 ? 40 : 18
+      }
     }
     return stay
   }
@@ -1131,9 +1162,9 @@ function destValue(s: GameState, p: PlayerId, zone: ZoneId, style: AiStyle, from
       if (!junglerFarming(s.round) || !camp) return score
       const home = campNeutral(s, homeJungle(p))
       const homeReady = !home || heroesIn(s, p, homeJungle(p)) >= junglerCap(home)
-      if (zone === homeJungle(p) && mine < junglerCap(camp)) {
+      if (zone === homeJungle(p) && mine < junglerCap(camp) && !(style === 'carry' && carryPushBlocked(s, p))) {
         const fight = style === 'carry' ? carryFightLane(s, p) : undefined
-        // A third hero on an open Tier 2 would rather take the camp. The pair that remains keeps hitting.
+        // A third hero on an open building would rather take the camp. The pair that remains keeps hitting.
         score += style === 'carry' && fight && heroesIn(s, p, fight) >= 3 ? 30 : 20
       }
       // The enemy camp is one step from mid. A carry farms at home and walks back, so the invade stays a jungler step.
@@ -1240,9 +1271,11 @@ export function aiUlts(state: GameState, p: PlayerId, style: AiStyle = 'balanced
   const push = style === 'carry' ? carryFightLane(s, p) : undefined
   const casters = heroesOnBoard(s, p).sort((a, b) => {
     if (push) {
+      const blocked = carryPushBlocked(s, p)
       const rank = (u: Unit) => {
-        // The camp spell has to land before the swing, or the camp lives and the gold arrives late.
-        if (u.zone === homeJungle(p) && campNeutral(s, u.zone) && u.cardId && campSpell(u.cardId)) return -1
+        // While a hero is blocking the tower, the lane spell comes first. The camp spell waits.
+        if (!blocked && u.zone === homeJungle(p) && campNeutral(s, u.zone) && u.cardId && campSpell(u.cardId)) return -1
+        if (blocked && u.zone === push) return -1
         return u.zone === push ? 0 : isLane(u.zone) ? 1 : 2
       }
       return rank(a) - rank(b) || ultCost(b, s) - ultCost(a, s)

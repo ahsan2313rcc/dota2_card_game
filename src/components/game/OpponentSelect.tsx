@@ -8,7 +8,7 @@ const OPPONENTS: { value: AiStyle; label: string; blurb: string }[] = [
   { value: 'jungler', label: 'Jungler', blurb: 'Farms, then hits a thin lane' },
   { value: 'defender', label: 'Defender', blurb: 'Answers every threat' },
   { value: 'hunter', label: 'Hunter', blurb: 'Thin lanes, and never farms' },
-  { value: 'carry', label: 'Carry', blurb: 'Holds a break, farms, spends the gold' },
+  { value: 'carry', label: 'Carry', blurb: 'Stays through a body block, then farms' },
   { value: 'split', label: 'Split', blurb: 'One per lane, two in the jungles' },
 ]
 

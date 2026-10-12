@@ -1077,6 +1077,19 @@ describe('opponent decisions', () => {
     expect(s.players.dire.hand.some((c) => c.type === 'item')).toBe(false)
   })
 
+  it('a carry keeps the next hero on a tower an enemy is blocking', () => {
+    let s = setup(72, [hero('r', 'axe')], [hero('d1', 'lina'), hero('d2', 'sven'), hero('d3', 'pudge')])
+    s = placeHero(s, 'dire', 'd1', 'bot')
+    s = placeHero(s, 'dire', 'd2', 'bot')
+    s = placeHero(s, 'radiant', 'r', 'bot')
+    forceCamp(s, 'direJungle', 'neutral')
+    s.round = 4
+    shown(s, 'radiant')
+    s = aiAssign(s, 'dire', 'carry')
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'bot')).toHaveLength(3)
+    expect(heroesOnBoard(s, 'dire').filter((u) => u.zone === 'direJungle')).toHaveLength(0)
+  })
+
   it('a carry sends one of a stack of three to the camp and leaves two on the tower', () => {
     let s = setup(71, [hero('a', 'axe'), hero('b', 'sven'), hero('c', 'pudge')])
     s = placeHero(s, 'radiant', 'a', 'bot')
@@ -1654,6 +1667,52 @@ describe('opponent decisions', () => {
     s.phase = 'rotate'
     s = aiRotate(s, 'radiant', 'carry')
     expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')?.zone).toBe('radiantJungle')
+  })
+
+  it('a carry does not leave a blocked tower to farm', () => {
+    let s = setup(68, [hero('a', 'sven'), hero('b', 'lina'), hero('c', 'pudge')], [hero('d', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'bot')
+    s = placeHero(s, 'radiant', 'b', 'bot')
+    s = placeHero(s, 'radiant', 'c', 'bot')
+    s = placeHero(s, 'dire', 'd', 'bot')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 4
+    s.phase = 'rotate'
+    shown(s, 'dire')
+    s = aiRotate(s, 'radiant', 'carry')
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'bot')).toHaveLength(3)
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'radiantJungle')).toHaveLength(0)
+  })
+
+  it('a carry walks the farmer back when a hero is blocking the tower', () => {
+    let s = setup(69, [hero('a', 'sven'), hero('b', 'lina'), hero('c', 'pudge')], [hero('d', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'bot')
+    s = placeHero(s, 'radiant', 'b', 'bot')
+    s = placeHero(s, 'radiant', 'c', 'radiantJungle')
+    s = placeHero(s, 'dire', 'd', 'bot')
+    forceCamp(s, 'radiantJungle', 'neutral')
+    s.round = 4
+    s.phase = 'rotate'
+    shown(s, 'dire')
+    s = aiRotate(s, 'radiant', 'carry')
+    expect(heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'pudge')?.zone).toBe('bot')
+    expect(heroesOnBoard(s, 'radiant').filter((u) => u.zone === 'bot')).toHaveLength(3)
+  })
+
+  it('a carry puts the first attack bonus on the hero who swings first', () => {
+    let s = setup(70, [hero('a', 'sven'), hero('b', 'lina'), item('i', 'desolator')], [hero('d', 'axe')])
+    s = placeHero(s, 'radiant', 'a', 'bot')
+    s = placeHero(s, 'radiant', 'b', 'bot')
+    s = placeHero(s, 'dire', 'd', 'bot')
+    s.round = 4
+    s = reveal(s)
+    s.players.radiant.gold = 4
+    if (s.priority === 'dire') s = passResponse(s, 'dire')
+    s = aiOneResponse(s, 'radiant', 'carry')
+    const lina = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'lina')!
+    const sven = heroesOnBoard(s, 'radiant').find((u) => u.cardId === 'sven')!
+    expect(lina.status.bonusDamage).toBe(1)
+    expect(sven.status.bonusDamage).toBe(0)
   })
 
   it('a carry steps off the camp to hold a Tier 1 a stack would break', () => {

@@ -513,6 +513,21 @@ def carry_fight_lane(g: Game, p: str) -> str | None:
     return None if best is None else best[1]
 
 
+def carry_push_blocked(g: Game, p: str) -> bool:
+    """Two heroes are in the lane and an enemy hero is standing in front of the building.
+
+    Those two hit that hero, not the tower. The next body stays and swings at the building
+    after that body dies. A hero placed this round is still hidden, so it does not count.
+    """
+    fight = carry_fight_lane(g, p)
+    if fight is None:
+        return False
+    mine = sum(1 for unit in g.board[p][fight] if unit.hp > 0)
+    if mine < 2:
+        return False
+    return any(unit.hp > 0 and not unit.fresh for unit in g.board[other(p)][fight])
+
+
 def jungle_value(g: Game, p: str) -> int:
     """Balanced farms for 5. A jungler waits until round 3, then sends one hero."""
     style = g.style[p]
@@ -530,11 +545,13 @@ def jungle_value(g: Game, p: str) -> int:
             return -999
         boss = camp.kind in ("roshan", "tormentor")
         if style == "carry":
-            # Two heroes already on a tower make the camp worth more than a third body there.
-            # An open Ancient still scores higher, so the farm stops when the ancient is bare.
+            # Farm once two heroes are hitting the building. A hero in that lane means they are
+            # hitting the hero, so the next body stays for the tower.
             fight = carry_fight_lane(g, p)
             fight_n = sum(1 for unit in g.board[p][fight] if unit.hp > 0) if fight else 0
             if fight_n >= 2:
+                if carry_push_blocked(g, p):
+                    return -999
                 return 32 if boss else 30
             return 21 if boss else 20
         return 19 if boss else 18
@@ -623,6 +640,9 @@ def legal_cast(g: Game, p: str) -> tuple[str, Unit] | None:
                 continue
             # The farmer still swings for 1. Carry spends the XP only when that plus the spell clears the camp this round.
             if g.style[p] == "carry" and hero.damage + 1 < camp.hp:
+                continue
+            # A hero is blocking the tower. The camp spell waits so the lane spell can remove that body.
+            if g.style[p] == "carry" and carry_push_blocked(g, p):
                 continue
             power = hero.damage + (1 if hero.stun else 0)
             if g.style[p] == "carry":
@@ -846,11 +866,22 @@ def play_item(g: Game, p: str) -> bool:
     fighters = [row for row in swinging(g, p) if row[0] == push[0][0]] if aimed and push else swinging(g, p)
     if not fighters and not (side.gold >= 2 and casters):
         return False
-    # Carry turns tower gold and camp gold into attack damage, spread across the heroes already hitting.
-    # A refresher waits until each of those heroes has taken that +1.
+    # Carry turns tower gold and camp gold into attack damage on the heroes already hitting.
+    # When a hero is blocking the tower, the first +1 goes to whoever swings first, so that
+    # swing kills the body and the later swings land on the building.
     if aimed and side.gold >= 1 and fighters:
         bare = [row for row in fighters if row[1].amplify <= 0]
-        target = min(bare or fighters, key=lambda row: row[1].amplify)
+        pool = bare or fighters
+        if carry_push_blocked(g, p):
+            def swing_key(row: tuple[str, Unit]) -> tuple[int, int, int]:
+                unit = row[1]
+                bracket = 0 if unit.haste else 1
+                attr = ORDER.index(unit.hero.attr) if unit.hero.attr in ORDER else len(ORDER)
+                return (bracket, attr, unit.amplify)
+
+            target = min(pool, key=swing_key)
+        else:
+            target = min(pool, key=lambda row: row[1].amplify)
         spend_gold(side, 1)
         target[1].amplify += 1
         g.items[p] += 1
@@ -1386,7 +1417,9 @@ def carry_stay(g: Game, p: str, zone: str) -> int:
         if g.round > 2 and camp is not None and camp.hp > 0 and mine <= jungler_cap(camp.kind):
             fight = carry_fight_lane(g, p)
             fight_n = sum(1 for unit in g.board[p][fight] if unit.hp > 0) if fight else 0
-            # The pair on the tower keeps hitting. This hero stays until the camp pays.
+            # Stay while the pair is hitting the building. Walk back when a hero is blocking it.
+            if carry_push_blocked(g, p):
+                return 0
             return 40 if fight_n >= 2 else 18
         return 0
     foe = g.sides[other(p)].towers[zone]
@@ -1409,7 +1442,9 @@ def carry_dest(g: Game, p: str, zone: str) -> int:
         if g.round > 2 and camp is not None and camp.hp > 0 and mine < jungler_cap(camp.kind):
             fight = carry_fight_lane(g, p)
             fight_n = sum(1 for unit in g.board[p][fight] if unit.hp > 0) if fight else 0
-            # Leave a stack of three. A pair stays on the tower.
+            # A hero in the lane is blocking the building. Do not walk off to farm.
+            if carry_push_blocked(g, p):
+                return 0
             return 30 if fight_n >= 3 else 20
         return 0
     foe = g.sides[other(p)].towers[zone]
